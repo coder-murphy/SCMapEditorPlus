@@ -1,0 +1,88 @@
+﻿#include "terrain/tileset.h"
+
+#include <cstring>
+#include <fstream>
+
+#include "common/log.h"
+
+namespace scmd {
+
+namespace {
+
+bool ReadWholeFile(const std::wstring& path, Buffer& out) {
+    std::ifstream in(path.c_str(), std::ios::binary | std::ios::ate);
+    if (!in) return false;
+    const std::streamoff size = in.tellg();
+    if (size <= 0) return false;
+    in.seekg(0, std::ios::beg);
+    out.resize(static_cast<std::size_t>(size));
+    in.read(reinterpret_cast<char*>(out.data()), size);
+    return true;
+}
+
+u16 ReadU16(const u8* p) { return static_cast<u16>(p[0] | (p[1] << 8)); }
+
+}  // namespace
+
+bool Tileset::Load(const std::wstring& dir, const std::wstring& prefix) {
+    Unload();
+    const std::wstring base = dir.empty() ? prefix : dir + L"\\" + prefix;
+    if (!ReadWholeFile(base + L".cv5", cv5_)) { Log(L"[ts] 缺少 %s.cv5", base.c_str()); Unload(); return false; }
+    if (!ReadWholeFile(base + L".vx4", vx4_)) { Log(L"[ts] 缺少 %s.vx4", base.c_str()); Unload(); return false; }
+    if (!ReadWholeFile(base + L".vr4", vr4_)) { Log(L"[ts] 缺少 %s.vr4", base.c_str()); Unload(); return false; }
+    if (!ReadWholeFile(base + L".wpe", wpe_)) { Log(L"[ts] 缺少 %s.wpe", base.c_str()); Unload(); return false; }
+    Log(L"[ts] loaded %s: groups=%d megatiles=%d vr=%d", prefix.c_str(),
+        GroupCount(), MegaCount(), VrCount());
+    return true;
+}
+
+void Tileset::Unload() {
+    cv5_.clear();
+    vx4_.clear();
+    vr4_.clear();
+    wpe_.clear();
+}
+
+u16 Tileset::MegatileOf(u16 mtxmValue) const {
+    const u16 group = static_cast<u16>((mtxmValue & 0x7FF0) >> 4);
+    const u16 index = static_cast<u16>(mtxmValue & 0x0F);
+    if (group >= GroupCount()) return 0;
+    return ReadU16(cv5_.data() + group * 52 + 20 + index * 2);
+}
+
+bool Tileset::TileBlock(u16 mtxmValue, u8 out[1024]) const {
+    if (!IsLoaded()) return false;
+    const u16 mega = MegatileOf(mtxmValue);
+    if (mega >= MegaCount()) { std::memset(out, 0, 1024); return false; }
+    std::memset(out, 0, 1024);
+
+    const u8* refs = vx4_.data() + static_cast<std::size_t>(mega) * 32;
+    for (int k = 0; k < 16; k++) {
+        const u16 ref = ReadU16(refs + k * 2);
+        const u16 vrid = static_cast<u16>(ref >> 1);
+        if (vrid >= VrCount()) continue;
+        const u8* src = vr4_.data() + static_cast<std::size_t>(vrid) * 64;
+        const int bx = (k % 4) * 8;
+        const int by = (k / 4) * 8;
+        const bool hflip = (ref & 1) != 0;
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                const u8 px = src[y * 8 + (hflip ? (7 - x) : x)];
+                out[(by + y) * 32 + bx + x] = px;
+            }
+        }
+    }
+    return true;
+}
+
+bool Tileset::IsWalkable(u16 group) const {
+    if (group >= GroupCount()) return false;
+    return (ReadU16(cv5_.data() + group * 52) & 1u) != 0;
+}
+
+u16 Tileset::Type(u16 group) const {
+    if (group >= GroupCount()) return 0;
+    return static_cast<u16>(ReadU16(cv5_.data() + group * 52) >> 1);
+}
+
+}  // namespace scmd

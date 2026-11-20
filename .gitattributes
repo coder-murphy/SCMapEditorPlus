@@ -1,0 +1,24 @@
+# 文本文件：仓库内统一 LF，检出时由各平台决定
+* text=auto
+
+# Windows 工程文件保持 CRLF，避免 VS 反复改写
+*.sln            text eol=crlf
+*.vcxproj        text eol=crlf
+*.vcxproj.filters text eol=crlf
+*.rc             text eol=crlf
+*.ps1            text eol=crlf
+*.bat            text eol=crlf
+
+# 二进制：不做任何行尾/编码转换
+*.scx     binary
+*.scm     binary
+*.mpq     binary
+*.bmp     binary
+*.png     binary
+*.dll     binary
+*.exe     binary
+*.lib     binary
+*.ico     binary
+
+# 注意：源码与资源文件均带 UTF-8 BOM，git 视为文本但不会改写 BOM。
+# 共享仓库后若用其他编辑器改动，请保持 BOM，否则 MSVC 在 CP936 下会按本地代码页解析。

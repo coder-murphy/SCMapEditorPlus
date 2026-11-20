@@ -1,0 +1,98 @@
+﻿#include <windows.h>
+#include "resource.h"
+
+// 从二进制导出的 25 个对话框（自动生成，勿手改）
+#include "dialogs.rc"
+
+IDI_APP ICON "app.ico"
+// 103 号对话框的 SS_ICON 静态控件按字符串名 "130" 取图标
+"130" ICON "app.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+// 主菜单：按业务域分组，与 src/ 的子目录一一对应
+IDR_MAINMENU MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New\tCtrl+N",              IDM_FILE_NEW
+        MENUITEM "&Open...\tCtrl+O",          IDM_FILE_OPEN
+        MENUITEM "&Save\tCtrl+S",             IDM_FILE_SAVE
+        MENUITEM "Save &As...",                IDM_FILE_SAVEAS
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                      IDM_FILE_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Undo\tCtrl+Z",             IDM_EDIT_UNDO
+        MENUITEM "&Redo\tCtrl+Y",             IDM_EDIT_REDO
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Terrain",                    IDM_VIEW_TERRAIN
+        MENUITEM "&Units",                      IDM_VIEW_UNITS
+    END
+    POPUP "&Terrain"
+    BEGIN
+        MENUITEM "&Tile Editor...",             IDM_TERRAIN_EDIT
+    END
+    POPUP "&Units"
+    BEGIN
+        MENUITEM "Unit &List...",               IDM_UNITS_LIST
+    END
+    POPUP "Triggers"
+    BEGIN
+        MENUITEM "&Trigger List...",            IDM_TRIGGERS_LIST
+    END
+    POPUP "&Players"
+    BEGIN
+        MENUITEM "&Properties...",              IDM_PLAYERS_PROPS
+    END
+    POPUP "&Tools"
+    BEGIN
+        MENUITEM "&Validate Map",               IDM_TOOLS_VALIDATE
+        MENUITEM SEPARATOR
+        MENUITEM "Recovered &UI (ScmDraft2)...",  IDM_TOOLS_DIALOGS
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About SCMD Plus...",         IDM_HELP_ABOUT
+    END
+END
+
+/////////////////////////////////////////////////////////////////////////////
+IDR_ACCEL ACCELERATORS
+BEGIN
+    "N",            IDM_FILE_NEW,       VIRTKEY, CONTROL
+    "O",            IDM_FILE_OPEN,      VIRTKEY, CONTROL
+    "S",            IDM_FILE_SAVE,      VIRTKEY, CONTROL
+    "Z",            IDM_EDIT_UNDO,      VIRTKEY, CONTROL
+    "Y",            IDM_EDIT_REDO,      VIRTKEY, CONTROL
+END
+
+/////////////////////////////////////////////////////////////////////////////
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 3,0,0,0
+ PRODUCTVERSION 3,0,0,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "FileDescription", "SCMD Plus 3.0"
+            VALUE "FileVersion", "3.0.0.0"
+            VALUE "InternalName", "SCMDPlus"
+            VALUE "OriginalFilename", "SCMDPlus.exe"
+            VALUE "ProductName", "SCMD Plus"
+            VALUE "ProductVersion", "3.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

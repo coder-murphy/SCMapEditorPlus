@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="app"><UniqueIdentifier>{A1000001-0000-0000-0000-000000000001}</UniqueIdentifier></Filter>
+    <Filter Include="ui"><UniqueIdentifier>{A1000001-0000-0000-0000-000000000002}</UniqueIdentifier></Filter>
+    <Filter Include="platform"><UniqueIdentifier>{A1000001-0000-0000-0000-000000000003}</UniqueIdentifier></Filter>
+    <Filter Include="common"><UniqueIdentifier>{A1000001-0000-0000-0000-000000000004}</UniqueIdentifier></Filter>
+    <Filter Include="archive"><UniqueIdentifier>{A1000001-0000-0000-0000-000000000005}</UniqueIdentifier></Filter>
+    <Filter Include="chk"><UniqueIdentifier>{A1000001-0000-0000-0000-000000000006}</UniqueIdentifier></Filter>
+    <Filter Include="terrain"><UniqueIdentifier>{A1000001-0000-0000-0000-000000000007}</UniqueIdentifier></Filter>
+    <Filter Include="units"><UniqueIdentifier>{A1000001-0000-0000-0000-000000000008}</UniqueIdentifier></Filter>
+    <Filter Include="players"><UniqueIdentifier>{A1000001-0000-0000-0000-000000000009}</UniqueIdentifier></Filter>
+    <Filter Include="triggers"><UniqueIdentifier>{A1000001-0000-0000-0000-00000000000A}</UniqueIdentifier></Filter>
+    <Filter Include="map"><UniqueIdentifier>{A1000001-0000-0000-0000-00000000000B}</UniqueIdentifier></Filter>
+    <Filter Include="res"><UniqueIdentifier>{A1000001-0000-0000-0000-00000000000C}</UniqueIdentifier></Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="app\main.cpp"><Filter>app</Filter></ClCompile>
+    <ClCompile Include="app\app.cpp"><Filter>app</Filter></ClCompile>
+    <ClCompile Include="ui\main_window.cpp"><Filter>ui</Filter></ClCompile>
+    <ClCompile Include="ui\dialogs.cpp"><Filter>ui</Filter></ClCompile>
+    <ClCompile Include="platform\file_dialog.cpp"><Filter>platform</Filter></ClCompile>
+    <ClCompile Include="common\log.cpp"><Filter>common</Filter></ClCompile>
+    <ClCompile Include="common\string_util.cpp"><Filter>common</Filter></ClCompile>
+    <ClCompile Include="archive\mpq_archive.cpp"><Filter>archive</Filter></ClCompile>
+    <ClCompile Include="chk\chk_document.cpp"><Filter>chk</Filter></ClCompile>
+    <ClCompile Include="terrain\tileset.cpp"><Filter>terrain</Filter></ClCompile>
+    <ClCompile Include="terrain\terrain_renderer.cpp"><Filter>terrain</Filter></ClCompile>
+    <ClCompile Include="terrain\edge_placer.cpp"><Filter>terrain</Filter></ClCompile>
+    <ClCompile Include="map\map_document.cpp"><Filter>map</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="app\app.h"><Filter>app</Filter></ClInclude>
+    <ClInclude Include="ui\main_window.h"><Filter>ui</Filter></ClInclude>
+    <ClInclude Include="ui\dialogs.h"><Filter>ui</Filter></ClInclude>
+    <ClInclude Include="ui\command_ids.h"><Filter>ui</Filter></ClInclude>
+    <ClInclude Include="platform\file_dialog.h"><Filter>platform</Filter></ClInclude>
+    <ClInclude Include="common\types.h"><Filter>common</Filter></ClInclude>
+    <ClInclude Include="common\log.h"><Filter>common</Filter></ClInclude>
+    <ClInclude Include="common\string_util.h"><Filter>common</Filter></ClInclude>
+    <ClInclude Include="archive\mpq_archive.h"><Filter>archive</Filter></ClInclude>
+    <ClInclude Include="chk\chk_section.h"><Filter>chk</Filter></ClInclude>
+    <ClInclude Include="chk\chk_document.h"><Filter>chk</Filter></ClInclude>
+    <ClInclude Include="terrain\tileset.h"><Filter>terrain</Filter></ClInclude>
+    <ClInclude Include="terrain\terrain_renderer.h"><Filter>terrain</Filter></ClInclude>
+    <ClInclude Include="terrain\edge_placer.h"><Filter>terrain</Filter></ClInclude>
+    <ClInclude Include="units\unit_model.h"><Filter>units</Filter></ClInclude>
+    <ClInclude Include="players\player_model.h"><Filter>players</Filter></ClInclude>
+    <ClInclude Include="triggers\trigger_model.h"><Filter>triggers</Filter></ClInclude>
+    <ClInclude Include="map\map_document.h"><Filter>map</Filter></ClInclude>
+    <ClInclude Include="res\resource.h"><Filter>res</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="res\resources.rc"><Filter>res</Filter></ResourceCompile>
+  </ItemGroup>
+</Project>

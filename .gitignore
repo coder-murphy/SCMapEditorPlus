@@ -1,0 +1,25 @@
+# VS
+.vs/
+Debug/
+Release/
+x64/
+*.user
+*.suo
+*.ncb
+*.sdf
+*.pdb
+*.ilk
+*.obj
+*.tlog
+*.idb
+*.ipch/
+
+# 本地产物
+bin/
+bin2/
+build/
+build2/
+
+# 补丁脚本的中间文件
+*.new
+*.bak
