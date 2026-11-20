@@ -71,9 +71,35 @@
 自动化脚本：`SCMDPlus.exe --dialog=<id>` 逐个启动 → 枚举该进程的 `#32770` 窗口 → 校验标题 → `WM_CLOSE` → 检查退出码。
 
 - **22 / 25 独立可开且标题正确**：103,155,163,164,166,167,169,171,172,173,174,175,179,180,181,182,183,187,188,189,191,192
-- **184 / 185 / 186 不可独立弹出**：模板样式 `0x50080048` 含 `WS_CHILD`，是嵌在触发编辑器里的子面板；
-  已加 `childPanel` 标记，`ShowDialog` 记日志并返回 false
+- **184 / 185 / 186 为子面板**：模板样式 `0x50080048` 含 `WS_CHILD`，已用
+  `CreateDialogParamW` 嵌入 181 触发编辑器（见下节），`ShowDialog` 仍拒绝独立弹出
 - 构建：343 个函数通过
+
+## 触发编辑器子面板（P2-9，VERIFIED）
+
+`ui/dlg_triggers.cpp` 在 181 的 `WM_INITDIALOG` 里创建三个子对话框：
+
+| 资源 | 处理过程 | 用途 |
+|---|---|---|
+| 184 | `ProcListViewHost` | 触发列表视图（`SysListView32`） |
+| 185 | `ProcListEditorA` | 条件编辑（新建/编辑/复制/删除/上移/下移） |
+| 186 | `ProcListEditorB` | 动作编辑（同上） |
+
+- 位置：181 的「触发」分组框（1113）内部，`MapDialogRect` 换算成像素后 `SetWindowPos`，
+  尺寸随 DPI/字体变化。
+- 默认 `mode=0`：只显示原始触发列表（182）与左侧树（1110），三个子面板隐藏。
+- 「修改」(1101) 循环切换 `0 → 184 → 185 → 186 → 0`，面板显示时隐藏被遮住的 182/1110。
+- 状态挂在 `GWLP_USERDATA`，`WM_DESTROY` 释放。
+
+验证脚本（`--dialog=181` → `EnumChildWindows`）：
+
+```
+child dialogs (#32770) = 3            # 3 个面板均已创建，尺寸 546x345
+mode0 visible=0                        # 默认不显示
+after click 1..4 visible=1,1,1,0        # 每次恰好一个面板可见，第 4 次回到列表
+exited = True  exit code = 0
+```
+
 
 ## 本轮修掉的三个真实 bug
 
@@ -98,6 +124,6 @@ MSBuild SCMDPlus.sln /t:Rebuild /p:Configuration=Release /p:Platform=Win32 ^
 
 ## 后续
 
-1. 184/185/186 接进 181 触发编辑器（`CreateDialogParamW` 到父窗口）；
+1. 185/186 的列表内容接到 `TriggerSection` / `LocationTable` / `StringTable`（P3）；
 2. 各对话框控件 ID 语义化命名（当前保留原程序数值，便于与二进制对照）；
 3. 位图 134/151/152 尚未导出。

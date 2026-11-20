@@ -84,6 +84,7 @@
     <ClCompile Include="terrain\terrain_renderer.cpp" />
     <ClCompile Include="terrain\edge_placer.cpp" />
     <ClCompile Include="map\edit_history.cpp" />
+    <ClCompile Include="triggers\trigger_model.cpp" />
     <ClCompile Include="map\map_document.cpp" />
   </ItemGroup>
   <ItemGroup>

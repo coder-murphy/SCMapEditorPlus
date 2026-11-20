@@ -126,9 +126,19 @@ bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir)
         }
     }
 
+    // 触发 / 地点 / 字符串
+    triggers_.Parse(Buffer());
+    locations_.Parse(Buffer());
+    strings_.Parse(Buffer());
+    if (const Buffer* trig = chk_.Find("TRIG")) triggers_.Parse(*trig);
+    if (const Buffer* mrgn = chk_.Find("MRGN")) locations_.Parse(*mrgn);
+    if (const Buffer* str = chk_.Find("STR ")) strings_.Parse(*str);
+
     path_ = path;
     dirty_ = false;
-    Log(L"[map] opened %dx%d era=%u units=%zu", width_, height_, era_, units_.size());
+    Log(L"[map] opened %dx%d era=%u units=%zu trig=%zu loc=%zu str=%zu",
+        width_, height_, era_, units_.size(), triggers_.BlockCount(),
+        locations_.Count(), strings_.Count());
     return true;
 }
 
@@ -271,6 +281,10 @@ bool MapDocument::Save(const std::wstring& path) {
     if (chk_.Has(section::kUnit) || !units_.empty()) {
         chk_.Set(section::kUnit, unitBytes);
     }
+
+    if (chk_.Has("TRIG")) chk_.Set("TRIG", triggers_.Serialize());
+    if (chk_.Has("MRGN")) chk_.Set("MRGN", locations_.Serialize());
+    if (chk_.Has("STR ")) chk_.Set("STR ", strings_.Serialize());
 
     const Buffer chkBytes = chk_.Serialize();
     std::vector<MpqFileEntry> files;

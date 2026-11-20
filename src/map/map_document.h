@@ -4,6 +4,7 @@
 #include "chk/chk_document.h"
 #include "common/types.h"
 #include "terrain/tileset.h"
+#include "triggers/trigger_model.h"
 #include "units/unit_model.h"
 
 namespace scmd {
@@ -31,6 +32,15 @@ public:
 
     const Tileset& tileset() const { return tileset_; }
     bool hasTileset() const { return tileset_.IsLoaded(); }
+
+    const TriggerSection& triggers() const { return triggers_; }
+    const LocationTable& locations() const { return locations_; }
+    const StringTable& strings() const { return strings_; }
+    StringTable& mutableStrings() { return strings_; }
+    LocationTable& mutableLocations() { return locations_; }
+
+    // 原始段内容（用于无损重建校验）
+    const ChkDocument& chk() const { return chk_; }
 
     const std::vector<UnitRecord>& units() const { return units_; }
     std::vector<UnitRecord>& mutableUnits() { return units_; }
@@ -68,6 +78,9 @@ private:
     u16 era_ = 0;                  // 0..7，越界按 0 处理
     Buffer tiles_;                 // MTXM 原始字节（u16 小端）
     std::vector<UnitRecord> units_;
+    TriggerSection triggers_;
+    LocationTable locations_;
+    StringTable strings_;
     bool dirty_ = false;
 };
 

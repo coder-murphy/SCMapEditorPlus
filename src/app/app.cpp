@@ -337,6 +337,33 @@ int RunUndoTest(const std::wstring& mapPath) {
     return ok ? 0 : 2;
 }
 
+// --section-test：校验 TRIG/MRGN/STR 的解析与无损重建
+int RunSectionTest(const std::wstring& mapPath) {
+    MapDocument doc;
+    if (!doc.Open(mapPath, std::wstring())) { WriteDiag(L"open=FAIL\n"); return 2; }
+
+    auto compare = [&doc](const char* name, const Buffer& rebuilt) {
+        const Buffer* orig = doc.chk().Find(name);
+        if (!orig) return -1;                        // 段不存在
+        return orig->size() == rebuilt.size() &&
+               std::memcmp(orig->data(), rebuilt.data(), orig->size()) == 0 ? 1 : 0;
+    };
+
+    const int trig = compare("TRIG", doc.triggers().Serialize());
+    const int mrgn = compare("MRGN", doc.locations().Serialize());
+    const int str = compare("STR ", doc.strings().Serialize());
+
+    wchar_t msg[384];
+    ::wsprintfW(msg, L"trigBlocks=%u\nmrgn=%u\nstr=%u\ntrigEq=%d\nmrgnEq=%d\nstrEq=%d\n",
+                static_cast<unsigned>(doc.triggers().BlockCount()),
+                static_cast<unsigned>(doc.locations().Count()),
+                static_cast<unsigned>(doc.strings().Count()), trig, mrgn, str);
+    WriteDiag(msg);
+
+    const bool ok = trig != 0 && mrgn != 0 && str != 0;
+    return ok ? 0 : 2;
+}
+
 void WriteDiag(const std::wstring& text) {
     wchar_t path[MAX_PATH] = L"";
     ::GetTempPathW(MAX_PATH, path);
@@ -438,6 +465,26 @@ int App::Run(HINSTANCE hInstance) {
         tsDir = std::wstring(exePath) + L"\\ts";
     }
     mainWindow_.SetTilesetDir(tsDir);
+
+    // 段重建回归（无头）
+    {
+        int argc = 0;
+        bool want = false;
+        LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+        if (argv) {
+            for (int i = 1; i < argc; ++i) {
+                if (std::wcsncmp(argv[i], L"--section-test", 14) == 0) want = true;
+            }
+            ::LocalFree(argv);
+        }
+        if (want) {
+            const std::wstring mapPath = ParseOpenArg();
+            if (mapPath.empty()) { WriteDiag(L"no-map\n"); return 2; }
+            const int rc = RunSectionTest(mapPath);
+            ::DestroyWindow(mainWindow_.hwnd());
+            return rc;
+        }
+    }
 
     // 撤销/重做回归（无头）
     if (!ParseUndoTestArg().empty()) {
