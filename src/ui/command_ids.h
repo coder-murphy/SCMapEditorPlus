@@ -13,8 +13,50 @@ enum CommandId : int {
 
     kEditUndo = 0x807F,
     kEditRedo = 0x8080,
+    kEditCut = 0x80E6,
+    kEditCopy = 0x80E7,
+    kEditPaste = 0x80E8,
+    kEditSelectAll = 0x809A,
+    kEditDelete = 0x809B,
+    kEditDeselect = 0x809E,
+    kEditProperties = 0x809C,
 
     kLayerTerrain = 0x803A,     // 编辑 → 编辑层 → 地形
+    kLayerDoodads = 0x803B,
+    kLayerFog = 0x803E,
+    kLayerLocations = 0x803C,
+    kLayerUnits = 0x803D,
+    kLayerSpUnits = 0x803F,
+
+    // 选项 → 方格
+    kGridTiny = 0x80AF,
+    kGridSmall = 0x800E,
+    kGridNormal = 0x800D,
+    kGridLarge = 0x80A5,
+    kGridHuge = 0x80AA,
+    kGridCustom = 0x80CF,
+    kGridOff = 0x80D6,
+    // 选项 → 方格 → 颜色
+    kGridColorBlack = 0x8036,
+    kGridColorGray = 0x80B1,
+    kGridColorWhite = 0x8037,
+    kGridColorGreen = 0x8038,
+    kGridColorRed = 0x8039,
+    kGridColorBlue = 0x80B2,
+    kGridColorOther = 0x80D0,
+
+    // 显示选项
+    kDispAllColors = 0x8054,
+    kDispUnits = 0x8018,
+    kDispDoodads = 0x8019,
+    kDispSpUnits = 0x801A,
+    kDispZergGround = 0x8034,
+    kDispSpecialStates = 0x80B3,
+    kDispHideMinimap = 0x80B4,
+    kDispColorCycle = 0x80D1,
+    kDispDeathFx = 0x80F6,
+    kDispFog = 0x8113,
+    kDispLocations = 0x8115,
 
     kTriggerEditor = 0x810F,    // 触发 → 编辑触发
 

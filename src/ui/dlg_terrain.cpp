@@ -9,19 +9,29 @@ namespace scmd {
 
 namespace {
 GridSettings g_grid;
+GridSettings g_seed;
+bool g_gridAccepted = false;
 }
 
 const GridSettings& LastGridSettings() { return g_grid; }
+
+void SeedGridSettings(const GridSettings& seed) {
+    g_seed = seed;
+    g_gridAccepted = false;
+}
+
+bool LastGridSettingsAccepted() { return g_gridAccepted; }
 
 // 166：方格设置（两组 X/Y 与偏移 + 启用开关）
 INT_PTR CALLBACK ProcGridSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
         case WM_INITDIALOG:
             CenterDialog(dlg);
-            ::SetDlgItemInt(dlg, IDC_D166_1044, 32, FALSE);
-            ::SetDlgItemInt(dlg, IDC_D166_1045, 32, FALSE);
-            ::SetDlgItemInt(dlg, IDC_D166_1046, 0, FALSE);
-            ::SetDlgItemInt(dlg, IDC_D166_1047, 0, FALSE);
+            ::CheckDlgButton(dlg, IDC_D166_1048, g_seed.enabled ? BST_CHECKED : BST_UNCHECKED);
+            ::SetDlgItemInt(dlg, IDC_D166_1044, static_cast<UINT>(g_seed.cellX), FALSE);
+            ::SetDlgItemInt(dlg, IDC_D166_1045, static_cast<UINT>(g_seed.cellY), FALSE);
+            ::SetDlgItemInt(dlg, IDC_D166_1046, static_cast<UINT>(g_seed.offsetX), TRUE);
+            ::SetDlgItemInt(dlg, IDC_D166_1047, static_cast<UINT>(g_seed.offsetY), TRUE);
             return TRUE;
         case WM_COMMAND:
             if (LOWORD(wParam) == IDC_D166_1) {                 // 确定
@@ -30,6 +40,7 @@ INT_PTR CALLBACK ProcGridSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                 g_grid.cellY = ReadClampedInt(dlg, IDC_D166_1045, 32, 1, 64);
                 g_grid.offsetX = ReadClampedInt(dlg, IDC_D166_1046, 0, -64, 64);
                 g_grid.offsetY = ReadClampedInt(dlg, IDC_D166_1047, 0, -64, 64);
+                g_gridAccepted = true;
                 Log(L"[grid] %dx%d off=%d,%d on=%d", g_grid.cellX, g_grid.cellY,
                     g_grid.offsetX, g_grid.offsetY, g_grid.enabled ? 1 : 0);
                 ::EndDialog(dlg, IDOK);

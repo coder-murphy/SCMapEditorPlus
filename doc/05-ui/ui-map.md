@@ -215,3 +215,26 @@ created=1 dirtyNew=1 unnamed=1 saved=1 cleanAfterSave=1 pathSaved=1
 reopened=1 sizeOk=1 painted=16/16 closed=1 freshOk=1
 ```
 
+
+## 编辑层 / 方格 / 显示选项（P3-11b）
+
+「编辑 → 编辑层」「选项 → 方格」「显示选项」三组菜单已接线，勾选状态随命令同步：
+
+- **编辑层**（0x803A/3B/3E/3C/3D/3F）：地形→地形刷，单位/SP单位→放单位，装饰物/迷雾/地点→仅查看。
+  Ctrl+T/D/F/L/U/R 与 F1 之外的数字键 1/2 也可切换。
+- **方格**：微小 8 / 较小 16 / 普通 32 / 较大 64 / 极大 128（单位：源像素，随缩放换算到屏幕），
+  禁止关闭；自定义打开 166「方格设置」，支持 X/Y 尺寸与偏移。
+- **方格颜色**：黑/灰/白/绿/红/蓝，其他调用系统取色器。
+- **显示选项**：单位、装饰物、SP单位、所有颜色、Zerg地皮、特殊状态、隐藏小雷达、颜色循环、
+  死亡效果、战争迷雾、显示Location 均可勾选；其中单位与 Location 立即影响绘制
+  （Location 按 MRGN 矩形画绿框并标序号），其余为状态位。
+  原资源里被灰掉的 4 项（所有颜色/单位/装饰物/SP单位）在创建时解除灰显。
+
+无头回归 `--menu-cmd-test`：
+
+```
+layerInit=1 layerUnits=1 layerLoc=1 layerBack=1
+gridLarge=1 gridOff=1 gridBack=1 gridRed=1
+unitsOff=1 unitsOn=1 fogOn=1
+```
+

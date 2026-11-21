@@ -276,6 +276,77 @@ int RunFileTest(const std::wstring& outPath) {
     return ok ? 0 : 2;
 }
 
+// --menu-cmd-test：检验编辑层/方格/显示选项菜单命令与勾选回显
+HMENU FindMenuWithItem(HMENU menu, int id) {
+    if (!menu) return nullptr;
+    const int count = ::GetMenuItemCount(menu);
+    for (int i = 0; i < count; i++) {
+        if (::GetMenuItemID(menu, i) == static_cast<UINT>(id)) return menu;
+    }
+    for (int i = 0; i < count; i++) {
+        if (HMENU sub = ::GetSubMenu(menu, i)) {
+            if (HMENU found = FindMenuWithItem(sub, id)) return found;
+        }
+    }
+    return nullptr;
+}
+
+bool ItemChecked(HWND hwnd, int id) {
+    HMENU menu = FindMenuWithItem(::GetMenu(hwnd), id);
+    if (!menu) return false;
+    const UINT state = ::GetMenuState(menu, static_cast<UINT>(id), MF_BYCOMMAND);
+    return state != 0xFFFFFFFFu && (state & MF_CHECKED) != 0;
+}
+
+int RunMenuCommandTest(HWND hwnd) {
+    auto cmd = [hwnd](int id) {
+        ::SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(id, 0), 0);
+    };
+
+    const bool layerInit = ItemChecked(hwnd, 0x803A);
+
+    cmd(0x803D);   // 编辑层 → 单位
+    const bool layerUnits = ItemChecked(hwnd, 0x803D) && !ItemChecked(hwnd, 0x803A);
+
+    cmd(0x803C);   // 编辑层 → 地点
+    const bool layerLoc = ItemChecked(hwnd, 0x803C) && ItemChecked(hwnd, 0x8115);
+
+    cmd(0x803A);   // 回到地形
+    const bool layerBack = ItemChecked(hwnd, 0x803A) && !ItemChecked(hwnd, 0x803C);
+
+    cmd(0x80A5);   // 方格 → 较大 (64)
+    const bool gridLarge = ItemChecked(hwnd, 0x80A5) && !ItemChecked(hwnd, 0x80D6);
+    cmd(0x80D6);   // 方格 → 禁止
+    const bool gridOff = ItemChecked(hwnd, 0x80D6) && !ItemChecked(hwnd, 0x80A5);
+    cmd(0x800D);   // 方格 → 普通
+    const bool gridBack = ItemChecked(hwnd, 0x800D) && !ItemChecked(hwnd, 0x80D6);
+
+    cmd(0x8039);   // 方格颜色 → 红色
+    const bool gridRed = ItemChecked(hwnd, 0x8039) && !ItemChecked(hwnd, 0x8036);
+
+    cmd(0x8018);   // 显示选项 → 单位 关
+    const bool unitsOff = !ItemChecked(hwnd, 0x8018);
+    cmd(0x8018);   // 再开
+    const bool unitsOn = ItemChecked(hwnd, 0x8018);
+
+    cmd(0x8113);   // 显示战争迷雾
+    const bool fogOn = ItemChecked(hwnd, 0x8113);
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+        L"layerInit=%d\nlayerUnits=%d\nlayerLoc=%d\nlayerBack=%d\n"
+        L"gridLarge=%d\ngridOff=%d\ngridBack=%d\ngridRed=%d\n"
+        L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\n",
+        layerInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0, layerBack ? 1 : 0,
+        gridLarge ? 1 : 0, gridOff ? 1 : 0, gridBack ? 1 : 0, gridRed ? 1 : 0,
+        unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = layerInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
+                    gridBack && gridRed && unitsOff && unitsOn && fogOn;
+    return ok ? 0 : 2;
+}
+
 // --undo-test：无头撤销/重做回归
 std::wstring ParseUndoTestArg() {
     int argc = 0;
@@ -607,6 +678,24 @@ int App::Run(HINSTANCE hInstance) {
         }
         if (want) {
             const int rc = RunMenuTest(mainWindow_.hwnd());
+            ::DestroyWindow(mainWindow_.hwnd());
+            return rc;
+        }
+    }
+
+    // 编辑层/方格/显示选项命令回归（无头）
+    {
+        int argc = 0;
+        bool want = false;
+        LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+        if (argv) {
+            for (int i = 1; i < argc; ++i) {
+                if (std::wcsncmp(argv[i], L"--menu-cmd-test", 15) == 0) want = true;
+            }
+            ::LocalFree(argv);
+        }
+        if (want) {
+            const int rc = RunMenuCommandTest(mainWindow_.hwnd());
             ::DestroyWindow(mainWindow_.hwnd());
             return rc;
         }

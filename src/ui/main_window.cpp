@@ -1,6 +1,7 @@
 ﻿#include "ui/main_window.h"
 
 #include <algorithm>
+#include <commdlg.h>
 #include <cstring>
 #include <cwchar>
 #include <windows.h>
@@ -10,6 +11,7 @@
 #include "platform/file_dialog.h"
 #include "res/resource.h"
 #include "ui/command_ids.h"
+#include "ui/dlg_procs.h"
 #include "ui/dialogs.h"
 
 namespace scmd {
@@ -44,6 +46,48 @@ COLORREF UnitColor(u16 type) {
     if (type == 214) return RGB(255, 255, 255);                 // 出生点
     return RGB(255, 150, 0);
 }
+
+// 递归找到直接包含命令 ID 的子菜单（用于按命令 ID 勾选/启用）
+HMENU FindMenuContaining(HMENU menu, int id) {
+    if (!menu) return nullptr;
+    const int count = ::GetMenuItemCount(menu);
+    for (int i = 0; i < count; i++) {
+        if (::GetMenuItemID(menu, i) == static_cast<UINT>(id)) return menu;
+    }
+    for (int i = 0; i < count; i++) {
+        if (HMENU sub = ::GetSubMenu(menu, i)) {
+            if (HMENU found = FindMenuContaining(sub, id)) return found;
+        }
+    }
+    return nullptr;
+}
+
+// 在一组互斥命令中只勾选 checkedId
+void CheckOnly(HMENU bar, const int* ids, int count, int checkedId) {
+    for (int i = 0; i < count; i++) {
+        if (HMENU menu = FindMenuContaining(bar, ids[i])) {
+            ::CheckMenuItem(menu, ids[i], MF_BYCOMMAND |
+                            (ids[i] == checkedId ? MF_CHECKED : MF_UNCHECKED));
+        }
+    }
+}
+
+const int kLayerIds[] = {0x803A, 0x803B, 0x803E, 0x803C, 0x803D, 0x803F};
+const int kGridIds[] = {0x80AF, 0x800E, 0x800D, 0x80A5, 0x80AA, 0x80CF, 0x80D6};
+const int kGridColorIds[] = {0x8036, 0x80B1, 0x8037, 0x8038, 0x8039, 0x80B2, 0x80D0};
+
+int GridPresetOf(bool enabled, int cellX, int cellY) {
+    if (!enabled) return 0x80D6;      // 禁止
+    if (cellX != cellY) return 0x80CF;  // 自定义
+    switch (cellX) {
+        case 8: return 0x80AF;        // 微小
+        case 16: return 0x800E;       // 较小
+        case 32: return 0x800D;       // 普通
+        case 64: return 0x80A5;       // 较大
+        case 128: return 0x80AA;      // 极大
+        default: return 0x80CF;       // 自定义
+    }
+}
 }  // namespace
 
 bool MainWindow::Create(HINSTANCE hInstance) {
@@ -77,7 +121,15 @@ bool MainWindow::Create(HINSTANCE hInstance) {
             ::AppendMenuW(help, MF_SEPARATOR, 0, nullptr);
             ::AppendMenuW(help, MF_STRING, kDebugDialogs, L"恢复的界面...");
         }
+        // 原程序把显示选项里的 4 项灰掉了；本工程可用，解除灰显
+        const int kEnableIds[] = {kDispAllColors, kDispUnits, kDispDoodads, kDispSpUnits};
+        for (int id : kEnableIds) {
+            if (HMENU menu = FindMenuContaining(bar, id)) {
+                ::EnableMenuItem(menu, id, MF_BYCOMMAND | MF_ENABLED);
+            }
+        }
     }
+    SyncMenuChecks();
 
     UpdateTitle();
     ::ShowWindow(hwnd_, SW_SHOW);
@@ -222,6 +274,187 @@ bool MainWindow::MaybeSave() {
     return true;
 }
 
+void MainWindow::SetLayer(EditLayer layer) {
+    layer_ = layer;
+    switch (layer) {
+        case EditLayer::kTerrain:
+            tool_ = Tool::kTerrain;
+            break;
+        case EditLayer::kUnits:
+        case EditLayer::kSpUnits:
+            tool_ = Tool::kUnit;
+            break;
+        default:
+            tool_ = Tool::kNone;   // 装饰物/迷雾/地点：只显示，不放置
+            break;
+    }
+    if (layer == EditLayer::kLocations) showLocations_ = true;
+    SyncMenuChecks();
+    ::InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+void MainWindow::ApplyGridPreset(int cell) {
+    gridEnabled_ = cell > 0;
+    if (cell > 0) {
+        gridCellX_ = gridCellY_ = cell;
+        gridOffsetX_ = gridOffsetY_ = 0;
+    }
+    SyncMenuChecks();
+    ::InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+void MainWindow::OpenGridSettings() {
+    GridSettings seed;
+    seed.enabled = gridEnabled_;
+    seed.cellX = gridCellX_;
+    seed.cellY = gridCellY_;
+    seed.offsetX = gridOffsetX_;
+    seed.offsetY = gridOffsetY_;
+    SeedGridSettings(seed);
+
+    ShowRecoveredDialog(IDD_DLG_166, hwnd_);
+    if (LastGridSettingsAccepted()) {
+        const GridSettings& s = LastGridSettings();
+        gridEnabled_ = s.enabled;
+        gridCellX_ = s.cellX;
+        gridCellY_ = s.cellY;
+        gridOffsetX_ = s.offsetX;
+        gridOffsetY_ = s.offsetY;
+        SyncMenuChecks();
+        ::InvalidateRect(hwnd_, nullptr, TRUE);
+    }
+}
+
+void MainWindow::SetGridColor(COLORREF color, int commandId) {
+    if (commandId == kGridColorOther) {
+        static COLORREF custom[16] = {0};
+        CHOOSECOLORW cc = {sizeof(cc)};
+        cc.hwndOwner = hwnd_;
+        cc.rgbResult = gridColor_;
+        cc.lpCustColors = custom;
+        cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+        if (!::ChooseColorW(&cc)) return;
+        color = cc.rgbResult;
+    }
+    gridColor_ = color;
+    gridColorCommand_ = commandId;
+    SyncMenuChecks();
+    ::InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+void MainWindow::ToggleDisplay(int commandId) {
+    switch (commandId) {
+        case kDispAllColors: showAllColors_ = !showAllColors_; break;
+        case kDispUnits: showUnits_ = !showUnits_; break;
+        case kDispDoodads: showDoodads_ = !showDoodads_; break;
+        case kDispSpUnits: showSpUnits_ = !showSpUnits_; break;
+        case kDispZergGround: showZergGround_ = !showZergGround_; break;
+        case kDispSpecialStates: showSpecialStates_ = !showSpecialStates_; break;
+        case kDispHideMinimap: hideMinimap_ = !hideMinimap_; break;
+        case kDispColorCycle: allowColorCycle_ = !allowColorCycle_; break;
+        case kDispDeathFx: showDeathFx_ = !showDeathFx_; break;
+        case kDispFog: showFog_ = !showFog_; break;
+        case kDispLocations: showLocations_ = !showLocations_; break;
+        default: return;
+    }
+    SyncMenuChecks();
+    ::InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+void MainWindow::SyncMenuChecks() {
+    HMENU bar = ::GetMenu(hwnd_);
+    if (!bar) return;
+
+    CheckOnly(bar, kLayerIds, 6, kLayerIds[static_cast<int>(layer_)]);
+    CheckOnly(bar, kGridIds, 7, GridPresetOf(gridEnabled_, gridCellX_, gridCellY_));
+    CheckOnly(bar, kGridColorIds, 7, gridColorCommand_);
+
+    struct Toggle { int id; bool on; };
+    const Toggle toggles[] = {
+        {kDispAllColors, showAllColors_}, {kDispUnits, showUnits_},
+        {kDispDoodads, showDoodads_}, {kDispSpUnits, showSpUnits_},
+        {kDispZergGround, showZergGround_}, {kDispSpecialStates, showSpecialStates_},
+        {kDispHideMinimap, hideMinimap_}, {kDispColorCycle, allowColorCycle_},
+        {kDispDeathFx, showDeathFx_}, {kDispFog, showFog_},
+        {kDispLocations, showLocations_},
+    };
+    for (const Toggle& t : toggles) {
+        if (HMENU menu = FindMenuContaining(bar, t.id)) {
+            ::CheckMenuItem(menu, t.id, MF_BYCOMMAND | (t.on ? MF_CHECKED : MF_UNCHECKED));
+        }
+    }
+    ::DrawMenuBar(hwnd_);
+}
+
+void MainWindow::DrawGrid(HDC dc, const RECT& client) const {
+    if (!gridEnabled_ || !map_.IsOpen() || pxPerTile_ <= 0) return;
+
+    // 方格尺寸按源像素定义（32 = 一格），随缩放换算到屏幕
+    const int cellX = gridCellX_ * pxPerTile_ / 32;
+    const int cellY = gridCellY_ * pxPerTile_ / 32;
+    if (cellX < 2 && cellY < 2) return;
+
+    const HPEN pen = ::CreatePen(PS_DOT, 1, gridColor_);
+    const HGDIOBJ oldPen = ::SelectObject(dc, pen);
+    const int oldBk = ::SetBkMode(dc, TRANSPARENT);
+
+    if (cellX >= 2) {
+        int x = gridOffsetX_ * pxPerTile_ / 32 - scrollX_;
+        while (x < client.left) x += cellX;
+        for (; x < client.right; x += cellX) {
+            ::MoveToEx(dc, x, client.top, nullptr);
+            ::LineTo(dc, x, client.bottom);
+        }
+    }
+    if (cellY >= 2) {
+        int y = gridOffsetY_ * pxPerTile_ / 32 - scrollY_;
+        while (y < client.top) y += cellY;
+        for (; y < client.bottom; y += cellY) {
+            ::MoveToEx(dc, client.left, y, nullptr);
+            ::LineTo(dc, client.right, y);
+        }
+    }
+
+    ::SetBkMode(dc, oldBk);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(pen);
+}
+
+void MainWindow::DrawLocations(HDC dc, const RECT& client) const {
+    if (!map_.IsOpen() || pxPerTile_ <= 0) return;
+
+    const HPEN pen = ::CreatePen(PS_SOLID, 1, RGB(0, 220, 90));
+    const HGDIOBJ oldPen = ::SelectObject(dc, pen);
+    const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
+    const int oldBk = ::SetBkMode(dc, TRANSPARENT);
+    const COLORREF oldColor = ::SetTextColor(dc, RGB(0, 220, 90));
+
+    const auto& items = map_.locations().Items();
+    for (std::size_t i = 0; i < items.size(); i++) {
+        const Location& loc = items[i];
+        RECT r;
+        r.left = static_cast<int>(loc.left) * pxPerTile_ - scrollX_;
+        r.top = static_cast<int>(loc.top) * pxPerTile_ - scrollY_;
+        r.right = (static_cast<int>(loc.right) + 1) * pxPerTile_ - scrollX_;
+        r.bottom = (static_cast<int>(loc.bottom) + 1) * pxPerTile_ - scrollY_;
+        if (r.right < client.left || r.bottom < client.top ||
+            r.left > client.right || r.top > client.bottom) {
+            continue;
+        }
+        ::Rectangle(dc, r.left, r.top, r.right, r.bottom);
+
+        wchar_t label[16];
+        ::wsprintfW(label, L"%u", static_cast<unsigned>(i));
+        ::TextOutW(dc, r.left + 2, r.top + 1, label, static_cast<int>(wcslen(label)));
+    }
+
+    ::SetTextColor(dc, oldColor);
+    ::SetBkMode(dc, oldBk);
+    ::SelectObject(dc, oldBrush);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(pen);
+}
+
 void MainWindow::TileCoordsFromClient(int mx, int my, int& tx, int& ty) const {
     tx = -1;
     ty = -1;
@@ -335,8 +568,8 @@ void MainWindow::OnKeyDown(int vk) {
         return;
     }
     switch (vk) {
-        case '1': tool_ = Tool::kTerrain; break;
-        case '2': tool_ = Tool::kUnit; break;
+        case '1': SetLayer(EditLayer::kTerrain); break;
+        case '2': SetLayer(EditLayer::kUnits); break;
         case '3': tool_ = Tool::kPicker; break;
         case VK_DELETE:
             if (cursorTx_ >= 0) {
@@ -382,9 +615,21 @@ void MainWindow::DrawHud(HDC dc) const {
     const wchar_t* toolName = L"地形刷";
     if (tool_ == Tool::kUnit) toolName = L"单位";
     else if (tool_ == Tool::kPicker) toolName = L"吸管";
-    ::wsprintfW(text, L"工具: %s   刷子: 0x%04X   单位: %u   缩放: %dpx/瓦片   撤销: %u / 重做: %u\n"
+    else if (tool_ == Tool::kNone) toolName = L"仅查看";
+
+    const wchar_t* layerName = L"地形";
+    switch (layer_) {
+        case EditLayer::kDoodads: layerName = L"装饰物"; break;
+        case EditLayer::kFog: layerName = L"战争迷雾"; break;
+        case EditLayer::kLocations: layerName = L"地点"; break;
+        case EditLayer::kUnits: layerName = L"单位"; break;
+        case EditLayer::kSpUnits: layerName = L"SP单位"; break;
+        default: break;
+    }
+
+    ::wsprintfW(text, L"层: %s   工具: %s   刷子: 0x%04X   单位: %u   缩放: %dpx/瓦片   撤销: %u / 重做: %u\n"
                       L"左键应用 / 右键删单位 / 1地形 2单位 3吸管 / 滚轮缩放 / Ctrl+Z 撤销 / Ctrl+Y 重做",
-                toolName, static_cast<unsigned>(brushTile_),
+                layerName, toolName, static_cast<unsigned>(brushTile_),
                 static_cast<unsigned>(unitType_), pxPerTile_,
                 static_cast<unsigned>(history_.UndoCount()),
                 static_cast<unsigned>(history_.RedoCount()));
@@ -418,7 +663,9 @@ void MainWindow::Present(HDC dc, const RECT& client) {
         }
     }
 
-    DrawUnits(dc, client);
+    DrawGrid(dc, client);
+    if (showUnits_) DrawUnits(dc, client);
+    if (showLocations_) DrawLocations(dc, client);
 
     // 光标所在格高亮
     if (cursorTx_ >= 0) {
@@ -507,6 +754,101 @@ void MainWindow::OnCommand(int id) {
             break;
         case kEditRedo:
             Redo();
+            break;
+        case kEditDelete:
+            if (cursorTx_ >= 0) {
+                BeginEdit();
+                if (map_.RemoveUnitsAtTile(cursorTx_, cursorTy_) > 0) {
+                    CommitEdit(L"删除单位");
+                    ::InvalidateRect(hwnd_, nullptr, FALSE);
+                } else {
+                    editOpen_ = false;
+                }
+            }
+            break;
+        case kEditDeselect:
+            cursorTx_ = cursorTy_ = -1;
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kEditCut:
+        case kEditCopy:
+        case kEditPaste:
+        case kEditSelectAll:
+            Log(L"[ui] 编辑命令 0x%04X 暂未实现（需要选择/剪贴板模型）", id);
+            MessageBeep(MB_ICONWARNING);
+            break;
+        case kLayerTerrain:
+            SetLayer(EditLayer::kTerrain);
+            break;
+        case kLayerDoodads:
+            SetLayer(EditLayer::kDoodads);
+            break;
+        case kLayerFog:
+            SetLayer(EditLayer::kFog);
+            break;
+        case kLayerLocations:
+            SetLayer(EditLayer::kLocations);
+            break;
+        case kLayerUnits:
+            SetLayer(EditLayer::kUnits);
+            break;
+        case kLayerSpUnits:
+            SetLayer(EditLayer::kSpUnits);
+            break;
+        case kGridTiny:
+            ApplyGridPreset(8);
+            break;
+        case kGridSmall:
+            ApplyGridPreset(16);
+            break;
+        case kGridNormal:
+            ApplyGridPreset(32);
+            break;
+        case kGridLarge:
+            ApplyGridPreset(64);
+            break;
+        case kGridHuge:
+            ApplyGridPreset(128);
+            break;
+        case kGridCustom:
+            OpenGridSettings();
+            break;
+        case kGridOff:
+            ApplyGridPreset(0);
+            break;
+        case kGridColorBlack:
+            SetGridColor(RGB(0, 0, 0), id);
+            break;
+        case kGridColorGray:
+            SetGridColor(RGB(128, 128, 128), id);
+            break;
+        case kGridColorWhite:
+            SetGridColor(RGB(255, 255, 255), id);
+            break;
+        case kGridColorGreen:
+            SetGridColor(RGB(0, 200, 0), id);
+            break;
+        case kGridColorRed:
+            SetGridColor(RGB(220, 0, 0), id);
+            break;
+        case kGridColorBlue:
+            SetGridColor(RGB(0, 90, 220), id);
+            break;
+        case kGridColorOther:
+            SetGridColor(gridColor_, id);
+            break;
+        case kDispAllColors:
+        case kDispUnits:
+        case kDispDoodads:
+        case kDispSpUnits:
+        case kDispZergGround:
+        case kDispSpecialStates:
+        case kDispHideMinimap:
+        case kDispColorCycle:
+        case kDispDeathFx:
+        case kDispFog:
+        case kDispLocations:
+            ToggleDisplay(id);
             break;
         case kTriggerEditor:
             ShowRecoveredDialog(IDD_DLG_181, hwnd_);

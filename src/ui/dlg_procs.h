@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include <windows.h>
 
+#include "ui/dlg_types.h"
+
 namespace scmd {
 
 // 25 个对话框的处理过程（与 dialog_registry.cpp 的注册表一一对应）
@@ -33,5 +35,9 @@ INT_PTR CALLBACK ProcRichText(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);
 // 对话框返回值缓存
 int LastInputValue();                 // 188 / 191
 const wchar_t* LastEditedString();    // 189
+const GridSettings& LastGridSettings();   // 166
+// 166 的输入初值（打开对话框前由调用方写入）
+void SeedGridSettings(const GridSettings& seed);
+bool LastGridSettingsAccepted();
 
 }  // namespace scmd
