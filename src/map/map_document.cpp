@@ -51,6 +51,7 @@ const wchar_t* kEraPrefix[8] = {
 }  // namespace
 
 bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir) {
+    opened_ = false;
     path_.clear();
     units_.clear();
     tiles_.clear();
@@ -135,11 +136,58 @@ bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir)
     if (const Buffer* str = chk_.Find("STR ")) strings_.Parse(*str);
 
     path_ = path;
+    opened_ = true;
     dirty_ = false;
     Log(L"[map] opened %dx%d era=%u units=%zu trig=%zu loc=%zu str=%zu",
         width_, height_, era_, units_.size(), triggers_.BlockCount(),
         locations_.Count(), strings_.Count());
     return true;
+}
+
+bool MapDocument::CreateNew(int width, int height, u16 era, const std::wstring& tilesetDir) {
+    Close();
+    if (width <= 0 || height <= 0 || width > kMaxMapSize || height > kMaxMapSize) return false;
+
+    width_ = width;
+    height_ = height;
+    era_ = era < 8 ? era : 0;
+
+    Buffer dim(4, 0);
+    WriteU16(dim.data(), static_cast<u16>(width_));
+    WriteU16(dim.data() + 2, static_cast<u16>(height_));
+    Buffer eraBytes(2, 0);
+    WriteU16(eraBytes.data(), era_);
+    // 全 0 的 MTXM：瓦片组 0，正常地形集下可行走
+    tiles_.assign(static_cast<std::size_t>(width_) * height_ * 2, 0);
+
+    chk_.Parse(Buffer());
+    chk_.Set(section::kDim, std::move(dim));
+    chk_.Set(section::kEra, std::move(eraBytes));
+    chk_.Set(section::kMtxm, tiles_);
+
+    if (!tilesetDir.empty() && !tileset_.Load(tilesetDir, kEraPrefix[era_])) {
+        Log(L"[map] 新地图地形集加载失败（ERA %u）", era_);
+    }
+
+    opened_ = true;
+    dirty_ = true;      // 新建地图尚未落盘
+    Log(L"[map] new %dx%d era=%u", width_, height_, era_);
+    return true;
+}
+
+void MapDocument::Close() {
+    opened_ = false;
+    dirty_ = false;
+    path_.clear();
+    width_ = height_ = 0;
+    era_ = 0;
+    tiles_.clear();
+    units_.clear();
+    triggers_.Parse(Buffer());
+    locations_.Parse(Buffer());
+    strings_.Parse(Buffer());
+    chk_.Parse(Buffer());
+    tileset_.Unload();
 }
 
 namespace {
@@ -298,6 +346,8 @@ bool MapDocument::Save(const std::wstring& path) {
     }
 
     dirty_ = false;
+    path_ = path;
+    opened_ = true;
     Log(L"[map] saved %s  chk=%u bytes", path.c_str(), static_cast<unsigned>(chkBytes.size()));
     return true;
 }

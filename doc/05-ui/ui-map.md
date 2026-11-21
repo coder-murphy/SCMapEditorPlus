@@ -189,3 +189,29 @@ MSBuild SCMDPlus.sln /t:Rebuild /p:Configuration=Release /p:Platform=Win32 ^
 2. 主菜单中尚未实现的命令（保存/关闭、层切换、网格尺寸、剧本设置…）逐项接线；
 3. 各对话框控件 ID 语义化命名（当前保留原程序数值，便于与二进制对照）；
 4. 位图 134/151/152 尚未导出。
+
+## 文件菜单闭环（P3-11）
+
+文件菜单的 5 个命令已全部接线，并补了脏标记与标题显示：
+
+| 命令 | ID | 行为 |
+| --- | --- | --- |
+| 新建 | 0x8005 | 询问保存 → `MapDocument::CreateNew(64×64, ERA 0)`，未命名、脏标记置位 |
+| 打开 | 0x801B | 询问保存 → 文件对话框 → `OpenMap` |
+| 关闭 | 0x8007 | 询问保存 → `Close()` 释放文档与地形集，清空标题 |
+| 保存 | 0x8087 | 有路径直接写，否则转到另存为 |
+| 另存为 | 0x8088 | `SaveFileDialog` 选路径 → `Save()`，成功后同步路径与标题 |
+| 退出 | 0x0069 | 询问保存后销毁窗口 |
+
+- 未命名地图在标题中显示为“SCMD Plus 3.0 - 未命名  [64x64 …，已修改]”。
+- `WM_CLOSE` 与“退出”共用 `MaybeSave()`（是/否/取消）。
+- `MapDocument` 新增 `CreateNew` / `Close`，`IsOpen()` 改由 `opened_` 判定（未保存的新图也算已打开）；
+  `Save()` 成功后回填 `path_` 并清脏。
+
+无头回归 `--file-test=<输出.scx>`：
+
+```
+created=1 dirtyNew=1 unnamed=1 saved=1 cleanAfterSave=1 pathSaved=1
+reopened=1 sizeOk=1 painted=16/16 closed=1 freshOk=1
+```
+

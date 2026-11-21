@@ -24,6 +24,11 @@ public:
 
     void SetTilesetDir(const std::wstring& dir) { tilesetDir_ = dir; }
     bool OpenMap(const std::wstring& path);
+    // 文件菜单闭环：新建 / 关闭 / 保存 / 另存为
+    void NewMap();
+    void CloseMap();
+    bool SaveMap(bool saveAs);
+    bool MaybeSave();   // 有未保存修改时询问，返回 false 表示取消
     const MapDocument& map() const { return map_; }
     MapDocument& mutableMap() { return map_; }
 
@@ -65,6 +70,7 @@ private:
     MapDocument map_;
     std::wstring tilesetDir_;
     std::wstring fileName_;
+    std::wstring mapPath_;      // 完整路径（未命名地图为空）
 
     TerrainRenderer renderer_;
     TerrainImage image_;

@@ -16,9 +16,13 @@ public:
     // tilesetDir 为空时只打开文档、不渲染
     bool Open(const std::wstring& path, const std::wstring& tilesetDir);
     bool Open(const std::wstring& path) { return Open(path, std::wstring()); }
+    // 新建空白地图：只写 DIM/ERA/MTXM（全 0，可行走），单位表为空
+    bool CreateNew(int width, int height, u16 era, const std::wstring& tilesetDir);
     bool Save(const std::wstring& path);
+    // 关闭文档并释放地形集（path 清空）
+    void Close();
 
-    bool IsOpen() const { return !path_.empty(); }
+    bool IsOpen() const { return opened_; }
     const std::wstring& path() const { return path_; }
 
     int width() const { return width_; }
@@ -81,6 +85,7 @@ private:
     TriggerSection triggers_;
     LocationTable locations_;
     StringTable strings_;
+    bool opened_ = false;
     bool dirty_ = false;
 };
 

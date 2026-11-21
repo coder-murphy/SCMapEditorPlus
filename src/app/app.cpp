@@ -113,6 +113,20 @@ std::wstring ParseSaveToArg() {
 // 前置声明（WriteDiag 定义在下方）
 void WriteDiag(const std::wstring& text);
 
+// --file-test=<输出scx>：文件菜单闭环回归（新建 -> 绘制 -> 保存 -> 重开 -> 关闭）
+std::wstring ParseFileTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--file-test=", 12) == 0) path = argv[i] + 12;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
 // --edit-test=<输出scx>：无头编辑回归（刷地形 + 放/删单位 + 可行走校验）
 std::wstring ParseEditTestArg() {
     int argc = 0;
@@ -214,6 +228,51 @@ int RunEditTest(const std::wstring& mapPath, const std::wstring& outPath) {
 
     const bool ok = painted && placed == 3 && rejected && removed == 1 && saved &&
                     reopened && repaintMatches == 3 && countOk;
+    return ok ? 0 : 2;
+}
+
+int RunFileTest(const std::wstring& outPath) {
+    MapDocument doc;
+    const bool created = doc.CreateNew(32, 32, 0, ParseTsArg());
+    const bool dirtyAfterNew = doc.IsDirty();
+    const bool unnamed = doc.path().empty();
+
+    const u16 brush = 0x0002;
+    doc.PaintRect(1, 1, 4, 4, brush);
+    const bool saved = doc.Save(outPath);
+    const bool cleanAfterSave = !doc.IsDirty();
+    const bool pathAfterSave = doc.path() == outPath;
+
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    int painted = 0;
+    if (reopened) {
+        for (int y = 1; y <= 4; y++) {
+            for (int x = 1; x <= 4; x++) {
+                if (check.TileAt(x, y) == brush) painted++;
+            }
+        }
+    }
+    const bool sizeOk = reopened && check.width() == 32 && check.height() == 32;
+
+    doc.Close();
+    const bool closed = !doc.IsOpen() && doc.path().empty();
+
+    MapDocument fresh;
+    const bool freshOk = fresh.CreateNew(64, 64, 0, std::wstring()) && fresh.IsOpen() &&
+                         fresh.path().empty();
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+        L"created=%d\ndirtyNew=%d\nunnamed=%d\nsaved=%d\ncleanAfterSave=%d\n"
+        L"pathSaved=%d\nreopened=%d\nsizeOk=%d\npainted=%d/16\nclosed=%d\nfreshOk=%d\n",
+        created ? 1 : 0, dirtyAfterNew ? 1 : 0, unnamed ? 1 : 0, saved ? 1 : 0,
+        cleanAfterSave ? 1 : 0, pathAfterSave ? 1 : 0, reopened ? 1 : 0, sizeOk ? 1 : 0,
+        painted, closed ? 1 : 0, freshOk ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = created && dirtyAfterNew && unnamed && saved && cleanAfterSave &&
+                    pathAfterSave && reopened && sizeOk && painted == 16 && closed && freshOk;
     return ok ? 0 : 2;
 }
 
@@ -587,6 +646,13 @@ int App::Run(HINSTANCE hInstance) {
         const std::wstring mapPath = ParseOpenArg();
         if (mapPath.empty()) { WriteDiag(L"open=FAIL no-map\n"); return 2; }
         const int rc = RunEditTest(mapPath, editOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 文件菜单闭环回归（无头）
+    if (const std::wstring fileOut = ParseFileTestArg(); !fileOut.empty()) {
+        const int rc = RunFileTest(fileOut);
         ::DestroyWindow(mainWindow_.hwnd());
         return rc;
     }

@@ -91,18 +91,16 @@ bool MainWindow::TranslateAccel(MSG& msg) const {
 
 void MainWindow::UpdateTitle() {
     std::wstring title = kWindowTitle;
-    if (!fileName_.empty()) {
+    if (map_.IsOpen()) {
         title += L" - ";
-        title += fileName_;
-        if (map_.IsOpen()) {
-            wchar_t info[192];
-            ::wsprintfW(info, L"  [%dx%d  ERA %u %s  %u 个单位%s%s]",
-                        map_.width(), map_.height(), static_cast<unsigned>(map_.era()),
-                        map_.eraName(), static_cast<unsigned>(map_.unitCount()),
-                        map_.hasTileset() ? L"" : L"，无地形集",
-                        map_.IsDirty() ? L"，已修改" : L"");
-            title += info;
-        }
+        title += fileName_.empty() ? L"未命名" : fileName_;
+        wchar_t info[192];
+        ::wsprintfW(info, L"  [%dx%d  ERA %u %s  %u 个单位%s%s]",
+                    map_.width(), map_.height(), static_cast<unsigned>(map_.era()),
+                    map_.eraName(), static_cast<unsigned>(map_.unitCount()),
+                    map_.hasTileset() ? L"" : L"，无地形集",
+                    map_.IsDirty() ? L"，已修改" : L"");
+        title += info;
     }
     ::SetWindowTextW(hwnd_, title.c_str());
 }
@@ -167,11 +165,60 @@ bool MainWindow::OpenMap(const std::wstring& path) {
         ::MessageBoxW(hwnd_, L"无法打开该地图文件。", kWindowTitle, MB_ICONWARNING);
         return false;
     }
+    mapPath_ = path;
     fileName_ = FileNameOf(path);
     history_.Clear();
     editOpen_ = false;
     UpdateTitle();
     RebuildView(pxPerTile_);
+    return true;
+}
+
+void MainWindow::NewMap() {
+    if (!MaybeSave()) return;
+    if (!map_.CreateNew(64, 64, 0, tilesetDir_)) return;
+    mapPath_.clear();
+    fileName_.clear();
+    history_.Clear();
+    editOpen_ = false;
+    UpdateTitle();
+    RebuildView(pxPerTile_);
+}
+
+void MainWindow::CloseMap() {
+    if (!MaybeSave()) return;
+    map_.Close();
+    mapPath_.clear();
+    fileName_.clear();
+    history_.Clear();
+    editOpen_ = false;
+    ReleaseBackBuffer();
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+bool MainWindow::SaveMap(bool saveAs) {
+    if (!map_.IsOpen()) return false;
+    std::wstring path = mapPath_;
+    if (saveAs || path.empty()) {
+        if (!SaveFileDialog(hwnd_, kMapFilter, L"scx", path)) return false;
+    }
+    if (!map_.Save(path)) {
+        ::MessageBoxW(hwnd_, L"保存地图失败。", kWindowTitle, MB_ICONWARNING);
+        return false;
+    }
+    mapPath_ = path;
+    fileName_ = FileNameOf(path);
+    UpdateTitle();
+    return true;
+}
+
+bool MainWindow::MaybeSave() {
+    if (!map_.IsOpen() || !map_.IsDirty()) return true;
+    const int answer = ::MessageBoxW(hwnd_, L"当前地图已修改，是否保存？", kWindowTitle,
+                                     MB_YESNOCANCEL | MB_ICONQUESTION);
+    if (answer == IDCANCEL) return false;
+    if (answer == IDYES) return SaveMap(false);
     return true;
 }
 
@@ -437,11 +484,24 @@ bool MainWindow::Redo() {
 
 void MainWindow::OnCommand(int id) {
     switch (id) {
+        case kFileNew:
+            NewMap();
+            break;
         case kFileOpen: {
+            if (!MaybeSave()) break;
             std::wstring path;
             if (OpenFileDialog(hwnd_, kMapFilter, path)) OpenMap(path);
             break;
         }
+        case kFileClose:
+            CloseMap();
+            break;
+        case kFileSave:
+            SaveMap(false);
+            break;
+        case kFileSaveAs:
+            SaveMap(true);
+            break;
         case kEditUndo:
             Undo();
             break;
@@ -455,7 +515,7 @@ void MainWindow::OnCommand(int id) {
             ShowRecoveredDialog(IDD_DLG_155, hwnd_);
             break;
         case kFileExit:
-            ::DestroyWindow(hwnd_);
+            if (MaybeSave()) ::DestroyWindow(hwnd_);
             break;
         case kHelpAbout:
             ::MessageBoxW(hwnd_, L"SCMD Plus 3.0\nWin32 骨架版本", kWindowTitle, MB_OK | MB_ICONINFORMATION);
@@ -558,6 +618,9 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         case WM_SIZE:
             UpdateScrollBars();
+            return 0;
+        case WM_CLOSE:
+            if (MaybeSave()) ::DestroyWindow(hwnd_);
             return 0;
         case WM_DESTROY:
             ReleaseBackBuffer();
