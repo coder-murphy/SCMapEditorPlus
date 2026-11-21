@@ -96,7 +96,8 @@ const std::string& StringTable::At(std::size_t index) const {
 }
 
 void StringTable::Set(std::size_t index, std::string value) {
-    if (index < items_.size()) items_[index] = std::move(value);
+    if (index >= items_.size()) items_.resize(index + 1);
+    items_[index] = std::move(value);
 }
 
 // ── TriggerSection ──

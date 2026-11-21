@@ -1,5 +1,7 @@
 ﻿#include "ui/dlg_procs.h"
 
+#include <string>
+
 #include "common/log.h"
 #include "res/control_ids.h"
 #include "ui/dlg_common.h"
@@ -144,14 +146,23 @@ INT_PTR CALLBACK ProcListEditorB(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
 }
 
 // 187：富文本（RichEdit20A）
+namespace {
+std::wstring g_richText;
+}
+const wchar_t* LastRichText() { return g_richText.c_str(); }
+void SeedRichText(const std::wstring& text) { g_richText = text; }
+
 INT_PTR CALLBACK ProcRichText(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
         case WM_INITDIALOG:
             CenterDialog(dlg);
-            ::SetDlgItemTextW(dlg, IDC_D187_1134, L"说明");
+            ::SetDlgItemTextW(dlg, IDC_D187_1134, g_richText.c_str());
             return TRUE;
         case WM_COMMAND:
             if (LOWORD(wParam) == IDC_D187_1) {
+                wchar_t buf[4096] = L"";
+                ::GetDlgItemTextW(dlg, IDC_D187_1134, buf, 4095);
+                g_richText = buf;
                 ::EndDialog(dlg, IDOK);
                 return TRUE;
             }

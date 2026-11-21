@@ -9,22 +9,25 @@ namespace scmd {
 
 namespace {
 UnitProps g_unitProps;
+UnitProps g_unitPropsSeed;
 unsigned g_spFlags = 0;
 }
 
 const UnitProps& LastUnitProps() { return g_unitProps; }
 unsigned LastSpFlags() { return g_spFlags; }
 
+void SeedUnitProps(const UnitProps& seed) { g_unitPropsSeed = seed; }
+
 // 180：设置单位属性（生命/护盾/魔法/资源/弹药 + 5 个状态位）
 INT_PTR CALLBACK ProcUnitProps(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
         case WM_INITDIALOG:
             CenterDialog(dlg);
-            SetPercent(dlg, IDC_D180_1078, 100);
-            SetPercent(dlg, IDC_D180_1079, 100);
-            SetPercent(dlg, IDC_D180_1081, 100);
-            ::SetDlgItemInt(dlg, IDC_D180_1080, 0, FALSE);
-            ::SetDlgItemInt(dlg, IDC_D180_1082, 0, FALSE);
+            SetPercent(dlg, IDC_D180_1078, g_unitPropsSeed.hp);
+            SetPercent(dlg, IDC_D180_1079, g_unitPropsSeed.shield);
+            SetPercent(dlg, IDC_D180_1081, g_unitPropsSeed.energy);
+            ::SetDlgItemInt(dlg, IDC_D180_1080, static_cast<UINT>(g_unitPropsSeed.resource), FALSE);
+            ::SetDlgItemInt(dlg, IDC_D180_1082, static_cast<UINT>(g_unitPropsSeed.ammo), FALSE);
             return TRUE;
         case WM_COMMAND:
             if (LOWORD(wParam) == IDC_D180_1) {                 // 确定

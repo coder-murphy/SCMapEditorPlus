@@ -8,9 +8,11 @@
 #include <windowsx.h>
 
 #include "common/log.h"
+#include "common/string_util.h"
 #include "platform/file_dialog.h"
 #include "res/resource.h"
 #include "ui/command_ids.h"
+#include "ui/dialog_registry.h"
 #include "ui/dlg_procs.h"
 #include "ui/dialogs.h"
 
@@ -228,7 +230,10 @@ bool MainWindow::OpenMap(const std::wstring& path) {
 
 void MainWindow::NewMap() {
     if (!MaybeSave()) return;
-    if (!map_.CreateNew(64, 64, 0, tilesetDir_)) return;
+    ShowRecoveredDialog(IDD_DLG_169, hwnd_);
+    if (LastDialogResult() != IDOK) return;
+    const MapSizeParams& size = LastMapSize();
+    if (!map_.CreateNew(size.width, size.height, 0, tilesetDir_)) return;
     mapPath_.clear();
     fileName_.clear();
     history_.Clear();
@@ -272,6 +277,114 @@ bool MainWindow::MaybeSave() {
     if (answer == IDCANCEL) return false;
     if (answer == IDYES) return SaveMap(false);
     return true;
+}
+
+void MainWindow::ResizeMapDialog() {
+    if (!map_.IsOpen()) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+    ShowRecoveredDialog(IDD_DLG_175, hwnd_);
+    if (LastDialogResult() != IDOK) return;
+
+    const ResizeParams& p = LastResizeParams();
+    if (!map_.Resize(p.width, p.height, p.offsetX, p.offsetY, p.smoothEdges)) {
+        ::MessageBoxW(hwnd_, L"重设地图大小失败。", kWindowTitle, MB_ICONWARNING);
+        return;
+    }
+    history_.Clear();     // 旧快照与新尺寸不兼容
+    editOpen_ = false;
+    RebuildView(pxPerTile_);
+    UpdateTitle();
+}
+
+int MainWindow::UnitIndexAtTile(int tx, int ty) const {
+    const auto& units = map_.units();
+    for (std::size_t i = 0; i < units.size(); i++) {
+        if (static_cast<int>(units[i].x) / 32 == tx &&
+            static_cast<int>(units[i].y) / 32 == ty) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+void MainWindow::EditUnitProps() {
+    if (!map_.IsOpen() || cursorTx_ < 0) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+    const int index = UnitIndexAtTile(cursorTx_, cursorTy_);
+    if (index < 0) {
+        ::MessageBoxW(hwnd_, L"光标所在格没有单位。", kWindowTitle, MB_ICONINFORMATION);
+        return;
+    }
+
+    const UnitRecord& unit = map_.units()[index];
+    UnitProps seed;
+    seed.hp = unit.hpPercent;
+    seed.shield = unit.shieldPercent;
+    seed.energy = unit.energyPercent;
+    seed.resource = static_cast<int>(unit.resource);
+    SeedUnitProps(seed);
+
+    ShowRecoveredDialog(IDD_DLG_180, hwnd_);
+    if (LastDialogResult() != IDOK) return;
+
+    const UnitProps& props = LastUnitProps();
+    BeginEdit();
+    UnitRecord& target = map_.mutableUnits()[index];
+    target.hpPercent = static_cast<u8>(props.hp);
+    target.shieldPercent = static_cast<u8>(props.shield);
+    target.energyPercent = static_cast<u8>(props.energy);
+    target.resource = static_cast<u32>(props.resource);
+    map_.MarkDirty();
+    CommitEdit(L"修改单位属性");
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::EditMapText(int stringIndex, bool richText) {
+    if (!map_.IsOpen()) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+    const std::wstring seed = Utf8ToWide(map_.strings().At(static_cast<std::size_t>(stringIndex)));
+
+    if (richText) {
+        SeedRichText(seed);
+        ShowRecoveredDialog(IDD_DLG_187, hwnd_);
+        if (LastDialogResult() != IDOK) return;
+        map_.mutableStrings().Set(static_cast<std::size_t>(stringIndex),
+                                   WideToUtf8(LastRichText()));
+    } else {
+        SeedEditedString(seed);
+        ShowRecoveredDialog(IDD_DLG_189, hwnd_);
+        if (LastDialogResult() != IDOK) return;
+        map_.mutableStrings().Set(static_cast<std::size_t>(stringIndex),
+                                   WideToUtf8(LastEditedString()));
+    }
+    map_.MarkDirty();
+    UpdateTitle();
+}
+
+void MainWindow::GotoStartPosition() {
+    if (!map_.IsOpen()) return;
+    for (const auto& u : map_.units()) {
+        if (u.type != 214) continue;      // 出生点
+        RECT rc;
+        ::GetClientRect(hwnd_, &rc);
+        const int tx = static_cast<int>(u.x) / 32;
+        const int ty = static_cast<int>(u.y) / 32;
+        const int viewW = static_cast<int>(rc.right - rc.left);
+        const int viewH = static_cast<int>(rc.bottom - rc.top);
+        scrollX_ = std::max(0, tx * pxPerTile_ - viewW / 2);
+        scrollY_ = std::max(0, ty * pxPerTile_ - viewH / 2);
+        UpdateScrollBars();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+        return;
+    }
+    ::MessageBoxW(hwnd_, L"地图中没有出生点。", kWindowTitle, MB_ICONINFORMATION);
 }
 
 void MainWindow::SetLayer(EditLayer layer) {
@@ -770,6 +883,55 @@ void MainWindow::OnCommand(int id) {
             cursorTx_ = cursorTy_ = -1;
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
+        case kEditProperties:
+            EditUnitProps();
+            break;
+        case kScenarioResize:
+            ResizeMapDialog();
+            break;
+        case kScenarioDescription:
+            EditMapText(2, true);      // STR[2] 地图描述（富文本）
+            break;
+        case kScenarioStrings:
+            EditMapText(1, false);     // STR[1] 地图名
+            break;
+        case kScenarioForces:
+            ShowRecoveredDialog(IDD_DLG_183, hwnd_);
+            break;
+        case kScenarioUnits:
+            ShowRecoveredDialog(IDD_DLG_172, hwnd_);
+            break;
+        case kScenarioUpgrades:
+        case kScenarioTech:
+            ShowRecoveredDialog(IDD_DLG_184, hwnd_);
+            break;
+        case kScenarioGotoStart:
+            GotoStartPosition();
+            break;
+        case kScenarioSounds:
+            Log(L"[ui] 编辑声音暂未实现");
+            MessageBeep(MB_ICONWARNING);
+            break;
+        case kLayerBrush:
+        case kWindowBrush:
+            ShowRecoveredDialog(IDD_DLG_182, hwnd_);
+            break;
+        case kOptionsEditorSettings:
+            ShowRecoveredDialog(IDD_DLG_155, hwnd_);
+            break;
+        case kAdvancedCheckUpdate:
+            ShowRecoveredDialog(IDD_DLG_174, hwnd_);
+            break;
+        case kAdvancedBackup:
+            ShowRecoveredDialog(IDD_DLG_173, hwnd_);
+            break;
+        case kWindowTerrain:
+            InvalidateRect(hwnd_, nullptr, FALSE);   // 地形视图即主视图，重绘即可
+            break;
+        case kWindowDoodads:
+            Log(L"[ui] 装饰物窗口暂未实现");
+            MessageBeep(MB_ICONWARNING);
+            break;
         case kEditCut:
         case kEditCopy:
         case kEditPaste:
@@ -860,7 +1022,7 @@ void MainWindow::OnCommand(int id) {
             if (MaybeSave()) ::DestroyWindow(hwnd_);
             break;
         case kHelpAbout:
-            ::MessageBoxW(hwnd_, L"SCMD Plus 3.0\nWin32 骨架版本", kWindowTitle, MB_OK | MB_ICONINFORMATION);
+            ShowRecoveredDialog(IDD_DLG_103, hwnd_);
             break;
         default:
             Log(L"[ui] command %d not implemented", id);

@@ -13,6 +13,8 @@ std::wstring g_lastString;
 
 const wchar_t* LastEditedString() { return g_lastString.c_str(); }
 
+void SeedEditedString(const std::wstring& text) { g_lastString = text; }
+
 // 189：编辑字符串。主编辑框 1120，右侧为预览（1079），左侧行号（1121）。
 INT_PTR CALLBACK ProcStringEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {

@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include <string>
 #include <windows.h>
 
 #include "ui/dlg_types.h"
@@ -36,8 +37,17 @@ INT_PTR CALLBACK ProcRichText(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);
 int LastInputValue();                 // 188 / 191
 const wchar_t* LastEditedString();    // 189
 const GridSettings& LastGridSettings();   // 166
-// 166 的输入初值（打开对话框前由调用方写入）
+const MapSizeParams& LastMapSize();       // 169
+const ResizeParams& LastResizeParams();   // 175
+const UnitProps& LastUnitProps();         // 180
+unsigned LastSpFlags();                   // 164
+
+// 对话框输入初值（打开前由调用方写入）
 void SeedGridSettings(const GridSettings& seed);
 bool LastGridSettingsAccepted();
+void SeedUnitProps(const UnitProps& seed);
+void SeedEditedString(const std::wstring& text);
+void SeedRichText(const std::wstring& text);
+const wchar_t* LastRichText();
 
 }  // namespace scmd

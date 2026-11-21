@@ -21,6 +21,28 @@ enum CommandId : int {
     kEditDeselect = 0x809E,
     kEditProperties = 0x809C,
 
+    // 剧本设置
+    kScenarioResize = 0x8106,
+    kScenarioDescription = 0x8041,
+    kScenarioForces = 0x8042,
+    kScenarioUnits = 0x8044,
+    kScenarioUpgrades = 0x8043,
+    kScenarioTech = 0x8045,
+    kScenarioStrings = 0x8046,
+    kScenarioSounds = 0x8047,
+    kScenarioGotoStart = 0x80C1,
+
+    // 窗口
+    kWindowTerrain = 0x8003,
+    kWindowDoodads = 0x8004,
+    kWindowBrush = 0x8114,
+    kLayerBrush = 0x810E,       // 编辑层 → 复制/剪切/粘贴/刷子
+
+    // 选项 / 高级 / 帮助
+    kOptionsEditorSettings = 0x80C4,
+    kAdvancedCheckUpdate = 0x8071,
+    kAdvancedBackup = 0x80F9,
+
     kLayerTerrain = 0x803A,     // 编辑 → 编辑层 → 地形
     kLayerDoodads = 0x803B,
     kLayerFog = 0x803E,

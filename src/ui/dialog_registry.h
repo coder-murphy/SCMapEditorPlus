@@ -22,4 +22,7 @@ bool ShowDialog(int id, HWND owner);
 // 最近一次 DialogBoxParamW 失败的 Win32 错误码（0 表示无错误）
 int LastDialogError();
 
+// 最近一次 DialogBoxParamW 的返回值（IDOK / IDCANCEL / -1 失败）
+INT_PTR LastDialogResult();
+
 }  // namespace scmd

@@ -347,6 +347,72 @@ int RunMenuCommandTest(HWND hwnd) {
     return ok ? 0 : 2;
 }
 
+// --resize-test=<输出scx>：重设地图大小回归（DIM/MTXM 平移、单位越界丢弃）
+std::wstring ParseResizeTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--resize-test=", 14) == 0) path = argv[i] + 14;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+int RunResizeTest(const std::wstring& mapPath, const std::wstring& outPath) {
+    MapDocument doc;
+    if (!doc.Open(mapPath, ParseTsArg())) { WriteDiag(L"open=FAIL\n"); return 2; }
+
+    const int oldW = doc.width();
+    const int oldH = doc.height();
+    const std::size_t oldUnits = doc.unitCount();
+
+    // 找一个非零瓦片，验证平移映射
+    int fx = -1, fy = -1;
+    u16 expected = 0;
+    for (int y = 0; y < oldH && fx < 0; y++) {
+        for (int x = 0; x < oldW; x++) {
+            if (doc.TileAt(x, y) != 0) { fx = x; fy = y; expected = doc.TileAt(x, y); break; }
+        }
+    }
+
+    const int newW = 96, newH = 96;
+    const bool resized = doc.Resize(newW, newH, 1, 1, false);
+    const bool dimOk = doc.width() == newW && doc.height() == newH;
+    const bool tileMoveOk = fx >= 0 && fx + 1 < newW && fy + 1 < newH &&
+                            doc.TileAt(fx + 1, fy + 1) == expected;
+    const bool borderOk = doc.TileAt(0, 0) == 0;
+    const bool unitsInBounds = [&doc] {
+        for (const auto& u : doc.units()) {
+            if (u.x >= doc.width() * 32 || u.y >= doc.height() * 32) return false;
+        }
+        return true;
+    }();
+    const bool dirty = doc.IsDirty();
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    const bool reopenDim = reopened && check.width() == newW && check.height() == newH;
+    const bool reopenTile = reopened && fx >= 0 && check.TileAt(fx + 1, fy + 1) == expected;
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+        L"old=%dx%d\nnew=%dx%d\nresized=%d\ndimOk=%d\ntileMove=%d\nborderZero=%d\n"
+        L"unitsInBounds=%d\nunits=%u->%u\ndirty=%d\nsaved=%d\nreopened=%d\nreopenDim=%d\nreopenTile=%d\n",
+        oldW, oldH, newW, newH, resized ? 1 : 0, dimOk ? 1 : 0, tileMoveOk ? 1 : 0,
+        borderOk ? 1 : 0, unitsInBounds ? 1 : 0, static_cast<unsigned>(oldUnits),
+        static_cast<unsigned>(doc.unitCount()), dirty ? 1 : 0,
+        saved ? 1 : 0, reopened ? 1 : 0, reopenDim ? 1 : 0, reopenTile ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = resized && dimOk && tileMoveOk && borderOk && unitsInBounds && dirty &&
+                    saved && reopened && reopenDim && reopenTile;
+    return ok ? 0 : 2;
+}
+
 // --undo-test：无头撤销/重做回归
 std::wstring ParseUndoTestArg() {
     int argc = 0;
@@ -735,6 +801,15 @@ int App::Run(HINSTANCE hInstance) {
         const std::wstring mapPath = ParseOpenArg();
         if (mapPath.empty()) { WriteDiag(L"open=FAIL no-map\n"); return 2; }
         const int rc = RunEditTest(mapPath, editOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 重设地图大小回归（无头）
+    if (const std::wstring resizeOut = ParseResizeTestArg(); !resizeOut.empty()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) { WriteDiag(L"open=FAIL no-map\n"); return 2; }
+        const int rc = RunResizeTest(mapPath, resizeOut);
         ::DestroyWindow(mainWindow_.hwnd());
         return rc;
     }

@@ -19,6 +19,8 @@ public:
     // 新建空白地图：只写 DIM/ERA/MTXM（全 0，可行走），单位表为空
     bool CreateNew(int width, int height, u16 era, const std::wstring& tilesetDir);
     bool Save(const std::wstring& path);
+    // 更改地图尺寸：旧内容按 (offsetX, offsetY) 平移进新画布，越界单位丢弃
+    bool Resize(int width, int height, int offsetX, int offsetY, bool smoothEdges);
     // 关闭文档并释放地形集（path 清空）
     void Close();
 

@@ -37,10 +37,12 @@ const DialogEntry kEntries[] = {
 };
 
 int g_lastDialogError = 0;
+INT_PTR g_lastDialogResult = 0;
 
 }  // namespace
 
 int LastDialogError() { return g_lastDialogError; }
+INT_PTR LastDialogResult() { return g_lastDialogResult; }
 
 const DialogEntry* FindDialog(int id) {
     for (const auto& e : kEntries) {
@@ -64,6 +66,7 @@ bool ShowDialog(int id, HWND owner) {
     }
     ::SetLastError(0);
     const INT_PTR r = ::DialogBoxParamW(::GetModuleHandleW(nullptr), MAKEINTRESOURCEW(id), owner, e->proc, 0);
+    g_lastDialogResult = r;
     if (r == -1) {
         g_lastDialogError = static_cast<int>(::GetLastError());
         Log(L"[dlg] DialogBoxParam failed for %d (err=%d)", id, g_lastDialogError);

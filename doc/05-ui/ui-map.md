@@ -238,3 +238,36 @@ gridLarge=1 gridOff=1 gridBack=1 gridRed=1
 unitsOff=1 unitsOn=1 fogOn=1
 ```
 
+
+## 核心对话框接线（P3-11c）
+
+| 菜单命令 | ID | 对话框 / 行为 |
+| --- | --- | --- |
+| 文件 → 新建 | 0x8005 | 169 新建地图（16..256，默认 64）→ `CreateNew` |
+| 剧本设置 → 变更地图尺寸 | 0x8106 | 175 → `MapDocument::Resize`（MTXM 平移、DIM 更新、越界单位丢弃） |
+| 剧本设置 → 地图描述 | 0x8041 | 187 富文本，读写 STR[2] |
+| 剧本设置 → 编辑字符串字符串 | 0x8046 | 189，读写 STR[1]（地图名） |
+| 剧本设置 → 势力设定 | 0x8042 | 183 标签容器 |
+| 剧本设置 → 单位设定 | 0x8044 | 172 单位名字 |
+| 剧本设置 → 升级/科技设置 | 0x8043/0x8045 | 184 列表容器 |
+| 剧本设置 → 到开始位置 | 0x80C1 | 视口居中到首个出生点（214） |
+| 编辑 → 属性 | 0x809C | 180，按光标所在单位回填并写回 HP/护盾/能量/资源 |
+| 编辑层 → 复制/剪切/粘贴/刷子 | 0x810E | 182 自定义刷子 |
+| 窗口 → 刷子窗口 | 0x8114 | 182 |
+| 选项 → 编辑器设定 | 0x80C4 | 155 |
+| 高级 → 检查更新 / 打开备份数据 | 0x8071 / 0x80F9 | 174 / 173 |
+| 帮助 → 关于 | 0x0068 | 103（替换原 MessageBox） |
+
+- 新增 `LastDialogResult()`，调用方用 `IDOK` 判断是否应用对话框结果。
+- 166/180/187/189 支持打开前写入初值（`SeedGridSettings` / `SeedUnitProps` /
+  `SeedRichText` / `SeedEditedString`）。
+- `StringTable::Set` 允许扩写到指定下标；`Save` 在没有 MRGN/STR 段时按需新建。
+- 尚无专属对话框的项（编辑声音、装饰物窗口、在线帮助等）记录日志并提示音。
+
+无头回归 `--resize-test`（192×192 → 96×96，偏移 1,1）：
+
+```
+dimOk=1 tileMove=1 borderZero=1 unitsInBounds=1 units=144->33
+dirty=1 saved=1 reopened=1 reopenDim=1 reopenTile=1
+```
+

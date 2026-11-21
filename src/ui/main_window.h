@@ -72,6 +72,13 @@ private:
     void DrawGrid(HDC dc, const RECT& client) const;
     void DrawLocations(HDC dc, const RECT& client) const;
 
+    // 对话框接线
+    void ResizeMapDialog();
+    void EditUnitProps();
+    void EditMapText(int stringIndex, bool richText);
+    int UnitIndexAtTile(int tx, int ty) const;
+    void GotoStartPosition();
+
     void UpdateScrollBars();
     void OnLButtonDown(int mx, int my);
     void OnMouseMove(int mx, int my, bool leftDown);

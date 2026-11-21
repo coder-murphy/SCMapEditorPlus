@@ -175,6 +175,59 @@ bool MapDocument::CreateNew(int width, int height, u16 era, const std::wstring& 
     return true;
 }
 
+bool MapDocument::Resize(int width, int height, int offsetX, int offsetY, bool smoothEdges) {
+    if (!opened_ || width <= 0 || height <= 0 || width > kMaxMapSize || height > kMaxMapSize) {
+        return false;
+    }
+    if (smoothEdges) Log(L"[map] resize: 平滑边缘暂未实现，按硬边处理");
+
+    Buffer next(static_cast<std::size_t>(width) * height * 2, 0);
+    const int copyW = std::min(width_, width);
+    const int copyH = std::min(height_, height);
+    for (int y = 0; y < copyH; y++) {
+        const int ny = y + offsetY;
+        if (ny < 0 || ny >= height) continue;
+        const std::size_t src = (static_cast<std::size_t>(y) * width_);
+        const std::size_t dst = (static_cast<std::size_t>(ny) * width);
+        for (int x = 0; x < copyW; x++) {
+            const int nx = x + offsetX;
+            if (nx < 0 || nx >= width) continue;
+            const std::size_t s = (src + x) * 2;
+            if (s + 1 >= tiles_.size()) continue;
+            next[(dst + nx) * 2] = tiles_[s];
+            next[(dst + nx) * 2 + 1] = tiles_[s + 1];
+        }
+    }
+
+    tiles_ = std::move(next);
+    width_ = width;
+    height_ = height;
+
+    // 单位：按格平移，越界丢弃
+    std::vector<UnitRecord> kept;
+    kept.reserve(units_.size());
+    for (const auto& u : units_) {
+        const int nx = static_cast<int>(u.x) + offsetX * 32;
+        const int ny = static_cast<int>(u.y) + offsetY * 32;
+        if (nx < 0 || ny < 0 || nx >= width_ * 32 || ny >= height_ * 32) continue;
+        UnitRecord moved = u;
+        moved.x = static_cast<u16>(nx);
+        moved.y = static_cast<u16>(ny);
+        kept.push_back(moved);
+    }
+    units_ = std::move(kept);
+
+    Buffer dim(4, 0);
+    WriteU16(dim.data(), static_cast<u16>(width_));
+    WriteU16(dim.data() + 2, static_cast<u16>(height_));
+    chk_.Set(section::kDim, std::move(dim));
+    chk_.Set(chk_.Has(section::kMtxm) ? section::kMtxm : section::kTile, tiles_);
+
+    dirty_ = true;
+    Log(L"[map] resized %dx%d off=%d,%d units=%zu", width_, height_, offsetX, offsetY, units_.size());
+    return true;
+}
+
 void MapDocument::Close() {
     opened_ = false;
     dirty_ = false;
@@ -331,8 +384,8 @@ bool MapDocument::Save(const std::wstring& path) {
     }
 
     if (chk_.Has("TRIG")) chk_.Set("TRIG", triggers_.Serialize());
-    if (chk_.Has("MRGN")) chk_.Set("MRGN", locations_.Serialize());
-    if (chk_.Has("STR ")) chk_.Set("STR ", strings_.Serialize());
+    if (chk_.Has("MRGN") || locations_.Count() > 0) chk_.Set("MRGN", locations_.Serialize());
+    if (chk_.Has("STR ") || strings_.Count() > 0) chk_.Set("STR ", strings_.Serialize());
 
     const Buffer chkBytes = chk_.Serialize();
     std::vector<MpqFileEntry> files;
