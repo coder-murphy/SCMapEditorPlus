@@ -68,10 +68,25 @@ bool MainWindow::Create(HINSTANCE hInstance) {
                               hInstance, this);
     if (!hwnd_) return false;
 
+    // 主菜单加速键：原始 RT_ACCELERATOR 109（Ctrl+N/O/S/Z/Y、Alt+网格尺寸…）
+    hAccel_ = ::LoadAcceleratorsW(hInstance, MAKEINTRESOURCEW(IDR_ACCEL_MAIN));
+
+    // 原菜单没有“恢复的界面”入口，追加到「帮助」子菜单，方便逐个检查 25 个对话框
+    if (HMENU bar = ::GetMenu(hwnd_)) {
+        if (HMENU help = ::GetSubMenu(bar, 8)) {
+            ::AppendMenuW(help, MF_SEPARATOR, 0, nullptr);
+            ::AppendMenuW(help, MF_STRING, kDebugDialogs, L"恢复的界面...");
+        }
+    }
+
     UpdateTitle();
     ::ShowWindow(hwnd_, SW_SHOW);
     ::UpdateWindow(hwnd_);
     return true;
+}
+
+bool MainWindow::TranslateAccel(MSG& msg) const {
+    return hAccel_ && ::TranslateAcceleratorW(hwnd_, hAccel_, &msg) != 0;
 }
 
 void MainWindow::UpdateTitle() {
@@ -427,7 +442,16 @@ void MainWindow::OnCommand(int id) {
             if (OpenFileDialog(hwnd_, kMapFilter, path)) OpenMap(path);
             break;
         }
-        case kToolsDialogs:
+        case kEditUndo:
+            Undo();
+            break;
+        case kEditRedo:
+            Redo();
+            break;
+        case kTriggerEditor:
+            ShowRecoveredDialog(IDD_DLG_181, hwnd_);
+            break;
+        case kDebugDialogs:
             ShowRecoveredDialog(IDD_DLG_155, hwnd_);
             break;
         case kFileExit:

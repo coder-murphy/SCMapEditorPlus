@@ -1,0 +1,288 @@
+﻿// 由 [CN]ScmDraft2.exe 的 RT_MENU 109 自动导出（10 个顶层菜单 / 224 项），请勿手工改动
+// 命令 ID、文本、分隔符、勾选/禁用状态均为二进制原值
+// 资源尾部残留的英文调试菜单（本地化后未清理的死数据）已丢弃
+#pragma code_page(65001)
+
+IDR_MAINMENU MENU
+BEGIN
+    POPUP "文件"
+    BEGIN
+        MENUITEM "新建\tCtrl+N", 0x8005
+        MENUITEM "打开\tCtrl+O", 0x801b
+        MENUITEM "最近编辑的地图", 0x810c
+        MENUITEM "关闭", 0x8007
+        MENUITEM "保存\tCtrl+S", 0x8087
+        MENUITEM "另存为", 0x8088
+        MENUITEM "保存地图图像", 0x8069
+        MENUITEM SEPARATOR
+        MENUITEM "退出", 0x69
+    END
+    POPUP "编辑"
+    BEGIN
+        MENUITEM "撤销\tCtrl+Z", 0x807f
+        MENUITEM "恢复\tCtrl+Y", 0x8080
+        MENUITEM SEPARATOR
+        MENUITEM "剪切\tCtrl+X", 0x80e6
+        MENUITEM "复制\tCtrl+C", 0x80e7
+        MENUITEM "粘贴\tCtrl+V", 0x80e8
+        MENUITEM SEPARATOR
+        MENUITEM "全选\tCtrl+A", 0x809a
+        MENUITEM "删除\t Del", 0x809b
+        MENUITEM "取消选择\tEsc", 0x809e
+        MENUITEM "转换地形", 0x8101, GRAYED
+        MENUITEM "重叠所选单位", 0x811a, GRAYED
+        MENUITEM SEPARATOR
+        POPUP "编辑层"
+        BEGIN
+            MENUITEM "地形\tCtrl+T", 0x803a, CHECKED
+            MENUITEM "装饰物\tCtrl+D", 0x803b
+            MENUITEM "战争迷雾\tCtrl+F", 0x803e
+            MENUITEM "区域/位置/Loc\tCtrl+L", 0x803c
+            MENUITEM "单位\tCtrl+U", 0x803d
+            MENUITEM "SP单位\tCtrl+R", 0x803f
+            MENUITEM "显示战争迷雾", 0x80ce
+            MENUITEM "复制/剪切/粘贴/刷子", 0x810e
+        END
+        MENUITEM SEPARATOR
+        MENUITEM "属性\tEnter", 0x809c
+    END
+    POPUP "选项"
+    BEGIN
+        POPUP "方格"
+        BEGIN
+            MENUITEM "微小\t Alt+U", 0x80af
+            MENUITEM "较小\tAlt+F", 0x800e
+            MENUITEM "普通\t Alt+G", 0x800d
+            MENUITEM "较大\tAlt+L", 0x80a5
+            MENUITEM "极大\tAlt+E", 0x80aa
+            MENUITEM "自定义", 0x80cf
+            MENUITEM "禁止", 0x80d6
+            MENUITEM SEPARATOR
+            POPUP "颜色"
+            BEGIN
+                MENUITEM "黑色", 0x8036
+                MENUITEM "灰色", 0x80b1
+                MENUITEM "白色", 0x8037
+                MENUITEM "绿色", 0x8038
+                MENUITEM "红色", 0x8039
+                MENUITEM "蓝色", 0x80b2
+                MENUITEM "其他", 0x80d0
+            END
+        END
+        POPUP "单位"
+        BEGIN
+            MENUITEM "建筑按正常规则放置", 0x8032, CHECKED
+            MENUITEM "单位按方格显示放置", 0x80b5
+            MENUITEM "允许地面单位重叠", 0x8015
+            MENUITEM "允许空中单位重叠", 0x8109
+            MENUITEM "单位任意放置", 0x80e9
+            MENUITEM "建筑任意放置", 0x80ea
+            MENUITEM "附属单位自动连接", 0x80b8, CHECKED
+            MENUITEM "矿物与基地距离限制", 0x80bf
+        END
+        POPUP "Locations"
+        BEGIN
+            MENUITEM "整齐的描绘", 0x8013, CHECKED
+            MENUITEM "按照方格描绘", 0x80eb
+            MENUITEM "任意描绘", 0x80ec
+            MENUITEM SEPARATOR
+            MENUITEM "修改名字", 0x8108
+        END
+        POPUP "装饰物"
+        BEGIN
+            MENUITEM "允许任意放置", 0x8010
+        END
+        POPUP "SP单位"
+        BEGIN
+            MENUITEM "对齐方格", 0x80b7
+        END
+        POPUP "战争迷雾"
+        BEGIN
+            MENUITEM "默认为未探索", 0x80d3
+            MENUITEM "默认为已探索", 0x80d4
+            MENUITEM SEPARATOR
+            MENUITEM "显示战争迷雾在探索地区", 0x80f4
+        END
+        POPUP "剪切 复制 粘贴"
+        BEGIN
+            MENUITEM "包括装饰物", 0x811c
+        END
+        POPUP "输出"
+        BEGIN
+            MENUITEM "显示", 0x80f3, CHECKED
+            POPUP "字体大小", GRAYED
+            BEGIN
+                MENUITEM "8", 0x805a
+                MENUITEM "10", 0x805b
+                MENUITEM "12", 0x805c
+                MENUITEM "14", 0x805d
+                MENUITEM "16", 0x805e
+            END
+            POPUP "提示详细度"
+            BEGIN
+                MENUITEM "关闭显示", 0x8067
+                MENUITEM "简化模式", 0x8065
+                MENUITEM "正常模式", 0x8062
+                MENUITEM "高级模式", 0x8063
+                MENUITEM "调试模式", 0x8064
+            END
+            MENUITEM "清除当前信息", 0x8068
+        END
+        POPUP "地图显示比率"
+        BEGIN
+            MENUITEM "400%", 0x8119
+            MENUITEM "300%", 0x8118
+            MENUITEM "200%", 0x8117
+            MENUITEM "150%", 0x8116
+            MENUITEM "100%", 0x80d8, CHECKED
+            MENUITEM "66%", 0x80dd
+            MENUITEM "50%", 0x80d9
+            MENUITEM "33%", 0x80db
+            MENUITEM "25%", 0x80da
+        END
+        POPUP "地图加载设置"
+        BEGIN
+            MENUITEM "纠正装饰物错误", 0x8103
+            MENUITEM "删除非法单位", 0x8105
+        END
+        MENUITEM SEPARATOR
+        MENUITEM "启用声音", 0x8072
+        MENUITEM SEPARATOR
+        MENUITEM "编辑器设定...", 0x80c4
+    END
+    POPUP "显示选项"
+    BEGIN
+        MENUITEM "所有颜色", 0x8054, GRAYED
+        MENUITEM "单位", 0x8018, GRAYED, CHECKED
+        MENUITEM "装饰物", 0x8019, GRAYED, CHECKED
+        MENUITEM "SP单位", 0x801a, GRAYED, CHECKED
+        MENUITEM "Zerg地皮", 0x8034, CHECKED
+        MENUITEM "特殊状态", 0x80b3, CHECKED
+        MENUITEM "隐藏小雷达", 0x80b4
+        MENUITEM "允许颜色循环", 0x80d1
+        MENUITEM "显示单位死亡效果", 0x80f6
+        MENUITEM "显示战争迷雾", 0x8113
+        MENUITEM "显示Location", 0x8115
+    END
+    POPUP "剧本设置"
+    BEGIN
+        MENUITEM "变更地图尺寸", 0x8106
+        MENUITEM "地图描述\t Ctrl+Shift+Enter", 0x8041
+        MENUITEM "势力设定\tCtrl+Shift+F", 0x8042
+        MENUITEM "单位设定\tCtrl+Shift+H", 0x8044
+        MENUITEM "升级设置\tCtrl+Shift+U", 0x8043
+        MENUITEM "科技设置\tCtrl+Shift+T", 0x8045
+        MENUITEM "编辑字符串字符串\tCtrl+Shift+S", 0x8046
+        MENUITEM "编辑声音\tCtrl+Shift+W", 0x8047
+        MENUITEM SEPARATOR
+        POPUP "全地图放置小雷达"
+        BEGIN
+            MENUITEM "Player 1", 0x801f
+            MENUITEM "Player 2", 0x8020
+            MENUITEM "Player 3", 0x8021
+            MENUITEM "Player 4", 0x8022
+            MENUITEM "Player 5", 0x8023
+            MENUITEM "Player 6", 0x8024
+            MENUITEM "Player 7", 0x8025
+            MENUITEM "Player 8", 0x8026
+            MENUITEM "所有玩家", 0x80c5
+        END
+        POPUP "删除小雷达"
+        BEGIN
+            MENUITEM "Player 1", 0x8074
+            MENUITEM "Player 2", 0x8075
+            MENUITEM "Player 3", 0x8076
+            MENUITEM "Player 4", 0x8077
+            MENUITEM "Player 5", 0x8078
+            MENUITEM "Player 6", 0x8079
+            MENUITEM "Player 7", 0x807a
+            MENUITEM "Player 8", 0x807b
+            MENUITEM "所有玩家", 0x80c6
+        END
+        POPUP "禁止迷雾"
+        BEGIN
+            MENUITEM "Player 1", 0x8028
+            MENUITEM "Player 2", 0x8029
+            MENUITEM "Player 3", 0x802a
+            MENUITEM "Player 4", 0x802b
+            MENUITEM "Player 5", 0x802c
+            MENUITEM "Player 6", 0x802d
+            MENUITEM "Player 7", 0x802e
+            MENUITEM "Player 8", 0x802f
+            MENUITEM "所有玩家", 0x80f7
+        END
+        POPUP "允许迷雾"
+        BEGIN
+            MENUITEM "Player 1", 0x804c
+            MENUITEM "Player 2", 0x804d
+            MENUITEM "Player 3", 0x804e
+            MENUITEM "Player 4", 0x804f
+            MENUITEM "Player 5", 0x8050
+            MENUITEM "Player 6", 0x8051
+            MENUITEM "Player 7", 0x8052
+            MENUITEM "Player 8", 0x8053
+            MENUITEM "所有玩家", 0x80f8
+        END
+        MENUITEM "到开始位置\tCtrl+G", 0x80c1
+        MENUITEM "矿物外形随机变化", 0x810d
+    END
+    POPUP "高级"
+    BEGIN
+        MENUITEM "检查更新", 0x8071
+        MENUITEM "打开备份数据", 0x80f9
+        MENUITEM SEPARATOR
+        MENUITEM "设置SCMD2为默认地图编辑器", 0x806b
+        MENUITEM "创建开始菜单快捷方式", 0x806c
+        MENUITEM "自动检查更新", 0x80a8
+    END
+    POPUP "触发"
+    BEGIN
+        MENUITEM "编辑触发", 0x810f
+        MENUITEM "编辑任务简报", 0x8110
+        MENUITEM SEPARATOR
+    END
+    POPUP "窗口"
+    BEGIN
+        MENUITEM "新建窗口", 0x80ed
+        MENUITEM "微型窗口", 0x80ee
+        MENUITEM "水平排列", 0x80ef
+        MENUITEM "垂直排列", 0x80f0
+        MENUITEM "关闭窗口", 0x80f1
+        MENUITEM SEPARATOR
+        MENUITEM "地形窗口", 0x8003
+        MENUITEM "装饰物窗口", 0x8004
+        MENUITEM "刷子窗口", 0x8114
+        MENUITEM "SP单位窗口", 0x80a4, GRAYED
+    END
+    POPUP "帮助"
+    BEGIN
+        MENUITEM "关于...", 0x68
+        MENUITEM "主页", 0x8070
+        MENUITEM "在线帮助", 0x811f
+        MENUITEM "论坛", 0x806d
+        MENUITEM "错误与建议", 0x806f
+        MENUITEM SEPARATOR
+        MENUITEM "捐款", 0x8120
+    END
+    POPUP "调试"
+    BEGIN
+        MENUITEM "允许调试", 0x80de
+        MENUITEM "显示数据(普通模式)", 0x80fc, GRAYED
+        MENUITEM "显示数据(精确模式)", 0x80fd, GRAYED
+        MENUITEM "显示数据(最终模式)", 0x80fe, GRAYED
+        MENUITEM "显示对比数据", 0x80e0, GRAYED
+        MENUITEM "显示重叠标记", 0x80e1, GRAYED
+        MENUITEM "显示CPU测试数据", 0x80f2, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "清除屏幕", 0x80e2, GRAYED
+        MENUITEM "清除装饰物缓存", 0x80e3, GRAYED
+        MENUITEM "清除单位缓存", 0x80e4, GRAYED
+        MENUITEM "清除重复缓存", 0x80e5, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "显示图像大小", 0x810a, GRAYED
+        MENUITEM "显示图像大小(禁用模式)", 0x810b, GRAYED
+        MENUITEM "显示单位冲突大小", 0x811d, GRAYED
+        MENUITEM SEPARATOR
+        MENUITEM "Iscript / Grp 调试", 0x811e
+    END
+END

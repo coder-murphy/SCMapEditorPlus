@@ -29,6 +29,9 @@ public:
 
     bool RebuildView(int pxPerTile);
 
+    // 主菜单加速键（Ctrl+N/O/S/Z/Y 等），由消息循环调用
+    bool TranslateAccel(MSG& msg) const;
+
     // 撤销 / 重做
     bool Undo();
     bool Redo();
@@ -58,6 +61,7 @@ private:
 
     HINSTANCE hInstance_ = nullptr;
     HWND hwnd_ = nullptr;
+    HACCEL hAccel_ = nullptr;
     MapDocument map_;
     std::wstring tilesetDir_;
     std::wstring fileName_;

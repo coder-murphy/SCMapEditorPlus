@@ -3,31 +3,13 @@
 // Resource IDs
 #define IDR_MAINMENU  109
 #define IDI_APP       130
-#define IDR_ACCEL     176
+#define IDR_ACCEL     176            // 兼容旧名：通用对话框加速键（确定/取消）
 
-// Menu commands
-#define IDM_FILE_NEW        40001
-#define IDM_FILE_OPEN       40002
-#define IDM_FILE_SAVE       40003
-#define IDM_FILE_SAVEAS     40004
-#define IDM_FILE_EXIT       40005
-
-#define IDM_EDIT_UNDO       40101
-#define IDM_EDIT_REDO       40102
-
-#define IDM_VIEW_TERRAIN    40201
-#define IDM_VIEW_UNITS      40202
-
-#define IDM_TERRAIN_EDIT    40301
-
-#define IDM_UNITS_LIST      40401
-#define IDM_TRIGGERS_LIST   40501
-#define IDM_PLAYERS_PROPS   40601
-
-#define IDM_TOOLS_VALIDATE  40701
-#define IDM_TOOLS_DIALOGS   40702
-
-#define IDM_HELP_ABOUT      40901
+// 从 ScmDraft2 导出的加速键表（资源定义见 accel.rc）
+#define IDR_ACCEL_MAIN    109        // 主菜单（Ctrl+N/O/S/Z/Y、层切换、Alt+网格尺寸…）
+#define IDR_ACCEL_DIALOG  176        // 通用对话框：Enter=确定、Esc=取消
+#define IDR_ACCEL_177     177        // 列表框编辑对话框
+#define IDR_ACCEL_178     178        // 列表对话框
 
 /////////////////////////////////////////////////////////////////////////////
 // Dialogs recovered from ScmDraft2 2.0.8.0 (definitions live in dialogs.rc)

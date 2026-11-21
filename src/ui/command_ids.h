@@ -1,31 +1,27 @@
 ﻿#pragma once
 
-// 菜单/工具栏命令 ID，与 res/resource.h 保持一致
+// 菜单命令 ID：全部取自 [CN]ScmDraft2.exe 的 RT_MENU 109（见 res/menu.rc）
 namespace scmd {
 
 enum CommandId : int {
-    kFileNew = 40001,
-    kFileOpen = 40002,
-    kFileSave = 40003,
-    kFileSaveAs = 40004,
-    kFileExit = 40005,
+    kFileNew = 0x8005,
+    kFileOpen = 0x801B,
+    kFileClose = 0x8007,
+    kFileSave = 0x8087,
+    kFileSaveAs = 0x8088,
+    kFileExit = 0x0069,
 
-    kEditUndo = 40101,
-    kEditRedo = 40102,
+    kEditUndo = 0x807F,
+    kEditRedo = 0x8080,
 
-    kViewTerrain = 40201,
-    kViewUnits = 40202,
+    kLayerTerrain = 0x803A,     // 编辑 → 编辑层 → 地形
 
-    kTerrainEdit = 40301,
+    kTriggerEditor = 0x810F,    // 触发 → 编辑触发
 
-    kUnitsList = 40401,
-    kTriggersList = 40501,
-    kPlayersProps = 40601,
+    kHelpAbout = 0x0068,        // 帮助 → 关于...
 
-    kToolsValidate = 40701,
-    kToolsDialogs = 40702,
-
-    kHelpAbout = 40901,
+    // 本工程自有的调试入口（原程序无此菜单项，运行时追加）
+    kDebugDialogs = 0x8FFF,
 };
 
 }  // namespace scmd

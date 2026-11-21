@@ -9,65 +9,9 @@ IDI_APP ICON "app.ico"
 "130" ICON "app.ico"
 
 /////////////////////////////////////////////////////////////////////////////
-// 主菜单：按业务域分组，与 src/ 的子目录一一对应
-IDR_MAINMENU MENU
-BEGIN
-    POPUP "&File"
-    BEGIN
-        MENUITEM "&New\tCtrl+N",              IDM_FILE_NEW
-        MENUITEM "&Open...\tCtrl+O",          IDM_FILE_OPEN
-        MENUITEM "&Save\tCtrl+S",             IDM_FILE_SAVE
-        MENUITEM "Save &As...",                IDM_FILE_SAVEAS
-        MENUITEM SEPARATOR
-        MENUITEM "E&xit",                      IDM_FILE_EXIT
-    END
-    POPUP "&Edit"
-    BEGIN
-        MENUITEM "&Undo\tCtrl+Z",             IDM_EDIT_UNDO
-        MENUITEM "&Redo\tCtrl+Y",             IDM_EDIT_REDO
-    END
-    POPUP "&View"
-    BEGIN
-        MENUITEM "&Terrain",                    IDM_VIEW_TERRAIN
-        MENUITEM "&Units",                      IDM_VIEW_UNITS
-    END
-    POPUP "&Terrain"
-    BEGIN
-        MENUITEM "&Tile Editor...",             IDM_TERRAIN_EDIT
-    END
-    POPUP "&Units"
-    BEGIN
-        MENUITEM "Unit &List...",               IDM_UNITS_LIST
-    END
-    POPUP "Triggers"
-    BEGIN
-        MENUITEM "&Trigger List...",            IDM_TRIGGERS_LIST
-    END
-    POPUP "&Players"
-    BEGIN
-        MENUITEM "&Properties...",              IDM_PLAYERS_PROPS
-    END
-    POPUP "&Tools"
-    BEGIN
-        MENUITEM "&Validate Map",               IDM_TOOLS_VALIDATE
-        MENUITEM SEPARATOR
-        MENUITEM "Recovered &UI (ScmDraft2)...",  IDM_TOOLS_DIALOGS
-    END
-    POPUP "&Help"
-    BEGIN
-        MENUITEM "&About SCMD Plus...",         IDM_HELP_ABOUT
-    END
-END
-
-/////////////////////////////////////////////////////////////////////////////
-IDR_ACCEL ACCELERATORS
-BEGIN
-    "N",            IDM_FILE_NEW,       VIRTKEY, CONTROL
-    "O",            IDM_FILE_OPEN,      VIRTKEY, CONTROL
-    "S",            IDM_FILE_SAVE,      VIRTKEY, CONTROL
-    "Z",            IDM_EDIT_UNDO,      VIRTKEY, CONTROL
-    "Y",            IDM_EDIT_REDO,      VIRTKEY, CONTROL
-END
+// 主菜单与加速键：从 [CN]ScmDraft2.exe 导出的原始资源（命令 ID 保持不变）
+#include "menu.rc"
+#include "accel.rc"
 
 /////////////////////////////////////////////////////////////////////////////
 VS_VERSION_INFO VERSIONINFO

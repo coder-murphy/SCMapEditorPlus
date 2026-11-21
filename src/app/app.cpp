@@ -3,8 +3,10 @@
 #include <shellapi.h>
 #include <cwchar>
 #include <cstring>
+#include <functional>
 #include <string>
 
+#include "res/resource.h"
 #include "ui/dialog_registry.h"
 #include "ui/dialogs.h"
 
@@ -364,6 +366,73 @@ int RunSectionTest(const std::wstring& mapPath) {
     return ok ? 0 : 2;
 }
 
+// --menu-test：校验从原程序导入的主菜单与加速键资源
+int RunMenuTest(HWND hwnd) {
+    const HINSTANCE inst = ::GetModuleHandleW(nullptr);
+    HMENU menu = ::LoadMenuW(inst, MAKEINTRESOURCEW(IDR_MAINMENU));
+    if (!menu) {
+        WriteDiag(L"menu=FAIL\n");
+        return 2;
+    }
+
+    const int topCount = ::GetMenuItemCount(menu);
+    std::wstring topLabels;
+    for (int i = 0; i < topCount; i++) {
+        wchar_t label[128] = L"";
+        ::GetMenuStringW(menu, i, label, 127, MF_BYPOSITION);
+        if (!topLabels.empty()) topLabels += L"|";
+        topLabels += label;
+    }
+
+    int items = 0, seps = 0;
+    std::function<void(HMENU)> walk = [&](HMENU m) {
+        const int n = ::GetMenuItemCount(m);
+        for (int i = 0; i < n; i++) {
+            MENUITEMINFOW mii = {sizeof(mii)};
+            mii.fMask = MIIM_FTYPE | MIIM_SUBMENU;
+            if (!::GetMenuItemInfoW(m, static_cast<UINT>(i), TRUE, &mii)) continue;
+            if (mii.fType & MFT_SEPARATOR) seps++;
+            items++;
+            if (mii.hSubMenu) walk(mii.hSubMenu);
+        }
+    };
+    walk(menu);
+
+    HACCEL accel = ::LoadAcceleratorsW(inst, MAKEINTRESOURCEW(IDR_ACCEL_MAIN));
+    const int accelCount =
+        accel ? static_cast<int>(::CopyAcceleratorTableW(accel, nullptr, 0)) : -1;
+
+    // 抽查关键命令 ID 是否与二进制一致
+    const int idFileNew = ::GetMenuItemID(::GetSubMenu(menu, 0), 0);
+    const int idEditUndo = ::GetMenuItemID(::GetSubMenu(menu, 1), 0);
+    const int idHelpAbout = ::GetMenuItemID(::GetSubMenu(menu, 8), 0);
+
+    // 用 Esc（无修饰键）直接走一次 TranslateAccelerator，确认加速键表已装载
+    bool escHandled = false;
+    if (accel) {
+        MSG probe = {};
+        probe.hwnd = hwnd;
+        probe.message = WM_KEYDOWN;
+        probe.wParam = VK_ESCAPE;
+        probe.lParam = 1;
+        escHandled = ::TranslateAcceleratorW(hwnd, accel, &probe) != 0;
+    }
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+                L"menuTop=%d\nmenuItems=%d\nmenuSeps=%d\naccel=%d\n"
+                L"idFileNew=0x%x\nidEditUndo=0x%x\nidHelpAbout=0x%x\nesc=%d\nlabels=%s\n",
+                topCount, items, seps, accelCount, idFileNew, idEditUndo, idHelpAbout,
+                escHandled ? 1 : 0, topLabels.c_str());
+    WriteDiag(msg);
+
+    if (accel) ::DestroyAcceleratorTable(accel);
+    ::DestroyMenu(menu);
+    const bool ok = topCount == 10 && items == 224 && accelCount == 34 && idFileNew == 0x8005 &&
+                    idEditUndo == 0x807F && idHelpAbout == 0x0068 && escHandled;
+    return ok ? 0 : 2;
+}
+
 void WriteDiag(const std::wstring& text) {
     wchar_t path[MAX_PATH] = L"";
     ::GetTempPathW(MAX_PATH, path);
@@ -465,6 +534,24 @@ int App::Run(HINSTANCE hInstance) {
         tsDir = std::wstring(exePath) + L"\\ts";
     }
     mainWindow_.SetTilesetDir(tsDir);
+
+    // 菜单/加速键导入自检（无头）
+    {
+        int argc = 0;
+        bool want = false;
+        LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+        if (argv) {
+            for (int i = 1; i < argc; ++i) {
+                if (std::wcsncmp(argv[i], L"--menu-test", 11) == 0) want = true;
+            }
+            ::LocalFree(argv);
+        }
+        if (want) {
+            const int rc = RunMenuTest(mainWindow_.hwnd());
+            ::DestroyWindow(mainWindow_.hwnd());
+            return rc;
+        }
+    }
 
     // 段重建回归（无头）
     {
@@ -581,6 +668,7 @@ int App::Run(HINSTANCE hInstance) {
 
     MSG msg;
     while (::GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (mainWindow_.TranslateAccel(msg)) continue;
         ::TranslateMessage(&msg);
         ::DispatchMessageW(&msg);
     }

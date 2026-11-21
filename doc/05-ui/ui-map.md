@@ -7,7 +7,7 @@
 明细报告见 `doc/00-reverse/dialogs-report.md`。
 
 代码入口：`src/ui/dialogs.h/.cpp`（表 + `ShowRecoveredDialog`），
-菜单 `Tools → Recovered UI (ScmDraft2)...` 打开 155 号做冒烟验证。
+菜单 `帮助 → 恢复的界面...` 打开 155 号做冒烟验证。
 
 ## 映射表
 
@@ -65,6 +65,67 @@
 | `ui/dlg_misc.cpp` | 167 MPQ 列表、183 标签容器、184 列表容器、185/186 列表编辑、187 富文本 |
 
 返回值通过 `dlg_types.h` 的结构体与 `LastInputValue()` / `LastEditedString()` 取回。
+
+## 主菜单与加速键（P3-10，VERIFIED）
+
+来源：`[CN]ScmDraft2.exe` 的 `RT_MENU 109`（8 888 B）与 `RT_ACCELERATOR 109/176/177/178`，
+导出到 `src/res/menu.rc` / `src/res/accel.rc`，由 `resources.rc` include。
+
+### MENU 资源格式（MENUEX 变体）
+
+- 头 8 字节：`u16 version=1`、`u16 offset=4`、`u32 helpId`
+- 每项：`u32 type`、`u32 state`、`u32 menuId`、`u16 resInfo`、文本（0 结尾 UTF-16）
+- `menuId == 0xFFFF` 为弹出菜单；`resInfo & 0x01` 的项在文本后多 4 字节
+- `resInfo & 0x80` = 当前层最后一项；弹出项带 0x80 时，其子菜单结束后还要关闭父层
+- 每项按 4 字节对齐
+- 资源尾部有 2 460 字节英文调试菜单残留（本地化后未清理的死数据），解析到顶层闭合即停
+
+统计：**10 个顶层菜单 / 224 项 / 18 个分隔符**
+（文件 编辑 选项 显示选项 剧本设置 高级 触发 窗口 帮助 调试）。
+
+### 命令 ID
+
+保留原值（0x8000 段为主，另有 0x68=关于、0x69=退出）：
+
+| 功能 | ID |
+|---|---|
+| 新建 / 打开 / 关闭 | 0x8005 / 0x801B / 0x8007 |
+| 保存 / 另存为 | 0x8087 / 0x8088 |
+| 撤销 / 恢复 | 0x807F / 0x8080 |
+| 编辑层 → 地形 | 0x803A |
+| 触发 → 编辑触发 | 0x810F |
+| 帮助 → 关于 / 文件 → 退出 | 0x68 / 0x69 |
+
+`command_ids.h` 已改用这些原值；菜单项全部导入（未实现的命令统一走
+`Log("[ui] command ...")`）。原菜单没有“恢复的界面”入口，运行时追加到「帮助」子菜单
+（0x8FFF，仅本工程调试用）。
+
+### 加速键
+
+| 表 | 条数 | 用途 |
+|---|---|---|
+| 109 | 34 | 主菜单（Ctrl+N/O/S/Z/Y、Ctrl+T/D/F/L/U/R 层切换、Alt+U/F/G/L/E 网格、Esc/Del/Enter） |
+| 176 | 2 | 通用对话框：Enter=确定、Esc=取消 |
+| 177 / 178 | 7 / 6 | 列表框编辑 / 列表对话框 |
+
+`MainWindow` 启动时 `LoadAcceleratorsW(IDR_ACCEL_MAIN)`，消息循环先
+`TranslateAcceleratorW`；Ctrl+Z / Ctrl+Y 因此改由加速键派发到 `Undo()/Redo()`。
+
+### 验证
+
+```
+SCMDPlus.exe --menu-test
+exit=0
+menuTop=10  menuItems=224  menuSeps=18  accel=34
+idFileNew=0x8005  idEditUndo=0x807f  idHelpAbout=0x68  esc=1
+labels=文件|编辑|选项|显示选项|剧本设置|高级|触发|窗口|帮助|调试
+```
+
+GUI 集成（`--open=<map>`）：
+
+- 主窗口菜单 10 项，标题与上表一致；「帮助」子菜单 9 项，末项为「恢复的界面...」
+- `WM_COMMAND 0x68` → 关于框（标题 `SCMD Plus 3.0`）
+- `WM_COMMAND 0x810F` → 触发编辑器 181，内含 3 个 `#32770` 子面板
 
 ## 验证（VERIFIED）
 
@@ -125,5 +186,6 @@ MSBuild SCMDPlus.sln /t:Rebuild /p:Configuration=Release /p:Platform=Win32 ^
 ## 后续
 
 1. 185/186 的列表内容接到 `TriggerSection` / `LocationTable` / `StringTable`（P3）；
-2. 各对话框控件 ID 语义化命名（当前保留原程序数值，便于与二进制对照）；
-3. 位图 134/151/152 尚未导出。
+2. 主菜单中尚未实现的命令（保存/关闭、层切换、网格尺寸、剧本设置…）逐项接线；
+3. 各对话框控件 ID 语义化命名（当前保留原程序数值，便于与二进制对照）；
+4. 位图 134/151/152 尚未导出。
