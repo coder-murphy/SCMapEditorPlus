@@ -276,6 +276,104 @@ int RunFileTest(const std::wstring& outPath) {
     return ok ? 0 : 2;
 }
 
+// --trig-test=<输出scx>：触发语义回归（字段解析 + 条件/行动编辑 + 玩家开关 + 无损保存）
+std::wstring ParseTrigTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--trig-test=", 12) == 0) path = argv[i] + 12;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+int RunTrigTest(const std::wstring& mapPath, const std::wstring& outPath) {
+    MapDocument doc;
+    if (!doc.Open(mapPath, ParseTsArg())) { WriteDiag(L"open=FAIL\n"); return 2; }
+    if (doc.triggers().BlockCount() == 0) { WriteDiag(L"no-triggers\n"); return 2; }
+
+    // 1) 未修改时逐字节重建必须与原始段一致
+    const Buffer* orig = doc.chk().Find("TRIG");
+    const Buffer rebuilt = doc.triggers().Serialize();
+    const bool lossless = orig && orig->size() == rebuilt.size() &&
+                          std::memcmp(orig->data(), rebuilt.data(), orig->size()) == 0;
+
+    const std::size_t blocksBefore = doc.triggers().BlockCount();
+    const Trigger before = doc.triggers().Items()[0];
+    const int condBefore = before.ConditionCount();
+    const int actBefore = before.ActionCount();
+
+    // 2) 编辑条件/行动/执行标志/玩家开关
+    auto& items = doc.mutableTriggers().MutableItems();
+    Trigger& t = items[0];
+    if (t.ConditionCount() == 0) {
+        t.conditions[0].type = 22;      // Always
+        t.conditions[0].comparison = 0;
+    }
+    if (t.ActionCount() == 0) {
+        t.actions[0].type = 1;          // Victory
+    }
+    const u32 condAmount = t.conditions[0].amount + 3;
+    const u32 actAmount = (t.actions[0].amount + 5) & 0xFF;
+    t.conditions[0].amount = condAmount;
+    t.actions[0].amount = static_cast<u8>(actAmount);
+    t.executionFlags ^= 0x00000001u;
+    t.effectivePlayers[0] = 1;
+    const u32 expectedFlags = t.executionFlags;
+
+    // 3) 复制一条触发到末尾（push_back 后 t 可能失效，先取出期望值）
+    Trigger copy = t;
+    copy.effectivePlayers[0] = 0;
+    items.push_back(copy);
+
+    // 4) 序列化后重新解析，字段必须保持
+    TriggerSection check;
+    const Buffer edited = doc.triggers().Serialize();
+    check.Parse(edited);
+    const bool parseOk = check.BlockCount() == blocksBefore + 1;
+    const Trigger& ct = check.Items()[0];
+    const bool condOk = ct.conditions[0].amount == condAmount && ct.conditions[0].type != 0;
+    const bool actOk = ct.actions[0].amount == static_cast<u8>(actAmount) && ct.actions[0].type != 0;
+    const bool flagOk = ct.executionFlags == expectedFlags;
+    const bool playerOk = ct.effectivePlayers[0] == 1;
+
+    // 5) 保存并重开
+    const bool saved = doc.Save(outPath);
+    MapDocument reopened;
+    const bool reopenOk = reopened.Open(outPath, std::wstring());
+    bool reopenFields = false;
+    bool reopenLossless = false;
+    if (reopenOk) {
+        const Trigger& rt = reopened.triggers().Items()[0];
+        reopenFields = reopened.triggers().BlockCount() == blocksBefore + 1 &&
+                       rt.conditions[0].amount == condAmount &&
+                       rt.actions[0].amount == static_cast<u8>(actAmount) &&
+                       rt.executionFlags == expectedFlags &&
+                       rt.effectivePlayers[0] == 1;
+        const Buffer* savedTrig = reopened.chk().Find("TRIG");
+        const Buffer again = reopened.triggers().Serialize();
+        reopenLossless = savedTrig && savedTrig->size() == again.size() &&
+                         std::memcmp(savedTrig->data(), again.data(), again.size()) == 0;
+    }
+
+    wchar_t msg[640];
+    ::wsprintfW(msg,
+        L"blocks=%u->%u\ncond=%d act=%d\nlossless=%d\nparse=%d\ncondOk=%d\nactOk=%d\n"
+        L"flagOk=%d\nplayerOk=%d\nsaved=%d\nreopened=%d\nreopenFields=%d\nreopenLossless=%d\n",
+        static_cast<unsigned>(blocksBefore), static_cast<unsigned>(check.BlockCount()),
+        condBefore, actBefore, lossless ? 1 : 0, parseOk ? 1 : 0, condOk ? 1 : 0,
+        actOk ? 1 : 0, flagOk ? 1 : 0, playerOk ? 1 : 0, saved ? 1 : 0,
+        reopenOk ? 1 : 0, reopenFields ? 1 : 0, reopenLossless ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = lossless && parseOk && condOk && actOk && flagOk && playerOk && saved &&
+                    reopenOk && reopenFields && reopenLossless;
+    return ok ? 0 : 2;
+}
+
 // --menu-cmd-test：检验编辑层/方格/显示选项菜单命令与勾选回显
 HMENU FindMenuWithItem(HMENU menu, int id) {
     if (!menu) return nullptr;
@@ -785,6 +883,15 @@ int App::Run(HINSTANCE hInstance) {
             ::DestroyWindow(mainWindow_.hwnd());
             return rc;
         }
+    }
+
+    // 触发语义回归（无头）
+    if (const std::wstring trigOut = ParseTrigTestArg(); !trigOut.empty()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) { WriteDiag(L"no-map\n"); return 2; }
+        const int rc = RunTrigTest(mapPath, trigOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
     }
 
     // 撤销/重做回归（无头）

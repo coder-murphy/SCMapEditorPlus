@@ -113,11 +113,27 @@ u16 声明数量 + 若干以 0 结尾的字节串
   原始数量字段（新增条目超过时取较大者）+ 已解析字符串 + 残余字节”写回。
 - 1272 / 1297 张地图重建后逐字节一致。
 
-### `TRIG` 触发
+### `TRIG` 触发（P3-11d，语义已解析）
 
 - 实测 1297 张地图的 TRIG 长度**全部是 2400 的整数倍**，分布 0 / 2400 / 4800 / … / 5 786 400。
-- 因此按 2400 字节一组的**不透明块**保存与透传（组内条件/行动/玩家开关语义尚未解析）。
-- 逐字节重建：全部地图一致（`trigEq=1`）。
+- 单条触发 2400 B 的字段布局（VERIFIED，2 张含触发地图逐字节重建一致）：
+
+```
++0     16 × 条件（20 B）
+       u32 locationId / u32 player / u32 amount / u16 unitType
+       u8 comparison / u8 type / u8 resourceType / u8 property / u8 reserved[2]
++320   64 × 行动（32 B）
+       u32 locationId / stringId / wavId / time / player / target
+       u16 setting / u8 type / u8 amount / u8 property / u8 reserved[3]
++2368  u32 executionFlags（bit0 仅执行一次 / bit2 保留触发 / bit3 禁用）
++2372  27 B 生效玩家（每玩家 1 字节）+ 1 B currentAction
+```
+
+- 条件/行动都以 `type == 0` 表示空槽，运行时遇到第一个空槽即短路；
+  编辑器列表也只显示到第一个空槽为止。
+- 条件类型 1..23、行动类型 1..57 的编号与 TrigEditPlus 的声明顺序一致，
+  中文名称表在 `src/ui/dlg_triggers.cpp`。
+- 未修改的段仍按字段重建为原始字节；`--section-test` 的 `trigEq=1` 保持不变。
 
 ### 回归入口
 
@@ -128,4 +144,16 @@ SCMDPlus.exe --open="<地图>" --section-test
 输出写入 `%TEMP%\scmdplus_mpq.txt`：`trigBlocks / mrgn / str / trigEq / mrgnEq / strEq`，
 三个 `Eq` 全为 1 且退出码 0 才算通过。4 张基准地图（Space Circuit / Astro World /
 Mangosteen / Neo China）实测全部通过。
+
+触发语义回归（需要含 TRIG 的地图，如 `(1) easy.scx` / `(2) Friends In Jungle.scx`）：
+
+```
+SCMDPlus.exe --open="<地图>" --trig-test="<输出.scx>"
+blocks=2->3  cond=1 act=1  lossless=1
+parse=1 condOk=1 actOk=1 flagOk=1 playerOk=1
+saved=1 reopened=1 reopenFields=1 reopenLossless=1
+```
+
+测试会修改首条触发的条件数量、行动数量、执行标志与生效玩家，复制一条触发后
+保存并重开校验。
 

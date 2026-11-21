@@ -34,6 +34,8 @@ const DialogEntry kEntries[] = {
     {189, L"编辑字符串", "impl", false, &ProcStringEditor},
     {191, L"重叠单位", "impl", false, &ProcOverlapUnits},
     {192, L"Iscript测试", "impl", false, &ProcIscriptTest},
+    {193, L"编辑条件", "impl", false, &ProcTriggerCondition},
+    {194, L"编辑行动", "impl", false, &ProcTriggerAction},
 };
 
 int g_lastDialogError = 0;

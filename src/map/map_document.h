@@ -40,6 +40,7 @@ public:
     bool hasTileset() const { return tileset_.IsLoaded(); }
 
     const TriggerSection& triggers() const { return triggers_; }
+    TriggerSection& mutableTriggers() { return triggers_; }
     const LocationTable& locations() const { return locations_; }
     const StringTable& strings() const { return strings_; }
     StringTable& mutableStrings() { return strings_; }

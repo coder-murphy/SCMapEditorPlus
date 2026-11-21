@@ -18,7 +18,7 @@ namespace scmd {
 //   +20 u32 资源量（语义待核实）
 //   +24 u16 堆叠数
 //   +26 u16 队列数
-//   +28 u32 未使用
+//   +28 8 B 保留区（实测存在非零内容，保存时必须原样写回）
 struct UnitRecord {
     u32 serial = 0;
     u16 x = 0;
@@ -34,7 +34,7 @@ struct UnitRecord {
     u32 resource = 0;
     u16 stackCount = 0;
     u16 queueCount = 0;
-    u32 unused1 = 0;
+    u8 reserved[8] = {0};
 
     static constexpr size_t kSize = 36;
 };

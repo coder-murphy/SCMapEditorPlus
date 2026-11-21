@@ -2,6 +2,7 @@
 
 #include "archive/mpq_archive.h"
 #include <algorithm>
+#include <cstring>
 
 #include "common/log.h"
 
@@ -106,6 +107,7 @@ bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir)
             r.x = ReadU16(p + 4);
             r.y = ReadU16(p + 6);
             r.type = ReadU16(p + 8);
+            r.unused0 = ReadU16(p + 10);
             r.validState = ReadU16(p + 12);
             r.validProps = ReadU16(p + 14);
             r.owner = p[16];
@@ -115,6 +117,7 @@ bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir)
             r.resource = ReadU32(p + 20);
             r.stackCount = ReadU16(p + 24);
             r.queueCount = ReadU16(p + 26);
+            std::memcpy(r.reserved, p + 28, 8);
             units_.push_back(r);
         }
     }
@@ -367,7 +370,7 @@ bool MapDocument::Save(const std::wstring& path) {
         WriteU16(p + 4, r.x);
         WriteU16(p + 6, r.y);
         WriteU16(p + 8, r.type);
-        WriteU16(p + 10, 0);
+        WriteU16(p + 10, r.unused0);
         WriteU16(p + 12, r.validState);
         WriteU16(p + 14, r.validProps);
         p[16] = r.owner;
@@ -377,7 +380,7 @@ bool MapDocument::Save(const std::wstring& path) {
         WriteU32(p + 20, r.resource);
         WriteU16(p + 24, r.stackCount);
         WriteU16(p + 26, r.queueCount);
-        // 28..35 保留为 0
+        std::memcpy(p + 28, r.reserved, 8);
     }
     if (chk_.Has(section::kUnit) || !units_.empty()) {
         chk_.Set(section::kUnit, unitBytes);

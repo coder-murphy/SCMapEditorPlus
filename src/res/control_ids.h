@@ -284,3 +284,31 @@
 #define IDC_D192_1096  1096       // Edit
 #define IDC_D192_1138  1138       // Button  Unit is Cloaked
 #define IDC_D192_1139  1139       // Button  Unit is Goliath and has 
+
+// ── 193  编辑条件（本工程新增）──
+#define IDC_D193_TYPE      1180   // ComboBox  条件类型
+#define IDC_D193_TYPE_ID   1181   // Edit      类型号
+#define IDC_D193_LOCATION  1182   // Edit      地点
+#define IDC_D193_PLAYER    1183   // Edit      玩家
+#define IDC_D193_AMOUNT    1184   // Edit      数量
+#define IDC_D193_UNIT      1185   // Edit      单位
+#define IDC_D193_COMPARE   1186   // ComboBox  比较
+#define IDC_D193_PARAM     1187   // Edit      参数
+#define IDC_D193_PROP      1188   // Edit      属性
+#define IDC_D193_1         1      // Button    确定
+#define IDC_D193_2         2      // Button    关闭
+
+// ── 194  编辑行动（本工程新增）──
+#define IDC_D194_TYPE      1190   // ComboBox  行动类型
+#define IDC_D194_TYPE_ID   1191   // Edit      类型号
+#define IDC_D194_LOCATION  1192   // Edit      地点
+#define IDC_D194_STRING    1193   // Edit      字符串
+#define IDC_D194_WAV       1194   // Edit      WAV
+#define IDC_D194_TIME      1195   // Edit      时间
+#define IDC_D194_PLAYER    1196   // Edit      玩家
+#define IDC_D194_TARGET    1197   // Edit      目标
+#define IDC_D194_UNIT      1198   // Edit      单位
+#define IDC_D194_AMOUNT    1199   // Edit      数量
+#define IDC_D194_PROP      1200   // Edit      属性
+#define IDC_D194_1         1      // Button    确定
+#define IDC_D194_2         2      // Button    关闭

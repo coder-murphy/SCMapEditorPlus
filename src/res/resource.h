@@ -38,3 +38,6 @@
 #define IDD_DLG_189  189
 #define IDD_DLG_191  191
 #define IDD_DLG_192  192
+// 本工程新增：触发条件 / 行动编辑（原程序用动态窗口，模板未导出）
+#define IDD_TRIG_COND 193
+#define IDD_TRIG_ACT  194

@@ -2,6 +2,13 @@
 
 namespace scmd {
 
+namespace {
+MapDocument* g_dialogDocument = nullptr;
+}  // namespace
+
+void SetDialogDocument(MapDocument* doc) { g_dialogDocument = doc; }
+MapDocument* DialogDocument() { return g_dialogDocument; }
+
 void CenterDialog(HWND dlg) {
     RECT rcDlg, rcOwner;
     ::GetWindowRect(dlg, &rcDlg);

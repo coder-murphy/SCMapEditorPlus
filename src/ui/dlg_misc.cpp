@@ -89,60 +89,12 @@ INT_PTR CALLBACK ProcListViewHost(HWND dlg, UINT msg, WPARAM, LPARAM) {
     return FALSE;
 }
 
-// 185 / 186：同一套按钮（新建/编辑/复制/删除/上移/下移），列表 ID 不同
-namespace {
-INT_PTR HandleListEditor(HWND dlg, UINT msg, WPARAM wParam) {
-    const int listId = ::GetDlgItem(dlg, IDC_D185_1123) ? IDC_D185_1123 : IDC_D186_1115;
-    switch (msg) {
-        case WM_INITDIALOG:
-            CenterDialog(dlg);
-            return TRUE;
-        case WM_COMMAND:
-            switch (LOWORD(wParam)) {
-                case IDC_D185_1108:
-                    ListAddString(dlg, listId, L"新建项");
-                    return TRUE;
-                case IDC_D185_1109: {
-                    const int sel = ListSelectedIndex(dlg, listId);
-                    if (sel >= 0) {
-                        wchar_t buf[256] = L"";
-                        ::SendDlgItemMessageW(dlg, listId, LB_GETTEXT, static_cast<WPARAM>(sel),
-                                              reinterpret_cast<LPARAM>(buf));
-                        ListAddString(dlg, listId, buf);
-                    }
-                    return TRUE;
-                }
-                case IDC_D185_1107:
-                    ListRemoveSelection(dlg, listId);
-                    return TRUE;
-                case IDC_D185_1001:
-                    ListMoveSelection(dlg, listId, -1);
-                    return TRUE;
-                case IDC_D185_1002:
-                    ListMoveSelection(dlg, listId, 1);
-                    return TRUE;
-                case IDC_D185_1106:
-                    Log(L"[list] edit selected (TODO)");
-                    return TRUE;
-                default:
-                    break;
-            }
-            break;
-        case WM_CLOSE:
-            ::EndDialog(dlg, IDCANCEL);
-            return TRUE;
-        default:
-            break;
-    }
-    return FALSE;
-}
-}  // namespace
-
+// 185 / 186：触发条件 / 行动列表，实际逻辑在 dlg_triggers.cpp
 INT_PTR CALLBACK ProcListEditorA(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
-    return HandleListEditor(dlg, msg, wParam);
+    return HandleTriggerListEditor(dlg, msg, wParam);
 }
 INT_PTR CALLBACK ProcListEditorB(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
-    return HandleListEditor(dlg, msg, wParam);
+    return HandleTriggerListEditor(dlg, msg, wParam);
 }
 
 // 187：富文本（RichEdit20A）

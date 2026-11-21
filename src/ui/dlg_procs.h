@@ -31,7 +31,11 @@ INT_PTR CALLBACK ProcTabHost(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam); 
 INT_PTR CALLBACK ProcListViewHost(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 列表容器（184）
 INT_PTR CALLBACK ProcListEditorA(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 列表编辑 A（185）
 INT_PTR CALLBACK ProcListEditorB(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 列表编辑 B（186）
+// 185/186 的实际实现（触发条件/行动列表），由 dlg_misc 的两个处理过程转发
+INT_PTR HandleTriggerListEditor(HWND dlg, UINT msg, WPARAM wParam);
 INT_PTR CALLBACK ProcRichText(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 富文本（187）
+INT_PTR CALLBACK ProcTriggerCondition(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 条件编辑（193）
+INT_PTR CALLBACK ProcTriggerAction(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);     // 行动编辑（194）
 
 // 对话框返回值缓存
 int LastInputValue();                 // 188 / 191

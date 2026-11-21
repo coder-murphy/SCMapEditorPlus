@@ -13,6 +13,7 @@
 #include "res/resource.h"
 #include "ui/command_ids.h"
 #include "ui/dialog_registry.h"
+#include "ui/dlg_common.h"
 #include "ui/dlg_procs.h"
 #include "ui/dialogs.h"
 
@@ -1013,7 +1014,17 @@ void MainWindow::OnCommand(int id) {
             ToggleDisplay(id);
             break;
         case kTriggerEditor:
+            if (!map_.IsOpen()) {
+                MessageBeep(MB_ICONWARNING);
+                break;
+            }
+            SetDialogDocument(&map_);
             ShowRecoveredDialog(IDD_DLG_181, hwnd_);
+            SetDialogDocument(nullptr);
+            if (map_.IsDirty()) {
+                UpdateTitle();
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+            }
             break;
         case kDebugDialogs:
             ShowRecoveredDialog(IDD_DLG_155, hwnd_);
