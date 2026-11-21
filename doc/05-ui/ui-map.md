@@ -185,10 +185,10 @@ MSBuild SCMDPlus.sln /t:Rebuild /p:Configuration=Release /p:Platform=Win32 ^
 
 ## 后续
 
-1. 185/186 的列表内容接到 `TriggerSection` / `LocationTable` / `StringTable`（P3）；
-2. 主菜单中尚未实现的命令（保存/关闭、层切换、网格尺寸、剧本设置…）逐项接线；
-3. 各对话框控件 ID 语义化命名（当前保留原程序数值，便于与二进制对照）；
-4. 位图 134/151/152 尚未导出。
+1. ~~185/186 的列表内容接到 `TriggerSection` / `LocationTable` / `StringTable`~~（P3-11d 已完成）；
+2. 主菜单中尚未实现的命令逐项接线（保存/关闭、层切换、网格尺寸已完成，其余继续）；
+3. 已用控件语义别名接入触发编辑器；其余控件保留原程序数值，便于与二进制对照；
+4. ~~位图 134/151/152 尚未导出~~（P3-12 已导出到 `src/res/assets/`）。
 
 ## 文件菜单闭环（P3-11）
 

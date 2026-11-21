@@ -44,7 +44,7 @@ EditCommand {
 ```
 tileEdit=1 tileUndo=1 tileRedo=1
 placeOk=1  placeUndo=1 placeRedo=1
-removeUndo=1  undoCount=4  redoCleared=1
+removeUndo=1  undoCount=4  redoCleared=1  regionOk=1
 ```
 
 - 地形：刷 3 格后撤销，文档哈希回到初始值；重做后回到修改后的哈希；
@@ -62,8 +62,31 @@ Ctrl+Y -> 145 个单位，已修改
 注：第一次跑该测试时 `Ctrl+Y` 被误判失败，原因是脚本只等 700 ms 就读取标题，
 而撤销会触发整图重渲；延长等待后稳定通过——**是测试时序问题，不是功能缺陷**。
 
+## 局部重绘（P3-13，VERIFIED）
+
+撤销/重做不再默认整图重渲：
+
+1. 应用历史前后各取一份 MTXM，`DiffTileRect` 求变化瓦片的包围盒；
+2. 只有单位层变化 → 仅 `InvalidateRect`，不碰地形位图；
+3. 地形变化 → `TerrainRenderer::RenderRegion` 只渲染包围盒内瓦片，
+   再逐行 `memcpy` 到 DIB，最后只失效对应客户区；
+4. 包围盒面积超过全图 1/4 → 回退整图 `RebuildView`（保留滚动位置）。
+
+地形刷单格时只需重绘 8×8 像素，192×192 地图不再重新采样 2.4 M 像素。
+
+无头回归 `--undo-test` 新增 `regionOk`：对 3 格区域做局部渲染，结果与全量渲染
+逐字节一致。
+
+GUI 截图哈希（排除顶部 HUD）：绘制前/撤销后/重做后
+
+```
+before      293a97c48efdfc34
+after-paint 24700fb1a7309d3d
+after-undo  293a97c48efdfc34
+after-redo  24700fb1a7309d3d
+```
+
 ## 已知限制
 
-- 撤销会整图重渲（192×192 @8px 约 2.4 M 像素），大地图上有可见延迟；
-  后续可只重绘受影响区域。
+- 局部重绘按包围盒处理；对角线分散的改动会退化为整图重建（正确性优先）。
 - 目前不含“文件级”撤销（例如打开/另存）。

@@ -65,6 +65,33 @@ HMENU FindMenuContaining(HMENU menu, int id) {
     return nullptr;
 }
 
+// 比较两份 MTXM，返回变化瓦片的包围盒；没有任何变化时 any=false
+bool DiffTileRect(const Buffer& before, const Buffer& after, int width, int height,
+                  int& x0, int& y0, int& x1, int& y1, bool& any) {
+    any = false;
+    if (width <= 0 || height <= 0) return false;
+    const std::size_t need = static_cast<std::size_t>(width) * height * 2;
+    if (before.size() < need || after.size() < need) return false;
+    x0 = width;
+    y0 = height;
+    x1 = -1;
+    y1 = -1;
+    for (int ty = 0; ty < height; ty++) {
+        const u8* a = before.data() + static_cast<std::size_t>(ty) * width * 2;
+        const u8* b = after.data() + static_cast<std::size_t>(ty) * width * 2;
+        if (std::memcmp(a, b, static_cast<std::size_t>(width) * 2) == 0) continue;
+        for (int tx = 0; tx < width; tx++) {
+            if (a[tx * 2] == b[tx * 2] && a[tx * 2 + 1] == b[tx * 2 + 1]) continue;
+            x0 = std::min(x0, tx);
+            x1 = std::max(x1, tx);
+            y0 = std::min(y0, ty);
+            y1 = std::max(y1, ty);
+        }
+    }
+    any = x1 >= x0 && y1 >= y0;
+    return true;
+}
+
 // 在一组互斥命令中只勾选 checkedId
 void CheckOnly(HMENU bar, const int* ids, int count, int checkedId) {
     for (int i = 0; i < count; i++) {
@@ -829,16 +856,75 @@ void MainWindow::CommitEdit(const wchar_t* label) {
     UpdateTitle();
 }
 
+void MainWindow::RefreshAfterHistory(const Buffer& oldTiles) {
+    // 没有地形缓冲（未加载地形集）时只需让客户区重画（单位层由 Present 叠加）
+    if (!dibBits_ || !map_.hasTileset() || image_.pixels.empty() || pxPerTile_ <= 0) {
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+        return;
+    }
+
+    int x0 = 0, y0 = 0, x1 = -1, y1 = -1;
+    bool any = false;
+    if (!DiffTileRect(oldTiles, map_.tiles(), map_.width(), map_.height(), x0, y0, x1, y1, any)) {
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+        return;
+    }
+    if (!any) {
+        ::InvalidateRect(hwnd_, nullptr, FALSE);   // 只有单位层变化
+        return;
+    }
+
+    const long long area = static_cast<long long>(x1 - x0 + 1) * (y1 - y0 + 1);
+    const long long total = static_cast<long long>(map_.width()) * map_.height();
+    if (area * 4 > total) {                        // 改动过大：整图重建更划算
+        const int sx = scrollX_;
+        const int sy = scrollY_;
+        RebuildView(pxPerTile_);
+        scrollX_ = sx;
+        scrollY_ = sy;
+        UpdateScrollBars();
+        return;
+    }
+
+    if (!renderer_.RenderRegion(map_.tiles(), map_.width(), map_.height(), pxPerTile_,
+                                x0, y0, x1, y1, image_)) {
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+        return;
+    }
+
+    // 把 image_ 中变化区域同步到 DIB（逐行 memcpy，避免整图拷贝）
+    const std::size_t stride = static_cast<std::size_t>(image_.width) * 4;
+    const std::size_t left = static_cast<std::size_t>(x0 * pxPerTile_) * 4;
+    const std::size_t bytes = static_cast<std::size_t>((x1 - x0 + 1) * pxPerTile_) * 4;
+    const int top = y0 * pxPerTile_;
+    const int bottom = (y1 + 1) * pxPerTile_;
+    u8* dst = static_cast<u8*>(dibBits_);
+    for (int y = top; y < bottom; y++) {
+        std::memcpy(dst + static_cast<std::size_t>(y) * stride + left,
+                    image_.pixels.data() + static_cast<std::size_t>(y) * stride + left, bytes);
+    }
+
+    RECT r;
+    r.left = x0 * pxPerTile_ - scrollX_;
+    r.top = y0 * pxPerTile_ - scrollY_;
+    r.right = (x1 + 1) * pxPerTile_ - scrollX_;
+    r.bottom = (y1 + 1) * pxPerTile_ - scrollY_;
+    ::InvalidateRect(hwnd_, &r, FALSE);
+    Log(L"[render] 局部重绘 %dx%d 格 (%d,%d)-(%d,%d)", x1 - x0 + 1, y1 - y0 + 1, x0, y0, x1, y1);
+}
+
 bool MainWindow::Undo() {
+    const Buffer before = map_.tiles();
     if (!history_.Undo(map_)) return false;
-    RebuildView(pxPerTile_);
+    RefreshAfterHistory(before);
     UpdateTitle();
     return true;
 }
 
 bool MainWindow::Redo() {
+    const Buffer before = map_.tiles();
     if (!history_.Redo(map_)) return false;
-    RebuildView(pxPerTile_);
+    RefreshAfterHistory(before);
     UpdateTitle();
     return true;
 }

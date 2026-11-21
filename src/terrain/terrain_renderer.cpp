@@ -1,5 +1,6 @@
 ﻿#include "terrain/terrain_renderer.h"
 
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <unordered_map>
@@ -16,16 +17,35 @@ bool TerrainRenderer::Render(const Buffer& mtxm, int mapWidth, int mapHeight,
     if (!tileset_ || !tileset_->IsLoaded()) return false;
     if (mapWidth <= 0 || mapHeight <= 0) return false;
     if (pxPerTile < 1 || pxPerTile > 32) return false;
-
-    const std::size_t tileCount = static_cast<std::size_t>(mapWidth) * mapHeight;
-    if (mtxm.size() < tileCount * 2) return false;
-
-    const int step = 32 / pxPerTile;          // 源像素步长（32 必须能被 pxPerTile 整除）
     if (32 % pxPerTile != 0) return false;
 
     out.width = mapWidth * pxPerTile;
     out.height = mapHeight * pxPerTile;
     out.pixels.assign(static_cast<std::size_t>(out.width) * out.height * 4, 0);
+    return RenderRegion(mtxm, mapWidth, mapHeight, pxPerTile, 0, 0, mapWidth - 1, mapHeight - 1,
+                        out);
+}
+
+bool TerrainRenderer::RenderRegion(const Buffer& mtxm, int mapWidth, int mapHeight,
+                                  int pxPerTile, int tx0, int ty0, int tx1, int ty1,
+                                  TerrainImage& out) const {
+    if (!tileset_ || !tileset_->IsLoaded()) return false;
+    if (mapWidth <= 0 || mapHeight <= 0) return false;
+    if (pxPerTile < 1 || pxPerTile > 32) return false;
+    if (32 % pxPerTile != 0) return false;
+
+    const std::size_t tileCount = static_cast<std::size_t>(mapWidth) * mapHeight;
+    if (mtxm.size() < tileCount * 2) return false;
+    if (out.width != mapWidth * pxPerTile || out.height != mapHeight * pxPerTile) return false;
+    if (out.pixels.size() != static_cast<std::size_t>(out.width) * out.height * 4) return false;
+
+    tx0 = std::max(0, tx0);
+    ty0 = std::max(0, ty0);
+    tx1 = std::min(mapWidth - 1, tx1);
+    ty1 = std::min(mapHeight - 1, ty1);
+    if (tx0 > tx1 || ty0 > ty1) return true;
+
+    const int step = 32 / pxPerTile;          // 源像素步长（32 必须能被 pxPerTile 整除）
 
     const Buffer& wpe = tileset_->palette();
     if (wpe.size() < 256 * 4) return false;
@@ -33,8 +53,8 @@ bool TerrainRenderer::Render(const Buffer& mtxm, int mapWidth, int mapHeight,
     std::unordered_map<u16, std::vector<u8>> blockCache;
     blockCache.reserve(512);
 
-    for (int ty = 0; ty < mapHeight; ty++) {
-        for (int tx = 0; tx < mapWidth; tx++) {
+    for (int ty = ty0; ty <= ty1; ty++) {
+        for (int tx = tx0; tx <= tx1; tx++) {
             const u16 v = ReadU16(mtxm.data() + (static_cast<std::size_t>(ty) * mapWidth + tx) * 2);
             auto it = blockCache.find(v);
             if (it == blockCache.end()) {

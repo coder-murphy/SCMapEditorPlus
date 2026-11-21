@@ -88,6 +88,8 @@ private:
     void CommitEdit(const wchar_t* label);
     void TileCoordsFromClient(int mx, int my, int& tx, int& ty) const;
     void PaintTileToBuffer(int tx, int ty, u16 value);
+    // 撤销/重做后只重绘发生变化的瓦片区域（大面积改动回退为整图重建）
+    void RefreshAfterHistory(const Buffer& oldTiles);
     void DrawUnits(HDC dc, const RECT& client) const;
     void DrawHud(HDC dc) const;
 

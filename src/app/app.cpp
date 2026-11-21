@@ -633,6 +633,28 @@ int RunUndoTest(const std::wstring& mapPath) {
     const unsigned long long h1 = HashDocument(doc);
     history.Push(MakeCommand(doc, t0, u0, L"绘制地形"));
 
+    // 局部重绘原语：只刷新 3 格区域后的整图必须与全量渲染逐字节一致
+    bool regionOk = true;
+    if (doc.hasTileset()) {
+        TerrainRenderer renderer;
+        renderer.SetTileset(&doc.tileset());
+        TerrainImage full;
+        TerrainImage partial;
+        TerrainImage reference;
+        if (!renderer.Render(doc.tiles(), doc.width(), doc.height(), 8, full)) {
+            regionOk = false;
+        } else {
+            partial = full;
+            if (!renderer.RenderRegion(doc.tiles(), doc.width(), doc.height(), 8, wx, wy, wx + 2, wy,
+                                       partial)) {
+                regionOk = false;
+            } else if (!renderer.Render(doc.tiles(), doc.width(), doc.height(), 8, reference) ||
+                       reference.pixels != partial.pixels) {
+                regionOk = false;
+            }
+        }
+    }
+
     history.Undo(doc);
     const unsigned long long hUndo = HashDocument(doc);
     history.Redo(doc);
@@ -678,15 +700,15 @@ int RunUndoTest(const std::wstring& mapPath) {
     wchar_t msg[512];
     ::wsprintfW(msg,
         L"tileEdit=%d\ntileUndo=%d\ntileRedo=%d\nplaceOk=%d\nplaceUndo=%d\nplaceRedo=%d\n"
-        L"removeUndo=%d\nundoCount=%u\nredoCleared=%d\n",
+        L"removeUndo=%d\nundoCount=%u\nredoCleared=%d\nregionOk=%d\n",
         tileEditOk ? 1 : 0, tileUndoOk ? 1 : 0, tileRedoOk ? 1 : 0,
         placeOk ? 1 : 0, placeUndoOk ? 1 : 0, placeRedoOk ? 1 : 0,
         removeUndoOk ? 1 : 0, static_cast<unsigned>(history.UndoCount()),
-        redoCleared ? 1 : 0);
+        redoCleared ? 1 : 0, regionOk ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = tileEditOk && tileUndoOk && tileRedoOk && placeOk && placeUndoOk &&
-                    placeRedoOk && removeUndoOk;
+                    placeRedoOk && removeUndoOk && regionOk;
     return ok ? 0 : 2;
 }
 

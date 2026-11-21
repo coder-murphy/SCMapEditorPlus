@@ -20,6 +20,11 @@ public:
 
     bool Render(const Buffer& mtxm, int mapWidth, int mapHeight, int pxPerTile, TerrainImage& out) const;
 
+    // 只重绘 [tx0,tx1] × [ty0,ty1] 的瓦片区域（含端点）。
+    // out 必须已按同一 pxPerTile 分配且尺寸匹配；用于撤销/重做后的局部刷新。
+    bool RenderRegion(const Buffer& mtxm, int mapWidth, int mapHeight, int pxPerTile,
+                      int tx0, int ty0, int tx1, int ty1, TerrainImage& out) const;
+
     // 写 24 位 BMP（用于自动化比对）
     static bool WriteBmp24(const std::wstring& path, const TerrainImage& image);
 
