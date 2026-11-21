@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include <string>
 
+#include "archive/mpq_archive.h"
 #include "chk/chk_document.h"
 #include "common/types.h"
 #include "terrain/tileset.h"
@@ -38,6 +39,9 @@ public:
 
     const Tileset& tileset() const { return tileset_; }
     bool hasTileset() const { return tileset_.IsLoaded(); }
+
+    // MPQ 中除 scenario.chk 外的文件（自定义 BIN / 瓦片 / 音频等），保存时原样带回
+    std::size_t ExtraFileCount() const { return extraFiles_.size(); }
 
     const TriggerSection& triggers() const { return triggers_; }
     TriggerSection& mutableTriggers() { return triggers_; }
@@ -88,6 +92,7 @@ private:
     TriggerSection triggers_;
     LocationTable locations_;
     StringTable strings_;
+    std::vector<MpqFileEntry> extraFiles_;
     bool opened_ = false;
     bool dirty_ = false;
 };

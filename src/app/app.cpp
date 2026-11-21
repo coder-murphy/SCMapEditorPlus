@@ -374,6 +374,63 @@ int RunTrigTest(const std::wstring& mapPath, const std::wstring& outPath) {
     return ok ? 0 : 2;
 }
 
+// --extra-test=<输出scx>：自定义 MPQ 文件（BIN 等）保存后必须原样保留
+std::wstring ParseExtraTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--extra-test=", 13) == 0) path = argv[i] + 13;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+int RunExtraFileTest(const std::wstring& mapPath, const std::wstring& outPath) {
+    MpqArchive src;
+    Buffer chk;
+    if (!src.Open(mapPath) || !src.ReadScenarioChk(chk)) {
+        WriteDiag(L"seed=FAIL\n");
+        return 2;
+    }
+    Buffer probe(256);
+    for (std::size_t i = 0; i < probe.size(); i++) probe[i] = static_cast<u8>((i * 37 + 11) & 0xFF);
+
+    const std::wstring seed = outPath + L".seed.scx";
+    std::vector<MpqFileEntry> files;
+    const std::string list = "staredit\\scenario.chk\r\ncustom\\probe.bin\r\n";
+    files.push_back({"(listfile)", Buffer(list.begin(), list.end())});
+    files.push_back({"staredit\\scenario.chk", chk});
+    files.push_back({"custom\\probe.bin", probe});
+    if (!MpqArchive::WriteArchive(seed, files)) {
+        wchar_t err[512];
+        ::wsprintfW(err, L"seedwrite=FAIL path=%s err=%u\n", seed.c_str(), ::GetLastError());
+        WriteDiag(err);
+        return 2;
+    }
+
+    MapDocument doc;
+    const bool opened = doc.Open(seed);
+    const std::size_t extras = doc.ExtraFileCount();
+    const bool saved = opened && doc.Save(outPath);
+
+    Buffer back;
+    MpqArchive check;
+    const bool readBack = check.Open(outPath) && check.ReadFile("custom\\probe.bin", back);
+    const bool same = readBack && back.size() == probe.size() &&
+                      std::memcmp(back.data(), probe.data(), probe.size()) == 0;
+    ::DeleteFileW(seed.c_str());
+
+    wchar_t msg[256];
+    ::wsprintfW(msg, L"opened=%d extras=%u saved=%d readBack=%d same=%d bytes=%u\n",
+                opened ? 1 : 0, static_cast<unsigned>(extras), saved ? 1 : 0,
+                readBack ? 1 : 0, same ? 1 : 0, static_cast<unsigned>(back.size()));
+    WriteDiag(msg);
+    return (opened && extras == 1 && saved && same) ? 0 : 2;
+}
+
 // --menu-cmd-test：检验编辑层/方格/显示选项菜单命令与勾选回显
 HMENU FindMenuWithItem(HMENU menu, int id) {
     if (!menu) return nullptr;
@@ -883,6 +940,15 @@ int App::Run(HINSTANCE hInstance) {
             ::DestroyWindow(mainWindow_.hwnd());
             return rc;
         }
+    }
+
+    // 自定义 MPQ 文件保留回归（无头）
+    if (const std::wstring extraOut = ParseExtraTestArg(); !extraOut.empty()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) { WriteDiag(L"no-map\n"); return 2; }
+        const int rc = RunExtraFileTest(mapPath, extraOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
     }
 
     // 触发语义回归（无头）

@@ -197,6 +197,31 @@
 #define IDC_D181_1110  1110       // SysTreeView32
 #define IDC_D181_1113  1113       // Button  触发
 
+// ── 181 触发编辑器：语义别名（本工程实际使用）──
+#define IDC_D181_TRIGGER_LIST  IDC_D181_182    // 触发列表
+#define IDC_D181_PLAYER_TREE   IDC_D181_1110   // 玩家树
+#define IDC_D181_NEW           IDC_D181_1100   // 新建
+#define IDC_D181_MODIFY        IDC_D181_1101   // 修改
+#define IDC_D181_SWITCH_NAMES  IDC_D181_1102   // 开关命名
+#define IDC_D181_DELETE        IDC_D181_1104   // 删除
+#define IDC_D181_COPY          IDC_D181_1105   // 复制
+#define IDC_D181_UP            IDC_D181_1001   // 上移
+#define IDC_D181_DOWN          IDC_D181_1002   // 下移
+#define IDC_D181_CLOSE         IDC_D181_1      // 关闭
+
+// ── 184/185/186 子面板语义别名 ──
+#define IDC_D184_DETAIL_LIST   IDC_D184_1022   // 报表视图
+#define IDC_D185_COND_LIST     IDC_D185_1123   // 条件列表
+#define IDC_D186_ACTION_LIST   IDC_D186_1115   // 行动列表
+
+// 185/186 共用按钮
+#define IDC_TRIGLIST_EDIT      1106            // 编辑
+#define IDC_TRIGLIST_DELETE    1107            // 删除
+#define IDC_TRIGLIST_NEW       1108            // 新建
+#define IDC_TRIGLIST_COPY      1109            // 复制
+#define IDC_TRIGLIST_UP        1001            // 上移
+#define IDC_TRIGLIST_DOWN      1002            // 下移
+
 // ── 182  自定义刷子 ──
 #define IDC_D182_1126  1126       // ComboBox
 #define IDC_D182_1120  1120       // ComboBox

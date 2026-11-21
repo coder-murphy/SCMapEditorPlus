@@ -22,11 +22,33 @@
 - **位图（约 488 KB）** → 图标化工具条素材。
 - **自定义 `BIN`** → 待确认用途（疑似内嵌的瓦片/调色板或帮助数据）。
 
+## 导出状态（P3-12）
+
+`tools/export_res.py` 可复现导出：
+
+```
+python tools/export_res.py --exe "E:/Games/PCGames/SC1BWAI/[CN]ScmDraft2.exe"
+```
+
+输出到 `src/res/assets/`：
+
+| 文件 | 尺寸 | 说明 |
+| --- | --- | --- |
+| `bitmap_134.bmp` | 16×16，4 bpp | 小图标/调色板预览 |
+| `bitmap_151.bmp` | 500×300，24 bpp | 启动画面/帮助图 |
+| `bitmap_152.bmp` | 128×128，24 bpp | 图标 |
+| `bin_148.bin` | 1040 B | 用途待确认（内容近似随机） |
+| `bin_170.bin` | 18 953 B | 疑似 u16 查表数据 |
+| `bin_183.bin` | 7200 B | 大量 0，偏移 16 处为 0x16，疑似调色板/瓦片索引 |
+| `bin_193.bin` | 9600 B | 同 183 |
+
+脚本只补写 BMP 的 14 字节文件头，像素数据保持原样。
+
 ## 下一步（TODO）
 
-1. 写资源导出脚本，把 25 个 DIALOG 转成 `src/res/resources.rc`，菜单/加速键/版本信息按同样方式并入。
-2. 导出后逐个对话框补 `src/ui/` 的实现，并在 `doc/05-ui/ui-map.md` 标注「对话框 ID ↔ 业务模块」。
-3. 位图导出为 `src/res/*.bmp`。
+1. 25 个 DIALOG 已并入 `src/res/dialogs.rc`，菜单/加速键/版本信息同样已并入。
+2. 已实现对话框在 `doc/05-ui/ui-map.md` 标注「对话框 ID ↔ 业务模块」。
+3. 位图与 BIN 已导出；BIN 的 183/193 结构仍待确认。
 
 > 注意：`[CN]` 版的 `Local.dll` / `EditLocal.dll` 是加壳的汉化组件，会给动态分析添噪声；
 > 需要看运行时行为时，优先用未汉化的原版 exe。

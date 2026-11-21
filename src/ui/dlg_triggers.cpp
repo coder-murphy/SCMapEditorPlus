@@ -161,14 +161,14 @@ void ApplyTriggerMode(HWND dlg, TriggerPanels& panels, int mode) {
         if (panels.hwnd[i]) ::ShowWindow(panels.hwnd[i], mode == i + 1 ? SW_SHOW : SW_HIDE);
     }
     const int listShow = mode == 0 ? SW_SHOW : SW_HIDE;
-    ::ShowWindow(::GetDlgItem(dlg, IDC_D181_182), listShow);
-    ::ShowWindow(::GetDlgItem(dlg, IDC_D181_1110), listShow);
+    ::ShowWindow(::GetDlgItem(dlg, IDC_D181_TRIGGER_LIST), listShow);
+    ::ShowWindow(::GetDlgItem(dlg, IDC_D181_PLAYER_TREE), listShow);
     Log(L"[trigger] view=%d", mode);
 }
 
 // 184 的列表视图改成报表模式并建立列
 void SetupDetailList(HWND dlg, const TriggerPanels& panels) {
-    HWND list = panels.hwnd[0] ? ::GetDlgItem(panels.hwnd[0], IDC_D184_1022) : nullptr;
+    HWND list = panels.hwnd[0] ? ::GetDlgItem(panels.hwnd[0], IDC_D184_DETAIL_LIST) : nullptr;
     if (!list) return;
     LONG_PTR style = ::GetWindowLongPtrW(list, GWL_STYLE);
     style = (style & ~0x0000000F) | LVS_REPORT;
@@ -202,7 +202,7 @@ void AddDetailRow(HWND list, int row, const wchar_t* kind, const wchar_t* name,
 }
 
 void FillDetailList(HWND dlg, const TriggerPanels& panels, const Trigger* t) {
-    HWND list = panels.hwnd[0] ? ::GetDlgItem(panels.hwnd[0], IDC_D184_1022) : nullptr;
+    HWND list = panels.hwnd[0] ? ::GetDlgItem(panels.hwnd[0], IDC_D184_DETAIL_LIST) : nullptr;
     if (!list) return;
     ListView_DeleteAllItems(list);
     MapDocument* doc = DialogDocument();
@@ -268,7 +268,7 @@ void FillActionList(HWND list, const Trigger* t) {
 }
 
 void FillTriggerList(HWND dlg) {
-    HWND list = ::GetDlgItem(dlg, IDC_D181_182);
+    HWND list = ::GetDlgItem(dlg, IDC_D181_TRIGGER_LIST);
     if (!list) return;
     ::SendMessageW(list, LB_RESETCONTENT, 0, 0);
     MapDocument* doc = DialogDocument();
@@ -296,8 +296,8 @@ void FillTriggerList(HWND dlg) {
 void RefreshPanels(HWND dlg, const TriggerPanels& panels) {
     const Trigger* t = SelectedTrigger();
     FillDetailList(dlg, panels, t);
-    FillConditionList(panels.hwnd[1] ? ::GetDlgItem(panels.hwnd[1], IDC_D185_1123) : nullptr, t);
-    FillActionList(panels.hwnd[2] ? ::GetDlgItem(panels.hwnd[2], IDC_D186_1115) : nullptr, t);
+    FillConditionList(panels.hwnd[1] ? ::GetDlgItem(panels.hwnd[1], IDC_D185_COND_LIST) : nullptr, t);
+    FillActionList(panels.hwnd[2] ? ::GetDlgItem(panels.hwnd[2], IDC_D186_ACTION_LIST) : nullptr, t);
 }
 
 void RefreshAll(HWND dlg, const TriggerPanels& panels) {
@@ -306,7 +306,7 @@ void RefreshAll(HWND dlg, const TriggerPanels& panels) {
 }
 
 void FillPlayerTree(HWND dlg) {
-    HWND tree = ::GetDlgItem(dlg, IDC_D181_1110);
+    HWND tree = ::GetDlgItem(dlg, IDC_D181_PLAYER_TREE);
     if (!tree) return;
     TreeView_DeleteAllItems(tree);
     for (int p = 1; p <= 8; p++) {
@@ -360,8 +360,8 @@ void NotifyChanged(HWND dlg) {
 
 // 185/186 共用：列表 + 新建/编辑/复制/删除/上移/下移
 INT_PTR HandleListEditor(HWND dlg, UINT msg, WPARAM wParam) {
-    const bool isCondition = ::GetDlgItem(dlg, IDC_D185_1123) != nullptr;
-    const int listId = isCondition ? IDC_D185_1123 : IDC_D186_1115;
+    const bool isCondition = ::GetDlgItem(dlg, IDC_D185_COND_LIST) != nullptr;
+    const int listId = isCondition ? IDC_D185_COND_LIST : IDC_D186_ACTION_LIST;
 
     auto refresh = [&] {
         Trigger* t = SelectedTrigger();
@@ -376,7 +376,7 @@ INT_PTR HandleListEditor(HWND dlg, UINT msg, WPARAM wParam) {
             return TRUE;
         case WM_COMMAND:
             switch (LOWORD(wParam)) {
-                case 1108: {                                       // 新建
+                case IDC_TRIGLIST_NEW: {                           // 新建
                     Trigger* t = SelectedTrigger();
                     if (!t) return TRUE;
                     if (isCondition) {
@@ -400,7 +400,7 @@ INT_PTR HandleListEditor(HWND dlg, UINT msg, WPARAM wParam) {
                     NotifyChanged(dlg);
                     return TRUE;
                 }
-                case 1106: {                                       // 编辑
+                case IDC_TRIGLIST_EDIT: {                          // 编辑
                     Trigger* t = SelectedTrigger();
                     const int sel = ListSelectedIndex(dlg, listId);
                     if (!t || sel < 0) return TRUE;
@@ -423,7 +423,7 @@ INT_PTR HandleListEditor(HWND dlg, UINT msg, WPARAM wParam) {
                     }
                     return TRUE;
                 }
-                case 1109: {                                       // 复制
+                case IDC_TRIGLIST_COPY: {                          // 复制
                     Trigger* t = SelectedTrigger();
                     const int sel = ListSelectedIndex(dlg, listId);
                     if (!t || sel < 0) return TRUE;
@@ -447,7 +447,7 @@ INT_PTR HandleListEditor(HWND dlg, UINT msg, WPARAM wParam) {
                     NotifyChanged(dlg);
                     return TRUE;
                 }
-                case 1107: {                                       // 删除
+                case IDC_TRIGLIST_DELETE: {                        // 删除
                     Trigger* t = SelectedTrigger();
                     const int sel = ListSelectedIndex(dlg, listId);
                     if (!t || sel < 0) return TRUE;
@@ -467,8 +467,8 @@ INT_PTR HandleListEditor(HWND dlg, UINT msg, WPARAM wParam) {
                     NotifyChanged(dlg);
                     return TRUE;
                 }
-                case 1001:                                         // 上移
-                case 1002: {                                       // 下移
+                case IDC_TRIGLIST_UP:                              // 上移
+                case IDC_TRIGLIST_DOWN: {                          // 下移
                     Trigger* t = SelectedTrigger();
                     const int sel = ListSelectedIndex(dlg, listId);
                     const int delta = LOWORD(wParam) == 1001 ? -1 : 1;
@@ -535,9 +535,9 @@ INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
         }
         case WM_COMMAND:
             switch (LOWORD(wParam)) {
-                case IDC_D181_182:
+                case IDC_D181_TRIGGER_LIST:
                     if (HIWORD(wParam) == LBN_SELCHANGE) {
-                        const int sel = ListSelectedIndex(dlg, IDC_D181_182);
+                        const int sel = ListSelectedIndex(dlg, IDC_D181_TRIGGER_LIST);
                         if (sel >= 0) {
                             g_selectedTrigger = sel;
                             if (TriggerPanels* p = PanelsOf(dlg)) RefreshPanels(dlg, *p);
@@ -545,12 +545,12 @@ INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                         return TRUE;
                     }
                     break;
-                case IDC_D181_1101: {                            // 修改：在原始列表/184/185/186 间切换
+                case IDC_D181_MODIFY: {                            // 修改：在原始列表/184/185/186 间切换
                     TriggerPanels* panels = PanelsOf(dlg);
                     if (panels) ApplyTriggerMode(dlg, *panels, (panels->mode + 1) % 4);
                     return TRUE;
                 }
-                case IDC_D181_1100: {                            // 新建
+                case IDC_D181_NEW: {                            // 新建
                     MapDocument* doc = DialogDocument();
                     if (!doc) return TRUE;
                     auto& items = doc->mutableTriggers().MutableItems();
@@ -563,7 +563,7 @@ INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     if (TriggerPanels* p = PanelsOf(dlg)) RefreshAll(dlg, *p);
                     return TRUE;
                 }
-                case IDC_D181_1105: {                            // 复制
+                case IDC_D181_COPY: {                            // 复制
                     MapDocument* doc = DialogDocument();
                     const Trigger* src = SelectedTrigger();
                     if (!doc || !src) return TRUE;
@@ -576,7 +576,7 @@ INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     if (TriggerPanels* p = PanelsOf(dlg)) RefreshAll(dlg, *p);
                     return TRUE;
                 }
-                case IDC_D181_1104: {                            // 删除
+                case IDC_D181_DELETE: {                            // 删除
                     MapDocument* doc = DialogDocument();
                     if (!doc) return TRUE;
                     auto& items = doc->mutableTriggers().MutableItems();
@@ -591,12 +591,12 @@ INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     if (TriggerPanels* p = PanelsOf(dlg)) RefreshAll(dlg, *p);
                     return TRUE;
                 }
-                case IDC_D181_1001:                              // 上移
-                case IDC_D181_1002: {                            // 下移
+                case IDC_D181_UP:                              // 上移
+                case IDC_D181_DOWN: {                            // 下移
                     MapDocument* doc = DialogDocument();
                     if (!doc) return TRUE;
                     auto& items = doc->mutableTriggers().MutableItems();
-                    const int delta = LOWORD(wParam) == IDC_D181_1001 ? -1 : 1;
+                    const int delta = LOWORD(wParam) == IDC_D181_UP ? -1 : 1;
                     const int dst = g_selectedTrigger + delta;
                     if (g_selectedTrigger < 0 || dst < 0 ||
                         static_cast<std::size_t>(dst) >= items.size()) {
@@ -608,10 +608,10 @@ INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     if (TriggerPanels* p = PanelsOf(dlg)) RefreshAll(dlg, *p);
                     return TRUE;
                 }
-                case IDC_D181_1102:                              // 开关命名
+                case IDC_D181_SWITCH_NAMES:                              // 开关命名
                     Log(L"[trigger] 开关命名暂未接入（SWNM）");
                     return TRUE;
-                case IDC_D181_1:                                 // 关闭
+                case IDC_D181_CLOSE:                                 // 关闭
                     ::EndDialog(dlg, IDCANCEL);
                     return TRUE;
                 default:

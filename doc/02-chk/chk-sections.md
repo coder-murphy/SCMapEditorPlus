@@ -157,3 +157,20 @@ saved=1 reopened=1 reopenFields=1 reopenLossless=1
 测试会修改首条触发的条件数量、行动数量、执行标志与生效玩家，复制一条触发后
 保存并重开校验。
 
+## MPQ 附加文件（自定义 BIN 等）
+
+`.scm/.scx` 除 `staredit\scenario.chk` 外可能还带自定义文件（BIN、瓦片、音频等）。
+旧版 `MapDocument::Save` 只写 CHK，会把这些条目静默丢弃。
+
+- 打开时按 `(listfile)` 枚举条目，跳过 `(listfile)/(attributes)/(signature)/(user data)`
+  与 `scenario.chk`，其余读入 `extraFiles_`；
+- 保存时把 `extraFiles_` 原样写回，并重建覆盖全部条目的 `(listfile)`；
+- 读取失败的条目会记录日志，不会阻断保存。
+
+无头回归（先用 `scenario.chk` + `custom\probe.bin` 合成一个种子 MPQ）：
+
+```
+SCMDPlus.exe --open="<地图>" --extra-test="<输出.scx>"
+opened=1 extras=1 saved=1 readBack=1 same=1 bytes=256
+```
+

@@ -43,6 +43,49 @@ const wchar_t* MapDocument::eraName() const {
 
 namespace {
 
+// MPQ 内部文件：由写出器自行维护，不能原样回填
+bool IsInternalMpqFile(const std::string& name) {
+    static const char* const kInternal[] = {
+        "(listfile)", "(attributes)", "(signature)", "(user data)", "(patch_metadata)",
+    };
+    for (const char* s : kInternal) {
+        if (_stricmp(name.c_str(), s) == 0) return true;
+    }
+    return false;
+}
+
+bool IsScenarioChk(const std::string& name) {
+    return _stricmp(name.c_str(), "staredit\\scenario.chk") == 0 ||
+           _stricmp(name.c_str(), "staredit/scenario.chk") == 0 ||
+           _stricmp(name.c_str(), "scenario.chk") == 0;
+}
+
+// 取 MPQ 中除 CHK/内部文件外的全部条目；名称来自 (listfile)
+void LoadExtraFiles(const MpqArchive& mpq, std::vector<MpqFileEntry>& out) {
+    out.clear();
+    Buffer list;
+    if (!mpq.ReadFile("(listfile)", list)) return;
+    std::string names(list.begin(), list.end());
+    std::size_t at = 0;
+    while (at < names.size()) {
+        std::size_t end = at;
+        while (end < names.size() && names[end] != '\r' && names[end] != '\n' && names[end] != 0) {
+            end++;
+        }
+        std::string name = names.substr(at, end - at);
+        at = end + 1;
+        // 去掉末尾空白
+        while (!name.empty() && (name.back() == ' ' || name.back() == '\t')) name.pop_back();
+        if (name.empty() || IsInternalMpqFile(name) || IsScenarioChk(name)) continue;
+        Buffer data;
+        if (mpq.ReadFile(name, data)) {
+            out.push_back({name, std::move(data)});
+        } else {
+            Log(L"[map] 额外文件读取失败: %hs", name.c_str());
+        }
+    }
+}
+
 // ERA -> 地形集文件名前缀
 const wchar_t* kEraPrefix[8] = {
     L"StarDat.mpq_badlands", L"StarDat.mpq_platform", L"StarDat.mpq_install", L"StarDat.mpq_ashworld",
@@ -71,6 +114,7 @@ bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir)
         Log(L"[map] CHK 段解析失败");
         return false;
     }
+    LoadExtraFiles(mpq, extraFiles_);
 
     const Buffer* dim = chk_.Find(section::kDim);
     if (!dim || dim->size() < 4) {
@@ -141,9 +185,9 @@ bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir)
     path_ = path;
     opened_ = true;
     dirty_ = false;
-    Log(L"[map] opened %dx%d era=%u units=%zu trig=%zu loc=%zu str=%zu",
+    Log(L"[map] opened %dx%d era=%u units=%zu trig=%zu loc=%zu str=%zu extra=%zu",
         width_, height_, era_, units_.size(), triggers_.BlockCount(),
-        locations_.Count(), strings_.Count());
+        locations_.Count(), strings_.Count(), extraFiles_.size());
     return true;
 }
 
@@ -242,6 +286,7 @@ void MapDocument::Close() {
     triggers_.Parse(Buffer());
     locations_.Parse(Buffer());
     strings_.Parse(Buffer());
+    extraFiles_.clear();
     chk_.Parse(Buffer());
     tileset_.Unload();
 }
@@ -392,9 +437,16 @@ bool MapDocument::Save(const std::wstring& path) {
 
     const Buffer chkBytes = chk_.Serialize();
     std::vector<MpqFileEntry> files;
-    const std::string list = "staredit\\scenario.chk";
+
+    // listfile 覆盖 CHK 与全部额外文件，避免保存后自定义 BIN 变成孤儿条目
+    std::string list = "staredit\\scenario.chk\r\n";
+    for (const auto& extra : extraFiles_) {
+        list += extra.name;
+        list += "\r\n";
+    }
     files.push_back({"(listfile)", Buffer(list.begin(), list.end())});
     files.push_back({"staredit\\scenario.chk", chkBytes});
+    for (const auto& extra : extraFiles_) files.push_back(extra);
 
     if (!MpqArchive::WriteArchive(path, files)) {
         Log(L"[map] 写出失败: %s", path.c_str());
