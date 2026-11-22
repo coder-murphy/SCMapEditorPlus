@@ -1589,6 +1589,8 @@ void MainWindow::PaintTileToBuffer(int tx, int ty, u16 value) {
 }
 
 void MainWindow::OnLButtonDown(int mx, int my) {
+    if (ClickMinimapAt(mx, my)) return;
+
     int tx = -1, ty = -1;
     TileCoordsFromClient(mx, my, tx, ty);
     if (tx < 0) return;
@@ -1795,13 +1797,13 @@ void MainWindow::DrawUnitConflictSizes(HDC dc, const RECT& client) const {
     ::DeleteObject(pen);
 }
 
-void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
-    if (hideMinimap_ || !map_.IsOpen() || pxPerTile_ <= 0) return;
+RECT MainWindow::MinimapRect(const RECT& client) const {
+    RECT empty = {0, 0, 0, 0};
+    if (hideMinimap_ || !map_.IsOpen() || pxPerTile_ <= 0) return empty;
     const int viewW = client.right - client.left;
     const int viewH = client.bottom - client.top;
     const int maxSide = std::min(180, std::min(viewW, viewH) / 3);
-    if (maxSide < 32) return;
-
+    if (maxSide < 32) return empty;
     int mw = maxSide;
     int mh = maxSide;
     if (map_.width() >= map_.height()) {
@@ -1809,8 +1811,42 @@ void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
     } else {
         mw = std::max(16, maxSide * map_.width() / map_.height());
     }
-    const int mx = viewW - mw - 10;
-    const int my = viewH - mh - 10;
+    RECT r = {viewW - mw - 10, viewH - mh - 10, viewW - 10, viewH - 10};
+    return r;
+}
+
+bool MainWindow::ClickMinimapAt(int mx, int my) {
+    if (!map_.IsOpen()) return false;
+    RECT client;
+    ::GetClientRect(hwnd_, &client);
+    const RECT mm = MinimapRect(client);
+    if (mm.right <= mm.left || mm.bottom <= mm.top) return false;
+    if (mx < mm.left || mx >= mm.right || my < mm.top || my >= mm.bottom) return false;
+
+    const int mmW = static_cast<int>(mm.right - mm.left);
+    const int mmH = static_cast<int>(mm.bottom - mm.top);
+    const int tx = std::clamp((mx - static_cast<int>(mm.left)) * map_.width() / mmW,
+                              0, map_.width() - 1);
+    const int ty = std::clamp((my - static_cast<int>(mm.top)) * map_.height() / mmH,
+                              0, map_.height() - 1);
+    const int viewW = client.right - client.left;
+    const int viewH = client.bottom - client.top;
+    scrollX_ = std::clamp(tx * pxPerTile_ - viewW / 2, 0,
+                          std::max(0, image_.width - viewW));
+    scrollY_ = std::clamp(ty * pxPerTile_ - viewH / 2, 0,
+                          std::max(0, image_.height - viewH));
+    UpdateScrollBars();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+    return true;
+}
+
+void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
+    const RECT mm = MinimapRect(client);
+    if (mm.right <= mm.left) return;
+    const int mx = mm.left;
+    const int my = mm.top;
+    const int mw = mm.right - mm.left;
+    const int mh = mm.bottom - mm.top;
 
     RECT box = {mx - 2, my - 2, mx + mw + 2, my + mh + 2};
     HBRUSH back = ::CreateSolidBrush(RGB(0, 0, 0));
@@ -1844,6 +1880,8 @@ void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
 
     // 当前视口范围
     if (image_.width > 0 && image_.height > 0) {
+        const int viewW = client.right - client.left;
+        const int viewH = client.bottom - client.top;
         const int vx0 = mx + scrollX_ * mw / image_.width;
         const int vy0 = my + scrollY_ * mh / image_.height;
         const int vx1 = std::min(mx + mw, mx + (scrollX_ + viewW) * mw / image_.width);

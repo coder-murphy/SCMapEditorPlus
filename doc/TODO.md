@@ -140,7 +140,8 @@
 - [x] 小地图渲染（右下角，显示地形缩略图、单位点与当前视口）
   - 显示选项 → 隐藏小雷达（0x80B4）控制显隐；编辑层子菜单“显示战争迷雾”（0x80CE）
     与 0x8113 合并为同一开关。
-  - 回归：`--menu-cmd-test` 新增 `minimapOff/minimapOn/fogAlias`。
+  - 回归：`--menu-cmd-test` 新增 `minimapOff/minimapOn/fogAlias/miniNav`。
+  - 左键点击小地图可定位主视图。
 - [ ] MPQ 压缩写出：目前一律未压缩保存，zlib/implode 写出未实现。
 
 ## P3 验证与逆向

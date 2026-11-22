@@ -49,6 +49,9 @@ public:
     int FitZoom() const;                  // 按地图尺寸限制当前缩放
     void ApplyZoomPercent(int percent);   // 地图显示比率菜单（25%..400%）
     int pxPerTile() const { return pxPerTile_; }
+    bool ClickMinimapAt(int mx, int my);  // 小地图点击定位（返回是否命中）
+    int scrollX() const { return scrollX_; }
+    int scrollY() const { return scrollY_; }
 
     // 主菜单加速键（Ctrl+N/O/S/Z/Y 等），由消息循环调用
     bool TranslateAccel(MSG& msg) const;
@@ -149,6 +152,7 @@ private:
     void DrawUnits(HDC dc, const RECT& client) const;
     void DrawHud(HDC dc) const;
     void DrawMinimap(HDC dc, const RECT& client) const;
+    RECT MinimapRect(const RECT& client) const;
     void DrawOverlapMarkers(HDC dc, const RECT& client) const;
     void DrawUnitConflictSizes(HDC dc, const RECT& client) const;
 
