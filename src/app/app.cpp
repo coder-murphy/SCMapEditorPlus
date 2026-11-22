@@ -2338,23 +2338,36 @@ int RunRecentTest() {
                           occurrences == 1;
 
     settings.SetUndoLimit(75);
+    settings.SetDefaultMineral(12);
+    settings.SetDefaultGas(3);
+    settings.SetGameDir(L"C:\\StarCraft");
+    settings.SetMpqFiles({L"C:\\a.mpq", L"D:\\b.mpq"});
     const bool saved = settings.Save();
     settings.ClearRecentMaps();
     settings.SetUndoLimit(50);
+    settings.SetDefaultMineral(8);
+    settings.SetDefaultGas(1);
     const bool reloaded = settings.Load();
     const bool persisted = reloaded && settings.recentMaps().size() == AppSettings::kMaxRecent &&
                            settings.recentMaps().front() == L"C:\\maps\\map5.scx";
     const bool undoOk = settings.undoLimit() == 75;
+    const bool settingsOk = settings.defaultMineral() == 12 && settings.defaultGas() == 3 &&
+                            settings.gameDir() == L"C:\\StarCraft" &&
+                            settings.mpqFiles().size() == 2 &&
+                            settings.mpqFiles()[0] == L"C:\\a.mpq";
 
     wchar_t msg[384];
     ::wsprintfW(msg,
                 L"recent=1\nsaveClear=%d\nloadClear=%d\ncleared=%d\ncap=%d\n"
-                L"dedupe=%d\nsaved=%d\nreloaded=%d\npersisted=%d\nundo=%d\n",
+                L"dedupe=%d\nsaved=%d\nreloaded=%d\npersisted=%d\nundo=%d\nsettings=%d\n",
                 saveClear ? 1 : 0, loadClear ? 1 : 0,
                 cleared ? 1 : 0, capOk ? 1 : 0, dedupeOk ? 1 : 0, saved ? 1 : 0,
-                reloaded ? 1 : 0, persisted ? 1 : 0, undoOk ? 1 : 0);
+                reloaded ? 1 : 0, persisted ? 1 : 0, undoOk ? 1 : 0, settingsOk ? 1 : 0);
     WriteDiag(msg);
-    return (cleared && capOk && dedupeOk && saved && reloaded && persisted && undoOk) ? 0 : 2;
+    return (cleared && capOk && dedupeOk && saved && reloaded && persisted && undoOk &&
+            settingsOk)
+               ? 0
+               : 2;
 }
 
 // --tileset-render-test=<输出目录>：8 套地形集逐套创建合成地图，渲染结果与

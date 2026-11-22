@@ -79,6 +79,18 @@ void AppSettings::SetUndoLimit(int limit) {
     undoLimit_ = limit;
 }
 
+void AppSettings::SetDefaultMineral(int value) {
+    if (value < 0) value = 0;
+    if (value > 100000) value = 100000;
+    defaultMineral_ = value;
+}
+
+void AppSettings::SetDefaultGas(int value) {
+    if (value < 0) value = 0;
+    if (value > 100000) value = 100000;
+    defaultGas_ = value;
+}
+
 void AppSettings::AddRecentMap(const std::wstring& path) {
     if (path.empty()) return;
     for (auto it = recent_.begin(); it != recent_.end(); ++it) {
@@ -94,6 +106,10 @@ void AppSettings::AddRecentMap(const std::wstring& path) {
 bool AppSettings::Load() {
     recent_.clear();
     undoLimit_ = 50;
+    defaultMineral_ = 8;
+    defaultGas_ = 1;
+    gameDir_.clear();
+    mpqFiles_.clear();
     const std::wstring path = filePath();
     if (path.empty()) return false;
     std::string text;
@@ -101,6 +117,7 @@ bool AppSettings::Load() {
 
     std::size_t pos = 0;
     std::vector<std::wstring> slots(kMaxRecent);
+    std::vector<std::wstring> mpqSlots;
     while (pos < text.size()) {
         std::size_t nl = text.find('\n', pos);
         if (nl == std::string::npos) nl = text.size();
@@ -116,12 +133,30 @@ bool AppSettings::Load() {
             if (idx >= 0 && idx < static_cast<int>(kMaxRecent) && !value.empty()) {
                 slots[static_cast<std::size_t>(idx)] = value;
             }
+        } else if (key.compare(0, 3, "mpq") == 0 && key.size() > 3 &&
+                   key[3] >= '0' && key[3] <= '9') {
+            const int idx = std::atoi(key.c_str() + 3);
+            if (idx >= 0 && idx < 64 && !value.empty()) {
+                if (mpqSlots.size() <= static_cast<std::size_t>(idx)) {
+                    mpqSlots.resize(static_cast<std::size_t>(idx) + 1);
+                }
+                mpqSlots[static_cast<std::size_t>(idx)] = value;
+            }
         } else if (key == "undoLimit") {
             SetUndoLimit(std::atoi(line.c_str() + eq + 1));
+        } else if (key == "defaultMineral") {
+            SetDefaultMineral(std::atoi(line.c_str() + eq + 1));
+        } else if (key == "defaultGas") {
+            SetDefaultGas(std::atoi(line.c_str() + eq + 1));
+        } else if (key == "gameDir") {
+            gameDir_ = value;
         }
     }
     for (const std::wstring& p : slots) {
         if (!p.empty()) recent_.push_back(p);
+    }
+    for (const std::wstring& p : mpqSlots) {
+        if (!p.empty()) mpqFiles_.push_back(p);
     }
     return true;
 }
@@ -137,6 +172,13 @@ bool AppSettings::Save() {
     for (std::size_t i = 0; i < recent_.size(); i++) {
         out += "recent" + std::to_string(i) + "=" + WideToUtf8(recent_[i]) + "\n";
     }
+    out += "mpqCount=" + std::to_string(mpqFiles_.size()) + "\n";
+    for (std::size_t i = 0; i < mpqFiles_.size(); i++) {
+        out += "mpq" + std::to_string(i) + "=" + WideToUtf8(mpqFiles_[i]) + "\n";
+    }
+    out += "defaultMineral=" + std::to_string(defaultMineral_) + "\n";
+    out += "defaultGas=" + std::to_string(defaultGas_) + "\n";
+    out += "gameDir=" + WideToUtf8(gameDir_) + "\n";
     out += "undoLimit=" + std::to_string(undoLimit_) + "\n";
     return WriteWholeFile(filePath(), out);
 }

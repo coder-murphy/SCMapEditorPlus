@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace scmd {
@@ -22,6 +23,16 @@ public:
     int undoLimit() const { return undoLimit_; }
     void SetUndoLimit(int limit);
 
+    // 155 基本设置
+    int defaultMineral() const { return defaultMineral_; }
+    void SetDefaultMineral(int value);
+    int defaultGas() const { return defaultGas_; }
+    void SetDefaultGas(int value);
+    const std::wstring& gameDir() const { return gameDir_; }
+    void SetGameDir(const std::wstring& dir) { gameDir_ = dir; }
+    const std::vector<std::wstring>& mpqFiles() const { return mpqFiles_; }
+    void SetMpqFiles(std::vector<std::wstring> files) { mpqFiles_ = std::move(files); }
+
     static constexpr std::size_t kMaxRecent = 8;
 
 private:
@@ -31,6 +42,10 @@ private:
     std::wstring dir_;
     std::vector<std::wstring> recent_;
     int undoLimit_ = 50;
+    int defaultMineral_ = 8;
+    int defaultGas_ = 1;
+    std::wstring gameDir_;
+    std::vector<std::wstring> mpqFiles_;
 };
 
 }  // namespace scmd

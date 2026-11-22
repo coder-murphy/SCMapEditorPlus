@@ -730,7 +730,15 @@ bool MainWindow::PlaceUnitAtTile(int tx, int ty) {
 
     BeginEdit();
     const bool force = placeUnitsAnywhere_ || placeBuildingsAnywhere_;
-    if (!map_.PlaceUnit(tx, ty, unitType_, unitOwner_, unitResource_, force)) {
+    u32 resource = unitResource_;
+    if (resource == 0) {
+        if (unitType_ >= 176 && unitType_ <= 178) {
+            resource = static_cast<u32>(AppSettings::Instance().defaultMineral());
+        } else if (unitType_ == 188) {
+            resource = static_cast<u32>(AppSettings::Instance().defaultGas());
+        }
+    }
+    if (!map_.PlaceUnit(tx, ty, unitType_, unitOwner_, resource, force)) {
         editOpen_ = false;
         return false;
     }
