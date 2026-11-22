@@ -123,6 +123,7 @@ enum CommandId : int {
     kDispColorCycle = 0x80D1,
     kDispDeathFx = 0x80F6,
     kDispFog = 0x8113,
+    kLayerFogToggle = 0x80CE,   // 编辑层子菜单内的“显示战争迷雾”（与 0x8113 同义）
     kDispLocations = 0x8115,
 
     kTriggerEditor = 0x810F,    // 触发 → 编辑触发

@@ -145,6 +145,7 @@ private:
     void RefreshAfterHistory(const Buffer& oldTiles);
     void DrawUnits(HDC dc, const RECT& client) const;
     void DrawHud(HDC dc) const;
+    void DrawMinimap(HDC dc, const RECT& client) const;
 
     HINSTANCE hInstance_ = nullptr;
     HWND hwnd_ = nullptr;

@@ -1162,7 +1162,8 @@ void MainWindow::ToggleDisplay(int commandId) {
         case kDispHideMinimap: hideMinimap_ = !hideMinimap_; break;
         case kDispColorCycle: allowColorCycle_ = !allowColorCycle_; break;
         case kDispDeathFx: showDeathFx_ = !showDeathFx_; break;
-        case kDispFog: showFog_ = !showFog_; break;
+        case kDispFog:
+        case kLayerFogToggle: showFog_ = !showFog_; break;
         case kDispLocations: showLocations_ = !showLocations_; break;
         default: return;
     }
@@ -1196,7 +1197,7 @@ void MainWindow::SyncMenuChecks() {
         {kDispDoodads, showDoodads_}, {kDispSpUnits, showSpUnits_},
         {kDispZergGround, showZergGround_}, {kDispSpecialStates, showSpecialStates_},
         {kDispHideMinimap, hideMinimap_}, {kDispColorCycle, allowColorCycle_},
-        {kDispDeathFx, showDeathFx_}, {kDispFog, showFog_},
+        {kDispDeathFx, showDeathFx_}, {kDispFog, showFog_}, {kLayerFogToggle, showFog_},
         {kDispLocations, showLocations_},
     };
     for (const Toggle& t : toggles) {
@@ -1606,6 +1607,71 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
     }
 }
 
+void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
+    if (hideMinimap_ || !map_.IsOpen() || pxPerTile_ <= 0) return;
+    const int viewW = client.right - client.left;
+    const int viewH = client.bottom - client.top;
+    const int maxSide = std::min(180, std::min(viewW, viewH) / 3);
+    if (maxSide < 32) return;
+
+    int mw = maxSide;
+    int mh = maxSide;
+    if (map_.width() >= map_.height()) {
+        mh = std::max(16, maxSide * map_.height() / map_.width());
+    } else {
+        mw = std::max(16, maxSide * map_.width() / map_.height());
+    }
+    const int mx = viewW - mw - 10;
+    const int my = viewH - mh - 10;
+
+    RECT box = {mx - 2, my - 2, mx + mw + 2, my + mh + 2};
+    HBRUSH back = ::CreateSolidBrush(RGB(0, 0, 0));
+    ::FillRect(dc, &box, back);
+    ::DeleteObject(back);
+
+    // 地形：直接从整图 DIB 缩放采样
+    if (backBuffer_ && image_.width > 0 && image_.height > 0) {
+        const HDC mem = ::CreateCompatibleDC(dc);
+        if (mem) {
+            const HGDIOBJ old = ::SelectObject(mem, backBuffer_);
+            const int oldMode = ::SetStretchBltMode(dc, COLORONCOLOR);
+            ::StretchBlt(dc, mx, my, mw, mh, mem, 0, 0, image_.width, image_.height, SRCCOPY);
+            ::SetStretchBltMode(dc, oldMode);
+            ::SelectObject(mem, old);
+            ::DeleteDC(mem);
+        }
+    }
+
+    // 单位：颜色沿用主视图规则
+    const int mapPxW = std::max(1, map_.width() * kTilePixels);
+    const int mapPxH = std::max(1, map_.height() * kTilePixels);
+    for (const UnitRecord& u : map_.units()) {
+        const int x = mx + static_cast<int>(u.x) * mw / mapPxW;
+        const int y = my + static_cast<int>(u.y) * mh / mapPxH;
+        RECT r = {x, y, x + 2, y + 2};
+        HBRUSH b = ::CreateSolidBrush(UnitColor(u.type));
+        ::FillRect(dc, &r, b);
+        ::DeleteObject(b);
+    }
+
+    // 当前视口范围
+    if (image_.width > 0 && image_.height > 0) {
+        const int vx0 = mx + scrollX_ * mw / image_.width;
+        const int vy0 = my + scrollY_ * mh / image_.height;
+        const int vx1 = std::min(mx + mw, mx + (scrollX_ + viewW) * mw / image_.width);
+        const int vy1 = std::min(my + mh, my + (scrollY_ + viewH) * mh / image_.height);
+        RECT vp = {vx0, vy0, std::max(vx0 + 1, vx1), std::max(vy0 + 1, vy1)};
+        HBRUSH viewBrush = ::CreateSolidBrush(RGB(255, 255, 255));
+        ::FrameRect(dc, &vp, viewBrush);
+        ::DeleteObject(viewBrush);
+    }
+
+    RECT frame = {mx - 1, my - 1, mx + mw + 1, my + mh + 1};
+    HBRUSH border = ::CreateSolidBrush(RGB(160, 160, 160));
+    ::FrameRect(dc, &frame, border);
+    ::DeleteObject(border);
+}
+
 void MainWindow::DrawHud(HDC dc) const {
     wchar_t text[512];
     const wchar_t* toolName = L"地形刷";
@@ -1680,6 +1746,7 @@ void MainWindow::Present(HDC dc, const RECT& client) {
         ::DrawFocusRect(dc, &r);
     }
 
+    DrawMinimap(dc, client);
     DrawHud(dc);
 }
 
@@ -2320,6 +2387,7 @@ void MainWindow::OnCommand(int id) {
         case kDispColorCycle:
         case kDispDeathFx:
         case kDispFog:
+        case kLayerFogToggle:
         case kDispLocations:
             ToggleDisplay(id);
             break;

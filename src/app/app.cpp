@@ -1034,6 +1034,14 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     cmd(0x8113);   // 显示战争迷雾
     const bool fogOn = ItemChecked(hwnd, 0x8113);
 
+    // 小雷达显隐 + 编辑层子菜单里的战争迷雾别名
+    cmd(0x80B4);
+    const bool minimapOff = ItemChecked(hwnd, 0x80B4);
+    cmd(0x80B4);
+    const bool minimapOn = !ItemChecked(hwnd, 0x80B4);
+    cmd(0x80CE);
+    const bool fogAlias = !ItemChecked(hwnd, 0x80CE) && !ItemChecked(hwnd, 0x8113);
+
     // 地图显示比率（需要已打开地图；--menu-cmd-test 可配合 --open）
     bool zoomOk = true;
     if (win.map().IsOpen()) {
@@ -1050,14 +1058,17 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     ::wsprintfW(msg,
         L"layerInit=%d\nlayerUnits=%d\nlayerLoc=%d\nlayerBack=%d\n"
         L"gridLarge=%d\ngridOff=%d\ngridBack=%d\ngridRed=%d\n"
-        L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\nzoom=%d\n",
+        L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\nzoom=%d\nminimapOff=%d\nminimapOn=%d\n"
+        L"fogAlias=%d\n",
         layerInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0, layerBack ? 1 : 0,
         gridLarge ? 1 : 0, gridOff ? 1 : 0, gridBack ? 1 : 0, gridRed ? 1 : 0,
-        unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0, zoomOk ? 1 : 0);
+        unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0, zoomOk ? 1 : 0,
+        minimapOff ? 1 : 0, minimapOn ? 1 : 0, fogAlias ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = layerInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
-                    gridBack && gridRed && unitsOff && unitsOn && fogOn && zoomOk;
+                    gridBack && gridRed && unitsOff && unitsOn && fogOn && zoomOk &&
+                    minimapOff && minimapOn && fogAlias;
     return ok ? 0 : 2;
 }
 
