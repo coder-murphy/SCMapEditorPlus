@@ -1,4 +1,6 @@
-﻿#include <utility>
+﻿#include <shlobj.h>
+
+#include <utility>
 #include <vector>
 
 #include "ui/dlg_procs.h"
@@ -120,6 +122,38 @@ INT_PTR CALLBACK ProcSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     if (OpenFileDialog(dlg, L"MPQ 文件 (*.mpq)\0*.mpq\0所有文件 (*.*)\0*.*\0\0",
                                        path)) {
                         ListAddString(dlg, IDC_D155_1000, path.c_str());
+                    }
+                    return TRUE;
+                }
+                case IDC_D155_1016: {  // 浏览星际目录
+                    wchar_t dir[MAX_PATH] = L"";
+                    BROWSEINFOW bi = {};
+                    bi.hwndOwner = dlg;
+                    bi.pszDisplayName = dir;
+                    bi.lpszTitle = L"选择星际争霸安装目录";
+                    LPITEMIDLIST idl = ::SHBrowseForFolderW(&bi);
+                    if (idl) {
+                        if (::SHGetPathFromIDListW(idl, dir)) {
+                            ::SetDlgItemTextW(dlg, IDC_D155_1008, dir);
+                        }
+                        ::CoTaskMemFree(idl);
+                    }
+                    return TRUE;
+                }
+                case IDC_D155_1018: {  // 浏览 MPQ 文件
+                    std::wstring path;
+                    if (OpenFileDialog(dlg, L"MPQ 文件 (*.mpq)\0*.mpq\0所有文件 (*.*)\0*.*\0\0",
+                                       path)) {
+                        ::SetDlgItemTextW(dlg, IDC_D155_1017, path.c_str());
+                    }
+                    return TRUE;
+                }
+                case IDC_D155_1006: {  // 添加 MPQ（来自编辑框）
+                    wchar_t path[MAX_PATH] = L"";
+                    ::GetDlgItemTextW(dlg, IDC_D155_1017, path, MAX_PATH);
+                    if (path[0]) {
+                        ListAddString(dlg, IDC_D155_1000, path);
+                        ::SetDlgItemTextW(dlg, IDC_D155_1017, L"");
                     }
                     return TRUE;
                 }
