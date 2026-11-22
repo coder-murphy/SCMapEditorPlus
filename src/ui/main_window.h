@@ -46,6 +46,7 @@ public:
     MapDocument& mutableMap() { return map_; }
 
     bool RebuildView(int pxPerTile);
+    int FitZoom() const;                  // 按地图尺寸限制当前缩放
     void ApplyZoomPercent(int percent);   // 地图显示比率菜单（25%..400%）
     int pxPerTile() const { return pxPerTile_; }
 

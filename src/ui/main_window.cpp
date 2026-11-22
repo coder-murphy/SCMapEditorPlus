@@ -243,6 +243,15 @@ void MainWindow::ReleaseBackBuffer() {
     image_.width = image_.height = 0;
 }
 
+int MainWindow::FitZoom() const {
+    int zoom = pxPerTile_ > 0 ? pxPerTile_ : 8;
+    while (zoom > 2 && static_cast<double>(map_.width()) * map_.height() * zoom * zoom >
+                           64.0 * 1024.0 * 1024.0) {
+        zoom = NextZoom(zoom, -1);
+    }
+    return zoom;
+}
+
 void MainWindow::ApplyZoomPercent(int percent) {
     if (!map_.IsOpen()) {
         MessageBeep(MB_ICONWARNING);
@@ -324,7 +333,7 @@ bool MainWindow::OpenMap(const std::wstring& path) {
     AppSettings::Instance().AddRecentMap(path);
     AppSettings::Instance().Save();
     UpdateTitle();
-    RebuildView(pxPerTile_);
+    RebuildView(FitZoom());
     RefreshBrushPalette();
     return true;
 }
@@ -341,7 +350,7 @@ void MainWindow::NewMap() {
     editOpen_ = false;
     ClearSelection();
     UpdateTitle();
-    RebuildView(pxPerTile_);
+    RebuildView(FitZoom());
     RefreshBrushPalette();
 }
 
@@ -406,7 +415,7 @@ void MainWindow::ResizeMapDialog() {
     history_.Clear();     // 旧快照与新尺寸不兼容
     editOpen_ = false;
     ClearSelection();
-    RebuildView(pxPerTile_);
+    RebuildView(FitZoom());
     UpdateTitle();
 }
 
