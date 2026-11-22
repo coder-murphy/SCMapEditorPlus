@@ -46,7 +46,8 @@ int ClampInt(int value, int lo, int hi) {
     return value;
 }
 
-std::wstring TrimW(const std::wstring& in) {    std::size_t b = 0;
+std::wstring TrimW(const std::wstring& in) {
+    std::size_t b = 0;
     std::size_t e = in.size();
     while (b < e && (in[b] == L' ' || in[b] == L'\t' || in[b] == L'\r')) b++;
     while (e > b && (in[e - 1] == L' ' || in[e - 1] == L'\t' || in[e - 1] == L'\r')) e--;
@@ -146,6 +147,12 @@ bool AppSettings::Load() {
     if (path.empty()) return false;
     std::string text;
     if (!ReadWholeFile(path, text)) return false;
+    // 部分编辑器保存 UTF-8 时会带 BOM；不去掉会把首行键名污染成 "\xEF\xBB\xBFview.zoom"
+    if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF &&
+        static_cast<unsigned char>(text[1]) == 0xBB &&
+        static_cast<unsigned char>(text[2]) == 0xBF) {
+        text.erase(0, 3);
+    }
 
     std::size_t pos = 0;
     std::vector<std::wstring> slots(kMaxRecent);
