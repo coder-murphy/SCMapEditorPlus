@@ -147,7 +147,9 @@
     与 0x8113 合并为同一开关。
   - 回归：`--menu-cmd-test` 新增 `minimapOff/minimapOn/fogAlias/miniNav`。
   - 左键点击小地图可定位主视图。
-- [ ] MPQ 压缩写出：目前一律未压缩保存，zlib/implode 写出未实现。
+- [x] MPQ 压缩写出：单块 zlib（0x02 + raw deflate）压缩，压缩后不划算时回退未压缩。
+  - `real_edit.scx` 保存后 217 504 B → 57 808 B，本工程读回一致。
+  - 回归：`--mpq-compress-test=<输出mpq>`（可压缩/不可压缩条目都逐字节读回，体积缩小）。
 
 ## P3 验证与逆向
 

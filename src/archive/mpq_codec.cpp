@@ -1,5 +1,6 @@
 ﻿#include "archive/mpq_codec.h"
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -78,6 +79,160 @@ void EncryptWords(u32* data, std::size_t n, u32 key) {
         key = KeyRot(key);
         seed = plain + seed + (seed << 5) + 3;
     }
+}
+
+// ───────────────────────── DEFLATE 压缩（固定 Huffman + LZ77） ─────────────────────────
+namespace {
+
+// 位写入：字节内按低位先填，Huffman 码按高位先写
+struct BitWriter {
+    Buffer& out;
+    u32 buf = 0;
+    int cnt = 0;
+
+    explicit BitWriter(Buffer& dst) : out(dst) {}
+
+    void Put(u32 value, int bits) {
+        buf |= (value & ((1u << bits) - 1u)) << cnt;
+        cnt += bits;
+        while (cnt >= 8) {
+            out.push_back(static_cast<u8>(buf & 0xFFu));
+            buf >>= 8;
+            cnt -= 8;
+        }
+    }
+
+    void PutCode(u32 code, int bits) {
+        for (int i = bits - 1; i >= 0; --i) Put((code >> i) & 1u, 1);
+    }
+
+    void Flush() {
+        if (cnt > 0) out.push_back(static_cast<u8>(buf & 0xFFu));
+        buf = 0;
+        cnt = 0;
+    }
+};
+
+// RFC 1951 固定 Huffman 字面量/长度码
+void PutSymbol(BitWriter& bw, int sym) {
+    if (sym <= 143) bw.PutCode(0x30u + static_cast<u32>(sym), 8);
+    else if (sym <= 255) bw.PutCode(0x190u + static_cast<u32>(sym - 144), 9);
+    else if (sym <= 279) bw.PutCode(static_cast<u32>(sym - 256), 7);
+    else bw.PutCode(0xC0u + static_cast<u32>(sym - 280), 8);
+}
+
+struct LengthCode {
+    u8 extra;
+    u16 base;
+};
+
+// 符号 257..285
+const LengthCode kLengthCodes[29] = {
+    {0, 3},   {0, 4},   {0, 5},   {0, 6},   {0, 7},   {0, 8},   {0, 9},   {0, 10},
+    {1, 11},  {1, 13},  {1, 15},  {1, 17},  {2, 19},  {2, 23},  {2, 27},  {2, 31},
+    {3, 35},  {3, 43},  {3, 51},  {3, 59},  {4, 67},  {4, 83},  {4, 99},  {4, 115},
+    {5, 131}, {5, 163}, {5, 195}, {5, 227}, {0, 258},
+};
+
+const u16 kEncDistBase[30] = {
+    1,     2,     3,     4,     5,     7,     9,     13,    17,    25,
+    33,    49,    65,    97,    129,   193,   257,   385,   513,   769,
+    1025,  1537,  2049,  3073,  4097,  6145,  8193,  12289, 16385, 24577,
+};
+
+const u8 kEncDistExtra[30] = {
+    0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5,  5,  6,  6,
+    7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
+};
+
+void PutMatch(BitWriter& bw, int len, int dist) {
+    int li = 28;
+    while (li > 0 && len < static_cast<int>(kLengthCodes[li].base)) li--;
+    PutSymbol(bw, 257 + li);
+    const int lextra = kLengthCodes[li].extra;
+    if (lextra > 0) bw.Put(static_cast<u32>(len - kLengthCodes[li].base), lextra);
+
+    int di = 29;
+    while (di > 0 && dist < static_cast<int>(kEncDistBase[di])) di--;
+    bw.PutCode(static_cast<u32>(di), 5);
+    const int dextra = kEncDistExtra[di];
+    if (dextra > 0) bw.Put(static_cast<u32>(dist - kEncDistBase[di]), dextra);
+}
+
+}  // namespace
+
+bool CompressRaw(const u8* in, std::size_t inLen, Buffer& out) {
+    out.clear();
+    if (in == nullptr || inLen < 16) return false;
+    out.reserve(inLen / 2 + 16);
+
+    BitWriter bw(out);
+    bw.Put(1, 1);   // BFINAL
+    bw.Put(1, 2);   // BTYPE = 01（固定 Huffman）
+
+    constexpr int kWindow = 32768;
+    constexpr int kMinMatch = 3;
+    constexpr int kMaxMatch = 258;
+    constexpr int kHashBits = 15;
+    constexpr int kHashSize = 1 << kHashBits;
+    constexpr int kMaxChain = 32;
+
+    std::vector<int> head(kHashSize, -1);
+    std::vector<int> prev(inLen, -1);
+
+    auto hash3 = [&](std::size_t p) -> unsigned {
+        const unsigned h = (static_cast<unsigned>(in[p]) << 10) ^
+                           (static_cast<unsigned>(in[p + 1]) << 5) ^
+                           static_cast<unsigned>(in[p + 2]);
+        return h & (kHashSize - 1);
+    };
+
+    std::size_t pos = 0;
+    while (pos < inLen) {
+        int bestLen = 0;
+        int bestDist = 0;
+        if (pos + kMinMatch <= inLen) {
+            const unsigned h = hash3(pos);
+            int cand = head[h];
+            int chain = 0;
+            const std::size_t maxLen = std::min<std::size_t>(kMaxMatch, inLen - pos);
+            while (cand >= 0 && chain++ < kMaxChain) {
+                const std::size_t dist = pos - static_cast<std::size_t>(cand);
+                if (dist > static_cast<std::size_t>(kWindow)) break;
+                std::size_t len = 0;
+                while (len < maxLen && in[static_cast<std::size_t>(cand) + len] == in[pos + len]) {
+                    len++;
+                }
+                if (static_cast<int>(len) > bestLen) {
+                    bestLen = static_cast<int>(len);
+                    bestDist = static_cast<int>(dist);
+                    if (len == maxLen) break;
+                }
+                cand = prev[static_cast<std::size_t>(cand)];
+            }
+            prev[pos] = head[h];
+            head[h] = static_cast<int>(pos);
+        }
+
+        if (bestLen >= kMinMatch) {
+            PutMatch(bw, bestLen, bestDist);
+            for (int k = 1; k < bestLen; k++) {
+                const std::size_t p = pos + static_cast<std::size_t>(k);
+                if (p + kMinMatch <= inLen) {
+                    const unsigned h = hash3(p);
+                    prev[p] = head[h];
+                    head[h] = static_cast<int>(p);
+                }
+            }
+            pos += static_cast<std::size_t>(bestLen);
+        } else {
+            PutSymbol(bw, in[pos]);
+            pos++;
+        }
+    }
+    PutSymbol(bw, 256);   // 块结束
+    bw.Flush();
+    return true;
 }
 
 // ───────────────────────── 位流与 Huffman ─────────────────────────

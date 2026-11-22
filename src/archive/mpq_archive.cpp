@@ -319,13 +319,36 @@ bool MpqArchive::WriteArchive(const std::wstring& path, const std::vector<MpqFil
     constexpr u32 kHashSize = 1024;
     constexpr u32 kHeaderSize = 32;
 
+    // 能压小的条目写成「单块压缩」（zlib 类型 0x02 + raw deflate）：
+    // flags = EXISTS | SINGLE_UNIT | COMPRESS，无需扇区偏移表。
+    std::vector<Buffer> packed(files.size());
+    std::vector<const Buffer*> payload(files.size(), nullptr);
+    std::vector<u32> originalSize(files.size(), 0);
+    std::vector<u32> blockFlags(files.size(), 0x80000000u);
+    for (std::size_t i = 0; i < files.size(); i++) {
+        const Buffer& data = files[i].data;
+        originalSize[i] = static_cast<u32>(data.size());
+        payload[i] = &data;
+        if (data.size() >= 512 && data.size() <= (16u << 20)) {
+            Buffer deflated;
+            if (mpq::CompressRaw(data.data(), data.size(), deflated) &&
+                deflated.size() + 1 + 16 < data.size()) {
+                packed[i].reserve(deflated.size() + 1);
+                packed[i].push_back(0x02);
+                packed[i].insert(packed[i].end(), deflated.begin(), deflated.end());
+                payload[i] = &packed[i];
+                blockFlags[i] = 0x80000000u | 0x01000000u | 0x00000200u;
+            }
+        }
+    }
+
     // 布局：header | 文件数据（16 字节对齐） | 哈希表 | 块表
     std::vector<u32> blockPos(files.size(), 0);
     u32 cursor = kHeaderSize;
     for (std::size_t i = 0; i < files.size(); i++) {
         cursor = (cursor + 15u) & ~15u;
         blockPos[i] = cursor;
-        cursor += static_cast<u32>(files[i].data.size());
+        cursor += static_cast<u32>(payload[i]->size());
     }
     const u32 hashPos = (cursor + 15u) & ~15u;
     const u32 blockTablePos = hashPos + kHashSize * 16;
@@ -343,8 +366,8 @@ bool MpqArchive::WriteArchive(const std::wstring& path, const std::vector<MpqFil
     WriteU32(out.data() + 28, static_cast<u32>(files.size()));
 
     for (std::size_t i = 0; i < files.size(); i++) {
-        if (!files[i].data.empty()) {
-            std::memcpy(out.data() + blockPos[i], files[i].data.data(), files[i].data.size());
+        if (!payload[i]->empty()) {
+            std::memcpy(out.data() + blockPos[i], payload[i]->data(), payload[i]->size());
         }
     }
 
@@ -372,11 +395,10 @@ bool MpqArchive::WriteArchive(const std::wstring& path, const std::vector<MpqFil
     std::vector<u8> blockTable(files.size() * 16, 0);
     for (std::size_t i = 0; i < files.size(); i++) {
         u8* e = blockTable.data() + i * 16;
-        const u32 size = static_cast<u32>(files[i].data.size());
         WriteU32(e + 0, blockPos[i]);
-        WriteU32(e + 4, size);          // compressed size
-        WriteU32(e + 8, size);          // file size
-        WriteU32(e + 12, 0x80000000u);  // FLAG_EXISTS，未压缩、未加密
+        WriteU32(e + 4, static_cast<u32>(payload[i]->size()));  // compressed size
+        WriteU32(e + 8, originalSize[i]);                       // file size
+        WriteU32(e + 12, blockFlags[i]);
     }
 
     mpq::EncryptWords(reinterpret_cast<u32*>(hashTable.data()), kHashSize * 4,

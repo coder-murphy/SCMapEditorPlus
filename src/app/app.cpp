@@ -259,6 +259,22 @@ std::wstring ParseFileTestArg() {
     return path;
 }
 
+// --mpq-compress-test=<输出mpq>：压缩写出与读回闭环
+std::wstring ParseMpqCompressTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--mpq-compress-test=", 20) == 0) {
+                path = argv[i] + 20;
+            }
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
 // --edit-test=<输出scx>：无头编辑回归（刷地形 + 放/删单位 + 可行走校验）
 std::wstring ParseEditTestArg() {
     int argc = 0;
@@ -890,6 +906,49 @@ int RunFileTest(const std::wstring& outPath) {
     const bool ok = created && dirtyAfterNew && unnamed && saved && cleanAfterSave &&
                     pathAfterSave && reopened && sizeOk && painted == 16 && closed && freshOk;
     return ok ? 0 : 2;
+}
+
+// --mpq-compress-test=<输出mpq>：压缩写出与读回闭环（含不可压缩条目的回退）
+int RunMpqCompressTest(const std::wstring& outPath) {
+    // 高度可压缩：同一行文本重复
+    Buffer text;
+    const char* pattern = "staredit\\scenario.chk triggers locations strings ";
+    for (int i = 0; i < 4000; i++) {
+        for (const char* p = pattern; *p; ++p) text.push_back(static_cast<u8>(*p));
+    }
+    // 不可压缩：伪随机字节
+    Buffer noise(4096);
+    unsigned seed = 0x12345678u;
+    for (u8& b : noise) {
+        seed = seed * 1664525u + 1013904223u;
+        b = static_cast<u8>(seed >> 24);
+    }
+
+    std::vector<MpqFileEntry> files;
+    files.push_back({"text.bin", text});
+    files.push_back({"noise.bin", noise});
+    if (!MpqArchive::WriteArchive(outPath, files)) {
+        WriteDiag(L"compress=FAIL write\n");
+        return 2;
+    }
+
+    std::ifstream in(outPath.c_str(), std::ios::binary | std::ios::ate);
+    const std::size_t archiveSize = in ? static_cast<std::size_t>(in.tellg()) : 0;
+    const bool smaller = archiveSize > 0 && archiveSize < text.size() / 2;
+
+    MpqArchive archive;
+    Buffer textBack;
+    Buffer noiseBack;
+    const bool opened = archive.Open(outPath);
+    const bool textOk = opened && archive.ReadFile("text.bin", textBack) && textBack == text;
+    const bool noiseOk = opened && archive.ReadFile("noise.bin", noiseBack) && noiseBack == noise;
+
+    wchar_t msg[256];
+    ::wsprintfW(msg, L"compress=1\nwritten=%u\ntext=%u\nsmaller=%d\ntextOk=%d\nnoiseOk=%d\n",
+                static_cast<unsigned>(archiveSize), static_cast<unsigned>(text.size()),
+                smaller ? 1 : 0, textOk ? 1 : 0, noiseOk ? 1 : 0);
+    WriteDiag(msg);
+    return (smaller && textOk && noiseOk) ? 0 : 2;
 }
 
 // --trig-test=<输出scx>：触发语义回归（字段解析 + 条件/行动编辑 + 玩家开关 + 无损保存）
@@ -3248,6 +3307,13 @@ int App::Run(HINSTANCE hInstance) {
     // 文件菜单闭环回归（无头）
     if (const std::wstring fileOut = ParseFileTestArg(); !fileOut.empty()) {
         const int rc = RunFileTest(fileOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // MPQ 压缩写出回归（无头）
+    if (const std::wstring compressOut = ParseMpqCompressTestArg(); !compressOut.empty()) {
+        const int rc = RunMpqCompressTest(compressOut);
         ::DestroyWindow(mainWindow_.hwnd());
         return rc;
     }

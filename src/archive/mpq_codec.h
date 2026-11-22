@@ -16,6 +16,10 @@ void EncryptWords(u32* data, std::size_t dwordCount, u32 key);
 // DEFLATE 解压（raw，无 zlib 头），expected 用于预分配与截断
 bool InflateRaw(const u8* in, std::size_t inLen, Buffer& out, std::size_t expected);
 
+// DEFLATE 压缩（raw，无 zlib 头）：固定 Huffman + 贪心 LZ77。
+// 输出可直接在 MPQ 扇区前补 0x02 类型字节；返回 false 表示无需/无法压缩。
+bool CompressRaw(const u8* in, std::size_t inLen, Buffer& out);
+
 // PKWARE DCL implode（MPQ 压缩类型 0x08）
 bool Explode(const u8* in, std::size_t inLen, Buffer& out, std::size_t expected);
 
