@@ -141,6 +141,37 @@ bool IsHeadlessRun() {
     return headless;
 }
 
+// 通用开关参数（无值，如 --view-test）
+bool HasSwitchArg(const wchar_t* name) {
+    int argc = 0;
+    bool want = false;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcscmp(argv[i], name) == 0) want = true;
+        }
+        ::LocalFree(argv);
+    }
+    return want;
+}
+
+// --view-test：校验启动时从 settings.ini 恢复视图状态（--settings-dir 预置）
+bool ItemChecked(HWND hwnd, int id);
+void WriteDiag(const std::wstring& text);
+
+int RunViewTest(HWND hwnd, const MainWindow& win) {
+    const bool unitsLayer = ItemChecked(hwnd, 0x803D) && !ItemChecked(hwnd, 0x803A);
+    const bool gridOff = ItemChecked(hwnd, 0x80D6);
+    const bool unitsHidden = !ItemChecked(hwnd, 0x8018);
+    const bool zoom16 = win.pxPerTile() == 16;
+
+    wchar_t msg[256];
+    ::wsprintfW(msg, L"view=1\nlayer=%d\ngrid=%d\nunitsHidden=%d\nzoom=%d\n",
+                unitsLayer ? 1 : 0, gridOff ? 1 : 0, unitsHidden ? 1 : 0, zoom16 ? 1 : 0);
+    WriteDiag(msg);
+    return (unitsLayer && gridOff && unitsHidden && zoom16) ? 0 : 2;
+}
+
 // --ts=<目录>：地形集四件套所在目录
 std::wstring ParseTsArg() {
     int argc = 0;
@@ -2451,6 +2482,7 @@ int RunRecentTest() {
         view.hideMinimap = true;
         view.showFog = true;
     }
+    settings.SetSoundEnabled(false);
     const bool saved = settings.Save();
     settings.ClearRecentMaps();
     settings.SetUndoLimit(50);
@@ -2470,18 +2502,26 @@ int RunRecentTest() {
                             settings.view().zoomPx == 16 && !settings.view().gridEnabled &&
                             settings.view().gridCellX == 48 && settings.view().layer == 4 &&
                             !settings.view().showUnits && settings.view().hideMinimap &&
-                            settings.view().showFog;
+                            settings.view().showFog && !settings.soundEnabled();
+
+    // 失效最近项移除：去重后再删除首项
+    const bool frontBefore = !settings.recentMaps().empty();
+    if (frontBefore) settings.RemoveRecentMap(settings.recentMaps().front());
+    const bool removeOk = frontBefore && settings.recentMaps().size() == 7 &&
+                          settings.recentMaps().front() == L"C:\\maps\\map9.scx";
 
     wchar_t msg[384];
     ::wsprintfW(msg,
                 L"recent=1\nsaveClear=%d\nloadClear=%d\ncleared=%d\ncap=%d\n"
-                L"dedupe=%d\nsaved=%d\nreloaded=%d\npersisted=%d\nundo=%d\nsettings=%d\n",
+                L"dedupe=%d\nsaved=%d\nreloaded=%d\npersisted=%d\nundo=%d\nsettings=%d\n"
+        L"remove=%d\n",
                 saveClear ? 1 : 0, loadClear ? 1 : 0,
                 cleared ? 1 : 0, capOk ? 1 : 0, dedupeOk ? 1 : 0, saved ? 1 : 0,
-                reloaded ? 1 : 0, persisted ? 1 : 0, undoOk ? 1 : 0, settingsOk ? 1 : 0);
+                reloaded ? 1 : 0, persisted ? 1 : 0, undoOk ? 1 : 0, settingsOk ? 1 : 0,
+                removeOk ? 1 : 0);
     WriteDiag(msg);
     return (cleared && capOk && dedupeOk && saved && reloaded && persisted && undoOk &&
-            settingsOk)
+            settingsOk && removeOk)
                ? 0
                : 2;
 }
@@ -2683,7 +2723,8 @@ int RunTilesetRenderTest(const std::wstring& tsDir, const std::wstring& outDir) 
 }
 
 // --section-test：校验 TRIG/MRGN/STR 的解析与无损重建
-int RunSectionTest(const std::wstring& mapPath) {    MapDocument doc;
+int RunSectionTest(const std::wstring& mapPath) {
+    MapDocument doc;
     if (!doc.Open(mapPath, std::wstring())) { WriteDiag(L"open=FAIL\n"); return 2; }
 
     auto compare = [&doc](const char* name, const Buffer& rebuilt) {
@@ -3038,6 +3079,13 @@ int App::Run(HINSTANCE hInstance) {
             ::DestroyWindow(mainWindow_.hwnd());
             return rc;
         }
+    }
+
+    // 启动视图状态恢复回归
+    if (HasSwitchArg(L"--view-test")) {
+        const int rc = RunViewTest(mainWindow_.hwnd(), mainWindow_);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
     }
 
     // 段重建回归（无头）
