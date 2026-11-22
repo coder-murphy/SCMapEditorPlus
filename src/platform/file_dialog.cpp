@@ -19,8 +19,12 @@ bool OpenFileDialog(void* ownerHwnd, const wchar_t* filter, std::wstring& outPat
     return true;
 }
 
-bool SaveFileDialog(void* ownerHwnd, const wchar_t* filter, const wchar_t* defaultExt, std::wstring& outPath) {
+bool SaveFileDialog(void* ownerHwnd, const wchar_t* filter, const wchar_t* defaultExt,
+                    std::wstring& outPath, const wchar_t* initialName) {
     wchar_t buf[MAX_PATH] = L"";
+    if (initialName && initialName[0]) {
+        ::lstrcpynW(buf, initialName, MAX_PATH);
+    }
     OPENFILENAMEW ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = static_cast<HWND>(ownerHwnd);

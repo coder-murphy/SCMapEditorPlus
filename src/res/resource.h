@@ -41,3 +41,12 @@
 // 本工程新增：触发条件 / 行动编辑（原程序用动态窗口，模板未导出）
 #define IDD_TRIG_COND 193
 #define IDD_TRIG_ACT  194
+// 本工程新增：单位放置参数面板
+#define IDD_UNIT_PLACE 195
+// 本工程新增：玩家 / 势力设定
+#define IDD_PLAYER_ROSTER 196
+// 本工程新增：升级 / 科技限制
+#define IDD_RESTRICTIONS 197
+// 本工程新增：编辑声音 / 任务简报
+#define IDD_SOUNDS 198
+#define IDD_BRIEFING 199

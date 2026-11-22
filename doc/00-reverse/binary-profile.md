@@ -1,6 +1,6 @@
 # ScmDraft2 二进制画像
 
-对象：`E:\Games\PCGames\SC1BWAI\[CN]ScmDraft2.exe`（x86 汉化版）
+对象：`[CN]ScmDraft2.exe`（x86 汉化版，本机取自 `F:\Games\单机游戏\starcraft`）
 
 ## 基本属性（VERIFIED）
 

@@ -62,10 +62,14 @@
     <ClCompile Include="app\main.cpp" />
     <ClCompile Include="app\app.cpp" />
     <ClCompile Include="ui\main_window.cpp" />
+    <ClCompile Include="ui\brush_palette.cpp" />
     <ClCompile Include="ui\dlg_basic.cpp" />
     <ClCompile Include="ui\dlg_map.cpp" />
     <ClCompile Include="ui\dlg_triggers.cpp" />
     <ClCompile Include="ui\dlg_units.cpp" />
+    <ClCompile Include="ui\dlg_players.cpp" />
+    <ClCompile Include="ui\dlg_restrictions.cpp" />
+    <ClCompile Include="ui\dlg_scenario_extra.cpp" />
     <ClCompile Include="ui\dlg_terrain.cpp" />
     <ClCompile Include="ui\dlg_tools.cpp" />
     <ClCompile Include="ui\dlg_misc.cpp" />
@@ -81,15 +85,23 @@
     <ClCompile Include="archive\mpq_codec.cpp" />
     <ClCompile Include="chk\chk_document.cpp" />
     <ClCompile Include="terrain\tileset.cpp" />
+    <ClCompile Include="terrain\brush.cpp" />
     <ClCompile Include="terrain\terrain_renderer.cpp" />
+    <ClCompile Include="terrain\tileset_export.cpp" />
     <ClCompile Include="terrain\edge_placer.cpp" />
     <ClCompile Include="map\edit_history.cpp" />
     <ClCompile Include="triggers\trigger_model.cpp" />
+    <ClCompile Include="players\player_model.cpp" />
+    <ClCompile Include="players\restriction_model.cpp" />
     <ClCompile Include="map\map_document.cpp" />
+    <ClCompile Include="map\decor_model.cpp" />
+    <ClCompile Include="map\map_switches.cpp" />
+    <ClCompile Include="map\scenario_tables.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="app\app.h" />
     <ClInclude Include="ui\main_window.h" />
+    <ClInclude Include="ui\brush_palette.h" />
     <ClInclude Include="ui\dialogs.h" />
     <ClInclude Include="ui\command_ids.h" />
     <ClInclude Include="platform\file_dialog.h" />
@@ -101,13 +113,18 @@
     <ClInclude Include="chk\chk_section.h" />
     <ClInclude Include="chk\chk_document.h" />
     <ClInclude Include="terrain\tileset.h" />
+    <ClInclude Include="terrain\brush.h" />
     <ClInclude Include="terrain\terrain_renderer.h" />
+    <ClInclude Include="terrain\tileset_export.h" />
     <ClInclude Include="terrain\edge_placer.h" />
     <ClInclude Include="units\unit_model.h" />
     <ClInclude Include="players\player_model.h" />
     <ClInclude Include="triggers\trigger_model.h" />
     <ClInclude Include="map\edit_history.h" />
     <ClInclude Include="map\map_document.h" />
+    <ClInclude Include="map\decor_model.h" />
+    <ClInclude Include="map\map_switches.h" />
+    <ClInclude Include="map\scenario_tables.h" />
     <ClInclude Include="res\resource.h" />
     <ClInclude Include="ui\dlg_common.h" />
     <ClInclude Include="ui\dlg_types.h" />
@@ -118,5 +135,12 @@
   <ItemGroup>
     <ResourceCompile Include="res\resources.rc" />
   </ItemGroup>
+  <!-- 地形集随构建复制到输出目录，exe 可脱离源码树与游戏目录独立运行 -->
+  <Target Name="CopyTilesets" AfterTargets="Build">
+    <ItemGroup>
+      <TilesetFiles Include="$(ProjectDir)..\ts\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TilesetFiles)" DestinationFolder="$(OutDir)ts" SkipUnchangedFiles="true" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

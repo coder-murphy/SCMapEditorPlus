@@ -1,7 +1,13 @@
 ﻿#pragma once
 #include <string>
+#include <vector>
+
 #include <windows.h>
 
+#include "map/decor_model.h"
+#include "players/player_model.h"
+#include "players/restriction_model.h"
+#include "terrain/brush.h"
 #include "ui/dlg_types.h"
 
 namespace scmd {
@@ -19,6 +25,11 @@ INT_PTR CALLBACK ProcResizeMap(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam)
 INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 触发编辑器（181）
 INT_PTR CALLBACK ProcEditLocation(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 编辑 Location（171）
 INT_PTR CALLBACK ProcUnitProps(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 设置单位属性（180）
+INT_PTR CALLBACK ProcUnitPlacement(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 单位放置参数（195）
+INT_PTR CALLBACK ProcPlayerRoster(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 玩家/势力（196）
+INT_PTR CALLBACK ProcRestrictions(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 升级/科技（197）
+INT_PTR CALLBACK ProcSoundList(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);   // 编辑声音（198）
+INT_PTR CALLBACK ProcMissionBriefing(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 任务简报（199）
 INT_PTR CALLBACK ProcUnitNames(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 单位名字（172）
 INT_PTR CALLBACK ProcUnitSpFlags(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // SP 单位属性（164）
 INT_PTR CALLBACK ProcGridSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 方格设置（166）
@@ -44,12 +55,30 @@ const GridSettings& LastGridSettings();   // 166
 const MapSizeParams& LastMapSize();       // 169
 const ResizeParams& LastResizeParams();   // 175
 const UnitProps& LastUnitProps();         // 180
-unsigned LastSpFlags();                   // 164
+const LocationRect& LastLocation();       // 171
+void SeedLocation(const LocationRect& seed);   // 171
+const UnitPlacementParams& LastUnitPlacement();  // 195
+// 164 SP 单位属性：编辑 THG2 记录列表
+void SeedSpUnits(const std::vector<SpriteRecord>& units, int selected);
+const std::vector<SpriteRecord>& LastSpUnits();
 
 // 对话框输入初值（打开前由调用方写入）
 void SeedGridSettings(const GridSettings& seed);
 bool LastGridSettingsAccepted();
 void SeedUnitProps(const UnitProps& seed);
+void SeedUnitPlacement(const UnitPlacementParams& seed);
+// 182 自定义刷子：打开前写入列表与当前选区图案
+void SeedCustomBrushes(const std::vector<TerrainBrush>& brushes, const TerrainBrush& current,
+                       int selectedIndex);
+const std::vector<TerrainBrush>& LastCustomBrushes();
+const TerrainBrush& LastCustomBrush();
+bool LastCustomBrushAccepted();
+// 196 玩家 / 势力
+void SeedPlayerRoster(const PlayerRoster& roster);
+const PlayerRoster& LastPlayerRoster();
+// 197 升级 / 科技限制
+void SeedRestrictions(const UpgradeTechRestrictions& restrictions);
+const UpgradeTechRestrictions& LastRestrictions();
 void SeedEditedString(const std::wstring& text);
 void SeedRichText(const std::wstring& text);
 const wchar_t* LastRichText();

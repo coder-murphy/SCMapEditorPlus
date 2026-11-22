@@ -29,8 +29,9 @@ BEGIN
         MENUITEM "全选\tCtrl+A", 0x809a
         MENUITEM "删除\t Del", 0x809b
         MENUITEM "取消选择\tEsc", 0x809e
+        MENUITEM "选择工具\t4", 0x8ffb
         MENUITEM "转换地形", 0x8101, GRAYED
-        MENUITEM "重叠所选单位", 0x811a, GRAYED
+        MENUITEM "重叠所选单位", 0x811a
         MENUITEM SEPARATOR
         POPUP "编辑层"
         BEGIN
@@ -252,6 +253,7 @@ BEGIN
         MENUITEM "地形窗口", 0x8003
         MENUITEM "装饰物窗口", 0x8004
         MENUITEM "刷子窗口", 0x8114
+        MENUITEM "单位面板", 0x8ffd
         MENUITEM "SP单位窗口", 0x80a4, GRAYED
     END
     POPUP "帮助"

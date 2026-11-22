@@ -36,6 +36,11 @@ const DialogEntry kEntries[] = {
     {192, L"Iscript测试", "impl", false, &ProcIscriptTest},
     {193, L"编辑条件", "impl", false, &ProcTriggerCondition},
     {194, L"编辑行动", "impl", false, &ProcTriggerAction},
+    {195, L"单位放置参数", "impl", false, &ProcUnitPlacement},
+    {196, L"玩家 / 势力设定", "impl", false, &ProcPlayerRoster},
+    {197, L"升级 / 科技限制", "impl", false, &ProcRestrictions},
+    {198, L"编辑声音", "impl", false, &ProcSoundList},
+    {199, L"任务简报", "impl", false, &ProcMissionBriefing},
 };
 
 int g_lastDialogError = 0;

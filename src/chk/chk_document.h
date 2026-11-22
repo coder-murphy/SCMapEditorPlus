@@ -16,6 +16,7 @@ public:
     bool Has(const std::string& name) const;
     const Buffer* Find(const std::string& name) const;
     void Set(const std::string& name, Buffer data);  // 不存在则追加到末尾
+    void Remove(const std::string& name);            // 删除段（空段不写回）
 
     const std::vector<ChkSection>& sections() const { return sections_; }
 

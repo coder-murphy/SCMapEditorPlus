@@ -12,6 +12,7 @@
 | `05-ui/` | `src/ui/` | 对话框/菜单清单与功能映射 |
 | `06-platform/` | `src/platform/` | Windows 兼容性问题 |
 | `07-editing/` | `src/map/edit_history` | 撤销/重做（快照式） |
+| `TODO.md` | — | 后续任务与优先级（P0–P3） |
 
 标注约定：
 

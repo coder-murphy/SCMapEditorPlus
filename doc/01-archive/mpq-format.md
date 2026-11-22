@@ -15,7 +15,7 @@ staredit\scenario.chk
 | locale | 必须为 `0x0000`（不是常见的 `0xFFFF`） |
 | `(listfile)` | 必须存在，否则地图不被正确识别 |
 | 压缩 | 支持 zlib(`0x02`) 与 PKWARE implode(`0x08`)，两种都要实现 |
-| 扇区表 | 用 `key-1` 解密 |
+| 扇区表 | 仅加密文件用 `key-1` 解密；未加密文件直接读取 |
 | 扇区 i | 用 `key+i` 解密 |
 | 扇区表第 0 项 | 必须等于扇区表自身的字节数 |
 
@@ -39,8 +39,12 @@ SFileOpenArchive -> SFileOpenFileEx("staredit\\scenario.chk") -> SFileGetFileSiz
 
 ```
 key = hashString(basename, 3)
-if (flags & FLAG_ADJUSTED) key += blockPos
+if (flags & FLAG_ADJUSTED) key = (key + blockPos) ^ fileSize
 ```
+
+> 2026-11 从 `StarDat.mpq` / `BrooDat.mpq` 提取地形集时实测：地形集四件套全部带
+> `0x00020000`（FIX_KEY）标志，key 必须再与 `fileSize` 异或；只做 `+ blockPos`
+> 会得到错误的扇区表（表现为 `sector-bounds` 或非法的压缩类型字节）。
 
 ## C++ 实现状态（src/archive）
 

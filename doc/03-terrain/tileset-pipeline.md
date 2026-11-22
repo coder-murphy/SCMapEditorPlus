@@ -31,6 +31,35 @@ WPE               调色板，**每色 4 字节**（用 3 字节会渲染成坏�
 
 > MPQ 内部文件名用 `tileset\\platform.*`、`tileset\\install.*`，与编辑器显示名不一致。
 
+## 地形集数据（随仓库提供）
+
+8 套地形集四件套已入库到工程根目录 `ts/`（32 个文件，13 517 280 字节），
+构建时由 `SCMDPlus.vcxproj` 的 `CopyTilesets` 目标复制到 `bin\<Platform>\<Config>\ts`，
+因此编译产物不需要星际安装目录即可运行。
+
+运行时的地形集目录查找顺序：
+
+1. `--ts=<目录>`
+2. `<exe目录>\ts`（构建产物自带；单独拷贝 exe 与 `ts/` 目录即可运行）
+3. `<exe目录>\..\..\..\ts`（工程根目录，VS 内调试通用）
+
+## 重新导出地形集（可选，--extract-ts）
+
+游戏 MPQ 已随仓库放在工程根目录 `mpq/`，无需安装游戏即可离线重导出：
+
+```
+SCMDPlus.exe --extract-ts="<工程根目录>\ts" --game-dir="<工程根目录>\mpq"
+```
+
+- 从 `StarDat.mpq` 导出 badlands / platform / install / ashworld / jungle，
+  从 `BrooDat.mpq` 导出 desert / ice / twilight，共 8 × 4 = 32 个文件；
+- 输出名与 `MapDocument::kEraPrefix` 对齐：`StarDat.mpq_badlands.cv5` 等；
+- 结果写入 `%TEMP%\scmdplus_mpq.txt`：`ts=OK files=32 failed=0 bytes=13517280`。
+- `--game-dir` 也可指向任意装有 `StarDat.mpq` / `BrooDat.mpq` 的游戏目录。
+
+实测导出结果：32 个文件、13 517 280 字节；用 `(2) Friends In Jungle.scx` 验证
+`--brush-test` 得到 4317 个可绘制瓦片，`--dump-render` 与 `--edit-test` 均通过。
+
 ## CV5 类型字段
 
 `u16[0]`：bit0 = 可通行；其余位是类型。实测：`2` 虚空、`3` 甲板、`20` 边缘/崖壁、
@@ -57,7 +86,7 @@ WPE               调色板，**每色 4 字节**（用 3 字节会渲染成坏�
 ## 参考实现
 
 本项目在 `src/terrain/edge_placer.cpp` 保留了上表的组族常量；
-历史可用的 Node 实现见 `E:\Games\PCGames\SC1BWAI\tools\mapgen\`（同一套规则）。
+历史上另有一份 Node 实现（同一套规则），仅是规则来源记录，不参与当前构建。
 
 ## C++ 实现状态（P1-4，VERIFIED）
 
@@ -70,7 +99,7 @@ WPE               调色板，**每色 4 字节**（用 3 字节会渲染成坏�
 
 ### 验证
 
-`SCMDPlus.exe --open="<地图>" --ts="<ts目录>" --dump-render="<out.bmp>"` 导出 24 位 BMP，
+`SCMDPlus.exe --open="<地图>" --dump-render="<out.bmp>"`（地形集默认取输出目录或工程根的 `ts/`；`--ts=` 仅用于显式覆盖）导出 24 位 BMP，
 与 Node 参考实现逐瓦片比对：
 
 | 地图 | 结果 |
@@ -79,6 +108,33 @@ WPE               调色板，**每色 4 字节**（用 3 字节会渲染成坏�
 | (8)Mangosteen v1.0.scx（badlands） | 1536×1536，抽样 225 个瓦片中心像素**全部一致**，126 种颜色 |
 
 GUI 回归：4 张地图标题正确（含 ERA 与单位数）；连续滚轮缩放后进程存活。
+
+### 8 套地形集逐套渲染回归（P3-17，VERIFIED）
+
+```
+SCMDPlus.exe --tileset-render-test="<输出目录>"
+```
+
+对 ERA 0..7 各建一张 16×16 合成地图，MTXM 取 `group = ((x+y*16)*37) % GroupCount`、
+`index = (x+y) % 16`，覆盖地形集的组与全部 16 个索引；按 8 px/瓦片渲染，
+并与**独立参考解码**（直接读 CV5/VX4/VR4/WPE，不经过 `Tileset`/`TerrainRenderer`）
+逐像素比对。每套导出一张 128×128 的 BMP，哈希必须互不相同。
+
+实测（`pass=8/8`）：
+
+| ERA | 地形集 | groups | megas | vr | 颜色数 |
+|---|---|---|---|---|---|
+| 0 | badlands | 1665 | 4844 | 26247 | 49 |
+| 1 | platform | 1513 | 3055 | 18787 | 88 |
+| 2 | install | 1265 | 1431 | 7259 | 102 |
+| 3 | ashworld | 1262 | 3497 | 18078 | 87 |
+| 4 | jungle | 1578 | 5046 | 23818 | 105 |
+| 5 | desert | 1520 | 5810 | 32158 | 106 |
+| 6 | ice | 1415 | 4518 | 30376 | 83 |
+| 7 | twilight | 1494 | 5232 | 28124 | 101 |
+
+诊断写入 `%TEMP%\scmdplus_mpq.txt`，每套一行
+`era=... files=1 created=1 groups=... render=1 dims=1 pixels=1 colors=... unique=1 bmp=1 hash=...`。
 
 ### 已知限制
 
@@ -100,3 +156,32 @@ GUI 回归：4 张地图标题正确（含 ERA 与单位数）；连续滚轮缩
 - 滚轮 2/4/8/16/32 缩放；滚动条与 `WM_HSCROLL`/`WM_VSCROLL` 已接通；左上角 HUD 显示当前工具与刷子值。
 
 验证：无头回归中 `painted=1`、保存后重开 `repaint=3/3`（3 格全部写回成功）。
+
+## 地形刷选择（调色板窗口）
+
+「窗口 → 刷子窗口」（0x8114）打开独立调色板，用来选择 `brushTile_`：
+
+- `BrushPalette::BuildEntries` 遍历 CV5 组，跳过越界大瓦片与全透明块；
+  同一组内指向同一 mega 的索引只保留第一个（同组变体仍保留）。
+- 10 列网格、40 px 单元；预览走 `Tileset::TileBlock` + WPE 着色，只绘制可见行。
+- 顶部筛选栏：可走性（全部/可走/阻挡）、类型（从 CV5 动态收集）、组区间
+  （0-511 / 512-1023 / 1024-1535 / 1536-2047）。
+- 点击或方向键选中后向主窗口发送 `WM_APP+0x41`，主窗口写回 `brushTile_` 并切回地形层。
+- 吸管选中的瓦片会同步高亮；同组同 mega 的其它索引视为同一块。
+- 地图打开 / 新建 / 关闭时自动刷新；未载入地形集时显示空状态。
+
+回归：
+
+```
+SCMDPlus.exe --open=<map> --brush-test
+entries=4317 unique=1 window=1 click=1 paint=1 readback=1 filters=1 file=1
+```
+
+`filters=1` 覆盖可走/阻挡/类型/组区间四类过滤；`file=1` 为 `.scb` 刷子文件往返。
+
+## 自定义刷子与图案刷
+
+182 对话框（编辑层 → 复制/剪切/粘贴/刷子）把选区保存为多格图案，支持 `.scb` 打开/保存；
+双击应用后，主窗口以光标为中心压印图案，整笔作为一次撤销记录。
+无头回归：`--brush-pattern-test`。
+

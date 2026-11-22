@@ -161,7 +161,8 @@ struct MpqArchive::Impl {
         }
 
         u32 key = mpq::HashString(BaseName(NormalizeName(name)).c_str(), 3);
-        if (be.flags & kFlagAdjusted) key += be.pos;
+        // FIX_KEY：key = (hash + blockPos) ^ fileSize（StormLib 的 GetFileKey）
+        if (be.flags & kFlagAdjusted) key = (key + be.pos) ^ be.fileSize;
         const bool compressed = (be.flags & (kFlagCompress | kFlagImplode)) != 0;
 
         out.clear();
@@ -195,7 +196,11 @@ struct MpqArchive::Impl {
                 err = L"sector-table-out-of-range";
                 return false;
             }
-            Buffer tr = DecryptPadded(raw.data() + be.pos, tableBytes, key - 1);
+            // 扇区偏移表只在该文件加密时才用 key-1 解密
+            Buffer tr(raw.begin() + be.pos, raw.begin() + be.pos + tableBytes);
+            if (be.flags & kFlagEncrypted) {
+                tr = DecryptPadded(tr.data(), tr.size(), key - 1);
+            }
             for (std::size_t i = 0; i <= sectorCount; i++) table[i] = ReadU32(tr.data() + i * 4) & 0x7FFFFFFF;
         } else {
             for (std::size_t i = 0; i <= sectorCount; i++) table[i] = static_cast<u32>(i * sectorSize);

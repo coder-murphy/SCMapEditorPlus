@@ -12,6 +12,7 @@
 #include "res/resource.h"
 #include "ui/dlg_common.h"
 #include "ui/dlg_types.h"
+#include "ui/dialogs.h"
 
 namespace scmd {
 
@@ -505,6 +506,7 @@ INT_PTR HandleListEditor(HWND dlg, UINT msg, WPARAM wParam) {
 }  // namespace
 
 const LocationRect& LastLocation() { return g_location; }
+void SeedLocation(const LocationRect& seed) { g_location = seed; }
 
 // 181：触发编辑器。列表/条件/行动全部接到 MapDocument::triggers。
 INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
@@ -609,7 +611,7 @@ INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     return TRUE;
                 }
                 case IDC_D181_SWITCH_NAMES:                              // 开关命名
-                    Log(L"[trigger] 开关命名暂未接入（SWNM）");
+                    ShowRecoveredDialog(IDD_DLG_179, dlg);
                     return TRUE;
                 case IDC_D181_CLOSE:                                 // 关闭
                     ::EndDialog(dlg, IDCANCEL);
@@ -771,37 +773,76 @@ INT_PTR HandleTriggerListEditor(HWND dlg, UINT msg, WPARAM wParam) {
     return HandleListEditor(dlg, msg, wParam);
 }
 
-// 171：编辑 Location。六个地形高度按钮 + 四边坐标。
+// 171：编辑 Location。六个地形高度按钮 + 四边坐标 + 名称/STR 下标。
+namespace {
+
+// 按钮顺序与 MRGN flags 位一一对应：bit0 凹陷 / bit1 平地 / bit2 高地 /
+// bit3 低空 / bit4 普空 / bit5 高空。
+constexpr int kLocationElevationButtons[6] = {
+    IDC_D171_1065, IDC_D171_1066, IDC_D171_1067,
+    IDC_D171_1069, IDC_D171_1068, IDC_D171_1070,
+};
+
+void RefreshLocationElevation(HWND dlg) {
+    for (int i = 0; i < 6; i++) {
+        const bool on = (g_location.elevationMask & (1u << i)) != 0;
+        ::SendDlgItemMessageW(dlg, kLocationElevationButtons[i], BM_SETCHECK,
+                              on ? BST_CHECKED : BST_UNCHECKED, 0);
+    }
+}
+
+}  // namespace
+
 INT_PTR CALLBACK ProcEditLocation(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
-        case WM_INITDIALOG:
+        case WM_INITDIALOG: {
             CenterDialog(dlg);
-            ::SetDlgItemInt(dlg, IDC_D171_1079, 0, FALSE);
-            ::SetDlgItemInt(dlg, IDC_D171_1080, 0, FALSE);
-            ::SetDlgItemInt(dlg, IDC_D171_1081, 16, FALSE);
-            ::SetDlgItemInt(dlg, IDC_D171_1082, 16, FALSE);
+            ::SetDlgItemInt(dlg, IDC_D171_1079, static_cast<UINT>(g_location.left), FALSE);
+            ::SetDlgItemInt(dlg, IDC_D171_1080, static_cast<UINT>(g_location.top), FALSE);
+            ::SetDlgItemInt(dlg, IDC_D171_1081, static_cast<UINT>(g_location.right), FALSE);
+            ::SetDlgItemInt(dlg, IDC_D171_1082, static_cast<UINT>(g_location.bottom), FALSE);
+            ::SetDlgItemTextW(dlg, IDC_D171_1064, g_location.name.c_str());
+            ::SetDlgItemInt(dlg, IDC_D171_1071, static_cast<UINT>(g_location.stringId), FALSE);
+            RefreshLocationElevation(dlg);
             return TRUE;
-        case WM_COMMAND:
-            switch (LOWORD(wParam)) {
-                case IDC_D171_1065: g_location.elevation = 0; return TRUE;   // 凹陷
-                case IDC_D171_1066: g_location.elevation = 1; return TRUE;   // 平地
-                case IDC_D171_1067: g_location.elevation = 2; return TRUE;   // 高地
-                case IDC_D171_1069: g_location.elevation = 3; return TRUE;   // 较低空中
-                case IDC_D171_1068: g_location.elevation = 4; return TRUE;   // 普通空中
-                case IDC_D171_1070: g_location.elevation = 5; return TRUE;   // 较高空中
-                case IDC_D171_1:                                             // 确定
-                    g_location.left = ReadClampedInt(dlg, IDC_D171_1079, 0, 0, 255);
-                    g_location.top = ReadClampedInt(dlg, IDC_D171_1080, 0, 0, 255);
-                    g_location.right = ReadClampedInt(dlg, IDC_D171_1081, 16, 0, 255);
-                    g_location.bottom = ReadClampedInt(dlg, IDC_D171_1082, 16, 0, 255);
-                    Log(L"[location] rect=(%d,%d)-(%d,%d) elev=%d", g_location.left, g_location.top,
-                        g_location.right, g_location.bottom, g_location.elevation);
+        }
+        case WM_COMMAND: {
+            const int id = LOWORD(wParam);
+            for (int i = 0; i < 6; i++) {
+                if (id == kLocationElevationButtons[i]) {
+                    g_location.elevationMask = 1u << i;   // 单选：清掉其它位
+                    RefreshLocationElevation(dlg);
+                    return TRUE;
+                }
+            }
+            switch (id) {
+                case IDC_D171_1: {                                // 确定
+                    int left = ReadClampedInt(dlg, IDC_D171_1079, g_location.left, 0, 255);
+                    int top = ReadClampedInt(dlg, IDC_D171_1080, g_location.top, 0, 255);
+                    int right = ReadClampedInt(dlg, IDC_D171_1081, g_location.right, 0, 255);
+                    int bottom = ReadClampedInt(dlg, IDC_D171_1082, g_location.bottom, 0, 255);
+                    if (right < left) std::swap(left, right);
+                    if (bottom < top) std::swap(top, bottom);
+                    g_location.left = left;
+                    g_location.top = top;
+                    g_location.right = right;
+                    g_location.bottom = bottom;
+                    g_location.stringId = ReadClampedInt(dlg, IDC_D171_1071, g_location.stringId,
+                                                         0, 65535);
+                    wchar_t name[512] = L"";
+                    ::GetDlgItemTextW(dlg, IDC_D171_1064, name, 512);
+                    g_location.name = name;
+                    Log(L"[location] rect=(%d,%d)-(%d,%d) flags=0x%02X str=%d name=%s",
+                        g_location.left, g_location.top, g_location.right, g_location.bottom,
+                        g_location.elevationMask, g_location.stringId, g_location.name.c_str());
                     ::EndDialog(dlg, IDOK);
                     return TRUE;
+                }
                 default:
                     break;
             }
             break;
+        }
         case WM_CLOSE:
             ::EndDialog(dlg, IDCANCEL);
             return TRUE;

@@ -183,6 +183,41 @@
 #define IDC_D180_1076  1076       // Button  隐形
 #define IDC_D180_1077  1077       // Button  升起
 
+// ── 195  单位放置参数（本工程新增）──
+#define IDC_D195_1  1             // Button  确定
+#define IDC_D195_2  2             // Button  关闭
+#define IDC_D195_TYPE  1201       // Edit  单位类型 ID
+#define IDC_D195_PRESET  1202     // ComboBox  常用类型
+#define IDC_D195_OWNER  1203      // ComboBox  玩家
+#define IDC_D195_RESOURCE  1204   // Edit  资源
+
+// ── 196  玩家 / 势力设定（本工程新增）──
+#define IDC_D196_1  1             // Button  确定
+#define IDC_D196_2  2             // Button  关闭
+#define IDC_D196_PLAYER_LIST  1300   // ListBox  玩家槽位
+#define IDC_D196_CONTROLLER  1301    // ComboBox  控制者
+#define IDC_D196_RACE  1302          // ComboBox  种族
+#define IDC_D196_FORCE  1303         // ComboBox  队伍
+#define IDC_D196_COLOR  1304         // ComboBox  颜色
+#define IDC_D196_FORCE_LIST  1310    // ListBox  队伍列表
+#define IDC_D196_FORCE_NAME  1311    // Edit  名称 STR ID
+#define IDC_D196_FORCE_FLAGS  1312   // Edit  标志位
+#define IDC_D196_FORCE_TEXT  1313    // Static  名称文本
+
+// ── 197  升级 / 科技限制（本工程新增）──
+#define IDC_D197_1  1             // Button  确定
+#define IDC_D197_2  2             // Button  关闭
+#define IDC_D197_VERSION  1400    // ComboBox  原版/资料片
+#define IDC_D197_PLAYER  1401     // ComboBox  全局默认/Player
+#define IDC_D197_UPGRADE_LIST  1402   // ListBox  升级
+#define IDC_D197_TECH_LIST  1403      // ListBox  科技
+#define IDC_D197_UP_MAX  1404         // Edit  最大/可用
+#define IDC_D197_UP_START  1405       // Edit  初始
+#define IDC_D197_UP_DEFAULTS  1406    // Button  使用全局默认
+#define IDC_D197_TECH_AVAILABLE  1407 // Button  可用
+#define IDC_D197_TECH_START  1408     // Button  初始拥有
+#define IDC_D197_TECH_DEFAULTS  1409  // Button  使用全局默认
+
 // ── 181  触发编辑器 ──
 #define IDC_D181_182  182         // ListBox
 #define IDC_D181_1022  1022       // ListBox
@@ -337,3 +372,16 @@
 #define IDC_D194_PROP      1200   // Edit      属性
 #define IDC_D194_1         1      // Button    确定
 #define IDC_D194_2         2      // Button    关闭
+
+// ── 198  编辑声音（本工程新增）──
+#define IDC_D198_LIST  1500       // ListBox  512 个声音槽
+#define IDC_D198_PATH  1501       // Edit     声音路径（STR）
+#define IDC_D198_SET  1502        // Button   设置
+#define IDC_D198_CLEAR  1503      // Button   清除
+#define IDC_D198_CLOSE  1504      // Button   关闭
+
+// ── 199  任务简报（本工程新增）──
+#define IDC_D199_LIST  1510       // ListBox  文本/目标/传输行动
+#define IDC_D199_TEXT  1511       // Edit     文本
+#define IDC_D199_UPDATE  1512     // Button   更新文本
+#define IDC_D199_CLOSE  1513      // Button   关闭

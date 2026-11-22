@@ -1,5 +1,6 @@
 ﻿#include "chk/chk_document.h"
 
+#include <algorithm>
 namespace scmd {
 
 bool ChkDocument::Parse(const Buffer& chk) {
@@ -45,6 +46,12 @@ void ChkDocument::Set(const std::string& name, Buffer data) {
         if (s.name == name) { s.data = std::move(data); return; }
     }
     sections_.push_back(ChkSection{name, std::move(data)});
+}
+
+void ChkDocument::Remove(const std::string& name) {
+    sections_.erase(std::remove_if(sections_.begin(), sections_.end(),
+                                   [&](const ChkSection& s) { return s.name == name; }),
+                    sections_.end());
 }
 
 }  // namespace scmd

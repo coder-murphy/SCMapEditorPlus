@@ -4,6 +4,10 @@
 #include "archive/mpq_archive.h"
 #include "chk/chk_document.h"
 #include "common/types.h"
+#include "map/decor_model.h"
+#include "map/scenario_tables.h"
+#include "players/player_model.h"
+#include "players/restriction_model.h"
 #include "terrain/tileset.h"
 #include "triggers/trigger_model.h"
 #include "units/unit_model.h"
@@ -50,6 +54,30 @@ public:
     StringTable& mutableStrings() { return strings_; }
     LocationTable& mutableLocations() { return locations_; }
 
+    // OWNR / SIDE / FORC / COLR
+    const PlayerRoster& players() const { return players_; }
+    PlayerRoster& mutablePlayers() { return players_; }
+
+    // UPGR / PTEC / PUPx / PTEx
+    const UpgradeTechRestrictions& restrictions() const { return restrictions_; }
+    UpgradeTechRestrictions& mutableRestrictions() { return restrictions_; }
+
+    // DD2 装饰物 / MASK 战争迷雾
+    const DoodadTable& doodads() const { return doodads_; }
+    DoodadTable& mutableDoodads() { return doodads_; }
+    const FogMask& fog() const { return fog_; }
+    FogMask& mutableFog() { return fog_; }
+    const SpriteTable& sprites() const { return sprites_; }
+    SpriteTable& mutableSprites() { return sprites_; }
+
+    // WAV 声音 / SWNM 开关名 / MBRF 任务简报
+    const StringIndexTable& sounds() const { return sounds_; }
+    StringIndexTable& mutableSounds() { return sounds_; }
+    const StringIndexTable& switchNames() const { return switchNames_; }
+    StringIndexTable& mutableSwitchNames() { return switchNames_; }
+    const TriggerSection& briefing() const { return briefing_; }
+    TriggerSection& mutableBriefing() { return briefing_; }
+
     // 原始段内容（用于无损重建校验）
     const ChkDocument& chk() const { return chk_; }
 
@@ -71,9 +99,11 @@ public:
     //   矿物 176/177/178 -> (tx*32, ty*32+16)
     //   气矿 188        -> (tx*32, ty*32)
     //   其它（含出生点） -> (tx*32, ty*32+16)
-    bool PlaceUnit(int tx, int ty, u16 type, u8 owner, u32 resource);
+    bool PlaceUnit(int tx, int ty, u16 type, u8 owner, u32 resource, bool force = false);
     // 删除像素落点所在格的全部单位，返回删除数量
     int RemoveUnitsAtTile(int tx, int ty);
+    // 删除越界与重复 serial 的单位（类型合法性需单位属性表，暂不处理）
+    int RemoveInvalidUnits();
     // 返回该格上的单位数
     int UnitCountAtTile(int tx, int ty) const;
     // 标记脏数据（编辑操作调用），Save 成功后清零
@@ -92,6 +122,14 @@ private:
     TriggerSection triggers_;
     LocationTable locations_;
     StringTable strings_;
+    PlayerRoster players_;
+    UpgradeTechRestrictions restrictions_;
+    DoodadTable doodads_;
+    FogMask fog_;
+    SpriteTable sprites_;
+    StringIndexTable sounds_{512};
+    StringIndexTable switchNames_{256};
+    TriggerSection briefing_;
     std::vector<MpqFileEntry> extraFiles_;
     bool opened_ = false;
     bool dirty_ = false;

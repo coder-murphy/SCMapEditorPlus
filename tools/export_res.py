@@ -2,7 +2,9 @@
 """从原版 ScmDraft2.exe 导出位图与自定义 BIN 资源。
 
 用法：
-    python tools/export_res.py --exe "E:/Games/PCGames/SC1BWAI/[CN]ScmDraft2.exe"
+    python tools/export_res.py --exe "<星际安装目录>/[CN]ScmDraft2.exe"
+
+导出的位图/BIN 已随仓库放在 src/res/assets/，仅在重新逆向时才需要游戏目录。
 
 位图（RT_BITMAP）资源在 PE 中只存 DIB（BITMAPINFOHEADER + 调色板 + 像素），
 脚本补一个 14 字节 BITMAPFILEHEADER 后写成标准 .bmp。

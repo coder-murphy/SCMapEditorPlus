@@ -3,6 +3,7 @@
 #include "archive/mpq_archive.h"
 #include <algorithm>
 #include <cstring>
+#include <utility>
 
 #include "common/log.h"
 
@@ -114,6 +115,8 @@ bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir)
         Log(L"[map] CHK 段解析失败");
         return false;
     }
+    players_.Parse(chk_);
+    restrictions_.Parse(chk_);
     LoadExtraFiles(mpq, extraFiles_);
 
     const Buffer* dim = chk_.Find(section::kDim);
@@ -182,6 +185,22 @@ bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir)
     if (const Buffer* mrgn = chk_.Find("MRGN")) locations_.Parse(*mrgn);
     if (const Buffer* str = chk_.Find("STR ")) strings_.Parse(*str);
 
+    // 任务简报 / 声音 / 开关名
+    briefing_.Parse(Buffer());
+    sounds_.Parse(Buffer());
+    switchNames_.Parse(Buffer());
+    if (const Buffer* mbrf = chk_.Find(section::kMbrf)) briefing_.Parse(*mbrf);
+    if (const Buffer* wav = chk_.Find(section::kWav)) sounds_.Parse(*wav);
+    if (const Buffer* swnm = chk_.Find(section::kSwnm)) switchNames_.Parse(*swnm);
+
+    // 装饰物 / 战争迷雾 / SP 单位
+    doodads_.Parse(Buffer());
+    fog_.Parse(Buffer(), width_, height_);
+    sprites_.Parse(Buffer());
+    if (const Buffer* dd2 = chk_.Find(section::kDd2)) doodads_.Parse(*dd2);
+    if (const Buffer* mask = chk_.Find(section::kMask)) fog_.Parse(*mask, width_, height_);
+    if (const Buffer* thg2 = chk_.Find(section::kThg2)) sprites_.Parse(*thg2);
+
     path_ = path;
     opened_ = true;
     dirty_ = false;
@@ -249,6 +268,7 @@ bool MapDocument::Resize(int width, int height, int offsetX, int offsetY, bool s
     tiles_ = std::move(next);
     width_ = width;
     height_ = height;
+    fog_.Resize(width_, height_, offsetX, offsetY);
 
     // 单位：按格平移，越界丢弃
     std::vector<UnitRecord> kept;
@@ -286,6 +306,14 @@ void MapDocument::Close() {
     triggers_.Parse(Buffer());
     locations_.Parse(Buffer());
     strings_.Parse(Buffer());
+    players_.Reset();
+    restrictions_.Reset();
+    doodads_.Reset();
+    fog_.Reset();
+    sprites_.Reset();
+    briefing_.Parse(Buffer());
+    sounds_.Reset();
+    switchNames_.Reset();
     extraFiles_.clear();
     chk_.Parse(Buffer());
     tileset_.Unload();
@@ -339,8 +367,9 @@ bool MapDocument::PaintRect(int x0, int y0, int x1, int y1, u16 value) {
     return any;
 }
 
-bool MapDocument::PlaceUnit(int tx, int ty, u16 type, u8 owner, u32 resource) {
-    if (!IsWalkableTile(tx, ty)) return false;
+bool MapDocument::PlaceUnit(int tx, int ty, u16 type, u8 owner, u32 resource, bool force) {
+    if (tx < 0 || ty < 0 || tx >= width_ || ty >= height_) return false;
+    if (!force && !IsWalkableTile(tx, ty)) return false;
 
     u32 serial = 1;
     for (const auto& u : units_) {
@@ -394,6 +423,36 @@ int MapDocument::RemoveUnitsAtTile(int tx, int ty) {
     return removed;
 }
 
+int MapDocument::RemoveInvalidUnits() {
+    if (!opened_) return 0;
+
+    std::vector<UnitRecord> kept;
+    kept.reserve(units_.size());
+    int removed = 0;
+    for (const UnitRecord& u : units_) {
+        const bool outOfBounds = u.x >= width_ * 32 || u.y >= height_ * 32;
+        bool duplicate = false;
+        for (const UnitRecord& k : kept) {
+            if (k.serial == u.serial) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (outOfBounds || duplicate) {
+            removed++;
+            continue;
+        }
+        kept.push_back(u);
+    }
+
+    if (removed > 0) {
+        units_ = std::move(kept);
+        dirty_ = true;
+        Log(L"[unit] removed %d invalid units", removed);
+    }
+    return removed;
+}
+
 bool MapDocument::Save(const std::wstring& path) {
     if (!IsOpen()) return false;
 
@@ -434,6 +493,22 @@ bool MapDocument::Save(const std::wstring& path) {
     if (chk_.Has("TRIG")) chk_.Set("TRIG", triggers_.Serialize());
     if (chk_.Has("MRGN") || locations_.Count() > 0) chk_.Set("MRGN", locations_.Serialize());
     if (chk_.Has("STR ") || strings_.Count() > 0) chk_.Set("STR ", strings_.Serialize());
+    if (players_.Modified()) players_.SaveTo(chk_);
+    if (restrictions_.Modified()) restrictions_.SaveTo(chk_);
+    // 可选段为空表示“应不存在”，直接删除而不是写出零长段
+    auto applyOptional = [this](const char* name, bool modified, Buffer bytes) {
+        if (!modified) return;
+        if (bytes.empty()) chk_.Remove(name);
+        else chk_.Set(name, std::move(bytes));
+    };
+    applyOptional(section::kDd2, doodads_.Modified(), doodads_.Serialize());
+    applyOptional(section::kMask, fog_.Modified(), fog_.Serialize());
+    applyOptional(section::kThg2, sprites_.Modified(), sprites_.Serialize());
+    applyOptional(section::kWav, sounds_.Modified(), sounds_.Serialize());
+    applyOptional(section::kSwnm, switchNames_.Modified(), switchNames_.Serialize());
+    if (chk_.Has(section::kMbrf) || briefing_.BlockCount() > 0) {
+        chk_.Set(section::kMbrf, briefing_.Serialize());
+    }
 
     const Buffer chkBytes = chk_.Serialize();
     std::vector<MpqFileEntry> files;

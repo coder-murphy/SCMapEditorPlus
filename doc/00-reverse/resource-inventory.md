@@ -24,13 +24,13 @@
 
 ## 导出状态（P3-12）
 
-`tools/export_res.py` 可复现导出：
+`tools/export_res.py` 可复现导出（仅逆向时使用，构建不依赖）：
 
 ```
-python tools/export_res.py --exe "E:/Games/PCGames/SC1BWAI/[CN]ScmDraft2.exe"
+python tools/export_res.py --exe "<星际安装目录>/[CN]ScmDraft2.exe"
 ```
 
-输出到 `src/res/assets/`：
+输出到 `src/res/assets/`，已随仓库提供；日常编译不需要游戏目录：
 
 | 文件 | 尺寸 | 说明 |
 | --- | --- | --- |

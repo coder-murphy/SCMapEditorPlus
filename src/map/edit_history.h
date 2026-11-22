@@ -18,6 +18,38 @@ struct EditCommand {
     Buffer tilesAfter;
     std::vector<UnitRecord> unitsBefore;
     std::vector<UnitRecord> unitsAfter;
+    // TRIG / MRGN / STR 的序列化快照；hasMeta=false 表示该命令不涉及元数据
+    bool hasMeta = false;
+    Buffer triggersBefore;
+    Buffer triggersAfter;
+    Buffer locationsBefore;
+    Buffer locationsAfter;
+    Buffer stringsBefore;
+    Buffer stringsAfter;
+    // OWNR / SIDE / FORC / COLR 的 PlayerRoster::Snapshot()
+    bool hasPlayers = false;
+    Buffer playersBefore;
+    Buffer playersAfter;
+    // UPGR / PTEC / PUPx / PTEx 的 UpgradeTechRestrictions::Snapshot()
+    bool hasRestrictions = false;
+    Buffer restrictionsBefore;
+    Buffer restrictionsAfter;
+    // DD2 装饰物 / MASK 战争迷雾
+    bool hasDecor = false;
+    Buffer doodadsBefore;
+    Buffer doodadsAfter;
+    Buffer fogBefore;
+    Buffer fogAfter;
+    Buffer spritesBefore;      // THG2
+    Buffer spritesAfter;
+    // WAV / SWNM / MBRF
+    bool hasScenarioExtra = false;
+    Buffer wavBefore;
+    Buffer wavAfter;
+    Buffer swnmBefore;
+    Buffer swnmAfter;
+    Buffer mbrfBefore;
+    Buffer mbrfAfter;
 };
 
 class EditHistory {
@@ -38,6 +70,8 @@ public:
     const wchar_t* LastLabel() const;
 
 private:
+    static void ApplyMeta(MapDocument& doc, const EditCommand& cmd, bool before);
+
     std::vector<EditCommand> undo_;
     std::vector<EditCommand> redo_;
     std::size_t limit_ = 50;

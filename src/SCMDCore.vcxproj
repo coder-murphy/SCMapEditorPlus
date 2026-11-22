@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{B7E4D2A1-3C5F-4A8B-9D6E-1F2A3B4C5D6E}</ProjectGuid>
+    <RootNamespace>SCMDCore</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)build\SCMDCore\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>UNICODE;_UNICODE;WIN32_LEAN_AND_MEAN;NOMINMAX;SCMDCORE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="api\scmd_core.cpp" />
+    <ClCompile Include="archive\mpq_archive.cpp" />
+    <ClCompile Include="archive\mpq_codec.cpp" />
+    <ClCompile Include="chk\chk_document.cpp" />
+    <ClCompile Include="common\log.cpp" />
+    <ClCompile Include="common\string_util.cpp" />
+    <ClCompile Include="map\map_document.cpp" />
+    <ClCompile Include="map\decor_model.cpp" />
+    <ClCompile Include="map\map_switches.cpp" />
+    <ClCompile Include="map\scenario_tables.cpp" />
+    <ClCompile Include="players\player_model.cpp" />
+    <ClCompile Include="players\restriction_model.cpp" />
+    <ClCompile Include="terrain\tileset.cpp" />
+    <ClCompile Include="terrain\brush.cpp" />
+    <ClCompile Include="terrain\terrain_renderer.cpp" />
+    <ClCompile Include="terrain\tileset_export.cpp" />
+    <ClCompile Include="triggers\trigger_model.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="api\scmd_core.h" />
+    <ClInclude Include="archive\mpq_archive.h" />
+    <ClInclude Include="archive\mpq_codec.h" />
+    <ClInclude Include="chk\chk_document.h" />
+    <ClInclude Include="chk\chk_section.h" />
+    <ClInclude Include="common\log.h" />
+    <ClInclude Include="common\string_util.h" />
+    <ClInclude Include="common\types.h" />
+    <ClInclude Include="map\map_document.h" />
+    <ClInclude Include="players\player_model.h" />
+    <ClInclude Include="players\restriction_model.h" />
+    <ClInclude Include="terrain\tileset.h" />
+    <ClInclude Include="terrain\brush.h" />
+    <ClInclude Include="terrain\terrain_renderer.h" />
+    <ClInclude Include="terrain\tileset_export.h" />
+    <ClInclude Include="triggers\trigger_model.h" />
+    <ClInclude Include="units\unit_model.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

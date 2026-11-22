@@ -5,7 +5,9 @@
 
 #include "map/edit_history.h"
 #include "map/map_document.h"
+#include "terrain/brush.h"
 #include "terrain/terrain_renderer.h"
+#include "ui/brush_palette.h"
 
 namespace scmd {
 
@@ -14,6 +16,7 @@ enum class Tool {
     kTerrain = 1,     // 左键刷地形
     kUnit = 2,        // 左键放单位
     kPicker = 3,      // 左键吸取瓦片
+    kSelect = 4,      // 左键拖拽框选
 };
 
 // 编辑层（对应「编辑 → 编辑层」）
@@ -54,6 +57,26 @@ public:
 
     void OnCommand(int id);
 
+    // 单位放置参数（也用于无头回归）
+    void SetUnitPlacement(u16 type, u8 owner, u32 resource);
+    bool PlaceUnitAtTile(int tx, int ty);
+
+    // 选择与剪贴板（也用于无头回归）
+    void SelectRect(int x0, int y0, int x1, int y1);
+    void SelectAllTiles();
+    void ClearSelection();
+    void CopySelection(bool cut);
+    void PasteClipboard();
+    bool PasteClipboardAt(int tx, int ty);
+    int OverlapSelectedUnitsAt(int tx, int ty);
+    int DeleteInvalidUnits();
+
+    // 多格图案刷（也用于无头回归）
+    void SetBrushPattern(const TerrainBrush& brush);
+    bool PaintBrushAt(int tx, int ty);
+    const TerrainBrush& brushPattern() const { return brushPattern_; }
+    const std::vector<TerrainBrush>& customBrushes() const { return customBrushes_; }
+
 private:
     static LRESULT CALLBACK WndProcThunk(HWND, UINT, WPARAM, LPARAM);
     LRESULT WndProc(UINT msg, WPARAM wParam, LPARAM lParam);
@@ -68,24 +91,52 @@ private:
     void OpenGridSettings();
     void SetGridColor(COLORREF color, int commandId);
     void ToggleDisplay(int commandId);
+    void TogglePlacementRule(int commandId);
+    void OpenUnitPlacement();
+    void OpenPlayerRoster();
+    void OpenRestrictions();
+    void OpenSpUnitEditor(int selected = -1);   // 164 SP 单位属性
+    int SpriteIndexAtTile(int tx, int ty) const;
+    bool ApplyRadarFogCommand(int id);   // 剧本设置 → 小雷达 / 迷雾
     void SyncMenuChecks();
     void DrawGrid(HDC dc, const RECT& client) const;
     void DrawLocations(HDC dc, const RECT& client) const;
+    void DrawDoodads(HDC dc, const RECT& client) const;
+    void DrawSprites(HDC dc, const RECT& client) const;
+    void DrawFog(HDC dc, const RECT& client) const;
 
     // 对话框接线
     void ResizeMapDialog();
     void EditUnitProps();
+    void EditLocation(int index);
+    int LocationIndexAtTile(int tx, int ty) const;
     void EditMapText(int stringIndex, bool richText);
     int UnitIndexAtTile(int tx, int ty) const;
     void GotoStartPosition();
+    void SaveMapImage();
+
+    // 地形刷选择窗口（窗口 → 刷子窗口）
+    void ShowBrushPalette();
+    void SetBrushTile(u16 value);
+    void RefreshBrushPalette();
+
+    // 自定义刷子（编辑层 → 复制/剪切/粘贴/刷子，182）
+    void OpenCustomBrush();
 
     void UpdateScrollBars();
     void OnLButtonDown(int mx, int my);
+    void OnLButtonDblClk(int mx, int my);
     void OnMouseMove(int mx, int my, bool leftDown);
     void OnRButtonDown(int mx, int my);
     void OnKeyDown(int vk);
     void BeginEdit();
     void CommitEdit(const wchar_t* label);
+    void StampBrushAt(int tx, int ty);
+    void BeginSelection(int tx, int ty);
+    void UpdateSelection(int tx, int ty);
+    void DrawSelection(HDC dc, const RECT& client) const;
+    int SelectionCenterX() const { return (selX0_ + selX1_) / 2; }
+    int SelectionCenterY() const { return (selY0_ + selY1_) / 2; }
     void TileCoordsFromClient(int mx, int my, int& tx, int& ty) const;
     void PaintTileToBuffer(int tx, int ty, u16 value);
     // 撤销/重做后只重绘发生变化的瓦片区域（大面积改动回退为整图重建）
@@ -130,13 +181,58 @@ private:
     bool showZergGround_ = true;
     bool showSpecialStates_ = true;
     u16 brushTile_ = 0x0040;   // 默认：platform 甲板
+    TerrainBrush brushPattern_;      // 当前刷子图案（1x1 即单格刷）
+    std::vector<TerrainBrush> customBrushes_;   // 182 列表（进程内）
+    int customBrushIndex_ = -1;
     u16 unitType_ = 176;       // 默认：矿物
+    u8 unitOwner_ = 11;        // 0..7 玩家，11 中立
+    u32 unitResource_ = 1500;
+    bool placeUnitsAnywhere_ = false;      // 0x80E9
+    bool placeBuildingsAnywhere_ = false;  // 0x80EA
+    bool buildNormalRules_ = true;         // 0x8032
+    bool allowGroundOverlap_ = false;      // 0x8015（待单位元数据）
+    bool allowAirOverlap_ = false;         // 0x8109（待单位元数据）
+    bool unitGridDisplay_ = false;         // 0x80B5
+    bool autoConnectAddon_ = true;         // 0x80B8（待单位元数据）
+    bool mineralBaseDistance_ = false;     // 0x80BF（待单位元数据）
+    bool clipboardDoodads_ = false;        // 0x811C（剪贴板未实现）
+    BrushPalette brushPalette_;
     EditHistory history_;
     bool editOpen_ = false;
     Buffer tilesSnapshot_;
     std::vector<UnitRecord> unitsSnapshot_;
+    Buffer triggersSnapshot_;
+    Buffer locationsSnapshot_;
+    Buffer stringsSnapshot_;
+    Buffer playersSnapshot_;
+    Buffer restrictionsSnapshot_;
+    Buffer doodadsSnapshot_;
+    Buffer fogSnapshot_;
+    Buffer spritesSnapshot_;
+    Buffer wavSnapshot_;
+    Buffer swnmSnapshot_;
+    Buffer mbrfSnapshot_;
+    bool fogPaint_ = false;         // 迷雾拖动时统一写入的目标状态
     int cursorTx_ = -1;
     int cursorTy_ = -1;
+
+    // 框选与内部剪贴板（剪贴板可跨地图使用）
+    struct ClipboardData {
+        int width = 0;
+        int height = 0;
+        std::vector<u16> tiles;
+        std::vector<UnitRecord> units;   // x/y 已归一化为选区相对像素
+        bool Empty() const { return width <= 0 || height <= 0; }
+    };
+    bool hasSelection_ = false;
+    bool selecting_ = false;
+    int selAnchorX_ = 0;
+    int selAnchorY_ = 0;
+    int selX0_ = 0;
+    int selY0_ = 0;
+    int selX1_ = 0;
+    int selY1_ = 0;
+    ClipboardData clipboard_;
 };
 
 }  // namespace scmd

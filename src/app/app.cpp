@@ -3,17 +3,23 @@
 #include <shellapi.h>
 #include <cwchar>
 #include <cstring>
+#include <algorithm>
+#include <fstream>
 #include <functional>
 #include <string>
+#include <unordered_set>
 
 #include "res/resource.h"
+#include "ui/brush_palette.h"
 #include "ui/dialog_registry.h"
 #include "ui/dialogs.h"
 
 #include "archive/mpq_archive.h"
 #include "map/edit_history.h"
 #include "map/map_document.h"
+#include "map/map_switches.h"
 #include "terrain/terrain_renderer.h"
+#include "terrain/tileset_export.h"
 #include "chk/chk_section.h"
 
 #include <commctrl.h>
@@ -82,6 +88,34 @@ std::wstring ParseTsArg() {
     return dir;
 }
 
+// --game-dir=<目录>：星际安装目录（--extract-ts 使用）
+std::wstring ParseGameDirArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring dir;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--game-dir=", 11) == 0) dir = argv[i] + 11;
+        }
+        ::LocalFree(argv);
+    }
+    return dir;
+}
+
+// --extract-ts=<输出目录>：从游戏 MPQ 导出 8 套地形集四件套
+std::wstring ParseExtractTsArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring dir;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--extract-ts=", 13) == 0) dir = argv[i] + 13;
+        }
+        ::LocalFree(argv);
+    }
+    return dir;
+}
+
 // --dump-render=<bmp>：把当前地图渲染成 24 位 BMP（自动化比对用）
 std::wstring ParseDumpArg() {
     int argc = 0;
@@ -139,6 +173,188 @@ std::wstring ParseEditTestArg() {
         ::LocalFree(argv);
     }
     return path;
+}
+
+// --unit-param-test=<输出scx>：单位放置参数回归
+std::wstring ParseUnitParamTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--unit-param-test=", 18) == 0) path = argv[i] + 18;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --clip-test=<输出scx>：框选/剪贴板/重叠/非法单位回归
+std::wstring ParseClipTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--clip-test=", 12) == 0) path = argv[i] + 12;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --brush-pattern-test=<输出scx>：多格图案刷回归
+std::wstring ParseBrushPatternTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--brush-pattern-test=", 21) == 0) path = argv[i] + 21;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --player-test=<输出scx>：玩家/势力模型回归
+std::wstring ParsePlayerTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--player-test=", 14) == 0) path = argv[i] + 14;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --restriction-test=<输出scx>：升级/科技限制回归
+std::wstring ParseRestrictionTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--restriction-test=", 19) == 0) path = argv[i] + 19;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --location-test=<输出scx>：Location 171 → MRGN 写回回归
+std::wstring ParseLocationTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--location-test=", 16) == 0) path = argv[i] + 16;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --decor-test=<输出scx>：DD2 装饰物 / MASK 战争迷雾回归
+std::wstring ParseDecorTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--decor-test=", 13) == 0) path = argv[i] + 13;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --sprite-test=<输出scx>：THG2 SP 单位回归
+std::wstring ParseSpriteTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--sprite-test=", 14) == 0) path = argv[i] + 14;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --radar-test=<输出scx>：小雷达（Map Revealer）/ 迷雾开关回归
+std::wstring ParseRadarTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--radar-test=", 13) == 0) path = argv[i] + 13;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --scenario-text-test=<输出scx>：声音 / 开关名 / 任务简报回归
+std::wstring ParseScenarioTextTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--scenario-text-test=", 21) == 0) path = argv[i] + 21;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --map-tools-test=<输出scx>：转换地形 / 矿物外形随机回归
+std::wstring ParseMapToolsTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--map-tools-test=", 17) == 0) path = argv[i] + 17;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --tileset-render-test=<输出目录>：8 套地形集逐套渲染回归
+std::wstring ParseTilesetRenderTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--tileset-render-test=", 22) == 0) path = argv[i] + 22;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --brush-test：地形刷调色板回归（配合 --open / --ts）
+bool HasBrushTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    bool want = false;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcscmp(argv[i], L"--brush-test") == 0) want = true;
+        }
+        ::LocalFree(argv);
+    }
+    return want;
 }
 
 // 在给定格附近找一个可行走格；失败返回 false
@@ -229,6 +445,281 @@ int RunEditTest(const std::wstring& mapPath, const std::wstring& outPath) {
     const bool ok = painted && placed == 3 && rejected && removed == 1 && saved &&
                     reopened && repaintMatches == 3 && countOk;
     return ok ? 0 : 2;
+}
+
+// --unit-param-test=<输出scx>：单位放置参数回归
+int RunUnitParamTest(MainWindow& win, const std::wstring& outPath) {
+    MapDocument& doc = win.mutableMap();
+    // 不加载地形集：所有格视为可行走，专注验证放置参数写回
+    if (!doc.CreateNew(32, 32, 0, std::wstring())) {
+        WriteDiag(L"create=FAIL\n");
+        return 2;
+    }
+
+    win.SetUnitPlacement(214, 3, 0);              // 出生点，玩家 4
+    const bool placedStart = win.PlaceUnitAtTile(5, 5);
+    win.SetUnitPlacement(188, 11, 5000);          // 气矿，中立，资源 5000
+    const bool placedGeyser = win.PlaceUnitAtTile(6, 6);
+    const bool rejected = !win.PlaceUnitAtTile(-1, 0);
+    const bool saved = doc.Save(outPath);
+
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    bool startOk = false;
+    bool geyserOk = false;
+    if (reopened) {
+        for (const UnitRecord& u : check.units()) {
+            if (u.type == 214 && u.owner == 3) startOk = true;
+            if (u.type == 188 && u.owner == 11 && u.resource == 5000) geyserOk = true;
+        }
+    }
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+        L"create=OK\nplaced=%d/%d\nrejected=%d\nsaved=%d\nreopened=%d\nunits=%u\n"
+        L"startOk=%d\ngeyserOk=%d\n",
+        placedStart ? 1 : 0, placedGeyser ? 1 : 0, rejected ? 1 : 0, saved ? 1 : 0,
+        reopened ? 1 : 0, static_cast<unsigned>(check.unitCount()),
+        startOk ? 1 : 0, geyserOk ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = placedStart && placedGeyser && rejected && saved && reopened &&
+                    check.unitCount() == 2 && startOk && geyserOk;
+    return ok ? 0 : 2;
+}
+
+// --clip-test=<输出scx>：框选/剪贴板/重叠/非法单位回归
+int RunClipTest(MainWindow& win, const std::wstring& outPath) {
+    MapDocument& doc = win.mutableMap();
+    if (!doc.CreateNew(16, 16, 0, std::wstring())) {
+        WriteDiag(L"create=FAIL\n");
+        return 2;
+    }
+
+    const u16 sample = 0x0040;
+    doc.PaintTile(2, 2, sample);
+    doc.PlaceUnit(2, 2, 214, 1, 0, true);
+    doc.MarkDirty();
+
+    win.SelectRect(2, 2, 3, 3);
+    win.CopySelection(false);
+
+    // 跨地图：关闭后新建 20x20，再粘贴
+    doc.Close();
+    win.ClearSelection();
+    if (!doc.CreateNew(20, 20, 0, std::wstring())) {
+        WriteDiag(L"recreate=FAIL\n");
+        return 2;
+    }
+    const bool pasted = win.PasteClipboardAt(10, 10);
+    const bool tileOk = doc.TileAt(10, 10) == sample;
+    const bool unitOk = doc.UnitCountAtTile(10, 10) == 1;
+
+    // 剪切目标格
+    win.SelectRect(10, 10, 10, 10);
+    win.CopySelection(true);
+    const bool cutTileOk = doc.TileAt(10, 10) == 0;
+    const bool cutUnitOk = doc.UnitCountAtTile(10, 10) == 0;
+
+    // 再粘贴到 5,5
+    const bool pasted2 = win.PasteClipboardAt(5, 5);
+    const bool tile2Ok = doc.TileAt(5, 5) == sample;
+    const bool unit2Ok = doc.UnitCountAtTile(5, 5) == 1;
+
+    // 重叠所选单位
+    doc.PlaceUnit(6, 6, 188, 11, 5000, true);
+    win.SelectRect(5, 5, 6, 6);
+    const int merged = win.OverlapSelectedUnitsAt(5, 5);
+    const bool overlapOk = merged == 2 && doc.UnitCountAtTile(5, 5) == 2;
+
+    // 删除非法单位：越界 + 重复 serial
+    auto& units = doc.mutableUnits();
+    UnitRecord outOfBounds = units.front();
+    outOfBounds.serial = 12345;
+    outOfBounds.x = static_cast<u16>(20 * 32);
+    outOfBounds.y = 0;
+    units.push_back(outOfBounds);
+    const UnitRecord duplicate = units.front();
+    units.push_back(duplicate);
+    const int removed = win.DeleteInvalidUnits();
+    const bool invalidOk = removed == 2 && doc.unitCount() == 2;
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    const bool reopenOk = reopened && check.unitCount() == 2 && check.TileAt(5, 5) == sample;
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+        L"paste=%d\ntile=%d\nunit=%d\ncutTile=%d\ncutUnit=%d\npaste2=%d\ntile2=%d\nunit2=%d\n"
+        L"overlap=%d\nremoved=%d\ninvalidOk=%d\nsaved=%d\nreopened=%d\nreopenOk=%d\n",
+        pasted ? 1 : 0, tileOk ? 1 : 0, unitOk ? 1 : 0, cutTileOk ? 1 : 0, cutUnitOk ? 1 : 0,
+        pasted2 ? 1 : 0, tile2Ok ? 1 : 0, unit2Ok ? 1 : 0, overlapOk ? 1 : 0, removed,
+        invalidOk ? 1 : 0, saved ? 1 : 0, reopened ? 1 : 0, reopenOk ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = pasted && tileOk && unitOk && cutTileOk && cutUnitOk && pasted2 &&
+                    tile2Ok && unit2Ok && overlapOk && invalidOk && saved && reopenOk;
+    return ok ? 0 : 2;
+}
+
+// --brush-pattern-test=<输出scx>：多格图案刷绘制/撤销回归
+int RunBrushPatternTest(MainWindow& win, const std::wstring& outPath) {
+    MapDocument& doc = win.mutableMap();
+    if (!doc.CreateNew(16, 16, 0, std::wstring())) {
+        WriteDiag(L"create=FAIL\n");
+        return 2;
+    }
+
+    TerrainBrush brush;
+    brush.SetFromTiles(2, 2, {0x0040, 0x0041, 0x0042, 0x0043}, L"2x2");
+    win.SetBrushPattern(brush);
+
+    const bool painted = win.PaintBrushAt(5, 5);
+    const bool tileOk = doc.TileAt(4, 4) == 0x0040 && doc.TileAt(5, 4) == 0x0041 &&
+                        doc.TileAt(4, 5) == 0x0042 && doc.TileAt(5, 5) == 0x0043;
+
+    const bool undoOk = win.Undo() && doc.TileAt(4, 4) == 0 && doc.TileAt(5, 5) == 0;
+    const bool redoOk = win.Redo() && doc.TileAt(4, 4) == 0x0040 && doc.TileAt(5, 5) == 0x0043;
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    const bool reopenOk = reopened && check.TileAt(4, 4) == 0x0040 &&
+                          check.TileAt(5, 4) == 0x0041 &&
+                          check.TileAt(4, 5) == 0x0042 &&
+                          check.TileAt(5, 5) == 0x0043;
+
+    wchar_t msg[256];
+    ::wsprintfW(msg,
+                L"paint=%d\ntiles=%d\nundo=%d\nredo=%d\nsaved=%d\nreopened=%d\nreopenOk=%d\n",
+                painted ? 1 : 0, tileOk ? 1 : 0, undoOk ? 1 : 0, redoOk ? 1 : 0,
+                saved ? 1 : 0, reopened ? 1 : 0, reopenOk ? 1 : 0);
+    WriteDiag(msg);
+    return (painted && tileOk && undoOk && redoOk && saved && reopenOk) ? 0 : 2;
+}
+
+// --brush-test：地形刷调色板回归（枚举 / 去重 / 选中 / 窗口交互 / 绘制）
+int RunBrushTest(const std::wstring& mapPath, const std::wstring& tsDir) {
+    MapDocument doc;
+    if (!doc.Open(mapPath, tsDir) || !doc.hasTileset()) {
+        WriteDiag(L"open=FAIL\n");
+        return 2;
+    }
+
+    const std::vector<BrushPalette::Entry> entries = BrushPalette::BuildEntries(doc.tileset());
+    bool unique = !entries.empty();
+    std::unordered_set<unsigned> seen;
+    for (const BrushPalette::Entry& e : entries) {
+        const unsigned key = (static_cast<unsigned>(e.group) << 16) | e.mega;
+        if (!seen.insert(key).second) {
+            unique = false;
+            break;
+        }
+        if (doc.tileset().MegatileOf(e.value) != e.mega) {
+            unique = false;
+            break;
+        }
+    }
+
+    BrushPalette palette;
+    HINSTANCE instance = ::GetModuleHandleW(nullptr);
+    bool window = palette.Create(instance, nullptr);
+    bool click = false;
+    if (window) {
+        palette.Show(instance, nullptr, &doc.tileset(),
+                     entries.empty() ? 0 : entries.front().value);
+        ::UpdateWindow(palette.hwnd());
+        if (entries.size() >= 2) {
+            ::SendMessageW(palette.hwnd(), WM_KEYDOWN, VK_RIGHT, 0);
+            click = palette.selected() == entries[1].value;
+            // 再点第一格，验证鼠标命中（y=64 位于顶部筛选栏下方的瓦片网格）
+            ::SendMessageW(palette.hwnd(), WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(24, 64));
+            click = click && palette.selected() == entries.front().value;
+        } else {
+            click = true;
+        }
+        palette.Close();
+        window = !palette.IsOpen();
+    }
+
+    bool painted = false;
+    bool readback = false;
+    if (!entries.empty()) {
+        const u16 value = entries.front().value;
+        painted = doc.PaintTile(0, 0, value);
+        readback = doc.TileAt(0, 0) == value;
+    }
+
+    // 过滤：可走 / 阻挡 / 类型 / 组区间
+    bool filterOk = false;
+    if (!entries.empty()) {
+        const Tileset& ts = doc.tileset();
+        const int sampleType = ts.Type(entries.front().group);
+        const int sampleGroup = entries.front().group;
+
+        BrushPalette::Filter walkFilter;
+        walkFilter.walkable = 1;
+        const auto walkable = BrushPalette::BuildEntries(ts, walkFilter);
+        bool walkOk = true;
+        for (const auto& e : walkable) {
+            if (!ts.IsWalkable(e.group)) walkOk = false;
+        }
+
+        BrushPalette::Filter blockFilter;
+        blockFilter.walkable = 0;
+        const auto blocked = BrushPalette::BuildEntries(ts, blockFilter);
+        bool blockOk = true;
+        for (const auto& e : blocked) {
+            if (ts.IsWalkable(e.group)) blockOk = false;
+        }
+
+        BrushPalette::Filter typeFilter;
+        typeFilter.type = sampleType;
+        const auto typed = BrushPalette::BuildEntries(ts, typeFilter);
+        bool typeOk = !typed.empty();
+        for (const auto& e : typed) {
+            if (ts.Type(e.group) != sampleType) typeOk = false;
+        }
+
+        BrushPalette::Filter groupFilter;
+        groupFilter.groupMin = sampleGroup;
+        groupFilter.groupMax = sampleGroup;
+        const auto ranged = BrushPalette::BuildEntries(ts, groupFilter);
+        bool groupOk = !ranged.empty();
+        for (const auto& e : ranged) {
+            if (e.group != sampleGroup) groupOk = false;
+        }
+        filterOk = walkOk && blockOk && typeOk && groupOk;
+    }
+
+    // .scb 文件往返
+    bool fileOk = false;
+    {
+        std::vector<TerrainBrush> brushes;
+        TerrainBrush brush;
+        brush.SetFromTiles(2, 2, {0x0040, 0x0041, 0x0042, 0x0043}, L"测试刷子");
+        brushes.push_back(brush);
+
+        wchar_t path[MAX_PATH] = L"";
+        ::GetTempPathW(MAX_PATH, path);
+        ::lstrcatW(path, L"scmd_brush_test.scb");
+        const bool savedFile = SaveBrushes(path, brushes);
+        std::vector<TerrainBrush> loaded;
+        const bool loadedFile = LoadBrushes(path, loaded);
+        fileOk = savedFile && loadedFile && loaded.size() == 1 &&
+                 loaded[0].name == L"测试刷子" && loaded[0].width == 2 &&
+                 loaded[0].height == 2 && loaded[0].tiles == brush.tiles;
+        ::DeleteFileW(path);
+    }
+
+    wchar_t msg[384];
+    ::wsprintfW(msg, L"entries=%u unique=%d window=%d click=%d paint=%d readback=%d filters=%d file=%d\n",
+                static_cast<unsigned>(entries.size()), unique ? 1 : 0, window ? 1 : 0,
+                click ? 1 : 0, painted ? 1 : 0, readback ? 1 : 0,
+                filterOk ? 1 : 0, fileOk ? 1 : 0);
+    WriteDiag(msg);
+    return (unique && window && click && painted && readback && filterOk && fileOk) ? 0 : 2;
 }
 
 int RunFileTest(const std::wstring& outPath) {
@@ -697,24 +1188,1175 @@ int RunUndoTest(const std::wstring& mapPath) {
     history.Push(MakeCommand(doc, doc.tiles(), doc.units(), L"空操作"));
     const bool redoCleared = !history.CanRedo();
 
+    // 5) 元数据（TRIG/MRGN/STR）撤销/重做
+    const Buffer mt0 = doc.triggers().Serialize();
+    const Buffer ml0 = doc.locations().Serialize();
+    const Buffer ms0 = doc.strings().Serialize();
+
+    doc.mutableStrings().Set(1, "meta-undo");
+    Location metaLoc;
+    metaLoc.left = 1;
+    metaLoc.top = 2;
+    metaLoc.right = 10;
+    metaLoc.bottom = 11;
+    doc.mutableLocations().MutableItems().push_back(metaLoc);
+    Trigger metaTrigger;
+    metaTrigger.executionFlags = 1;
+    doc.mutableTriggers().MutableItems().push_back(metaTrigger);
+
+    const Buffer mt1 = doc.triggers().Serialize();
+    const Buffer ml1 = doc.locations().Serialize();
+    const Buffer ms1 = doc.strings().Serialize();
+
+    EditCommand meta;
+    meta.label = L"元数据";
+    meta.tilesBefore = doc.tiles();
+    meta.tilesAfter = doc.tiles();
+    meta.unitsBefore = doc.units();
+    meta.unitsAfter = doc.units();
+    meta.hasMeta = true;
+    meta.triggersBefore = mt0;
+    meta.triggersAfter = mt1;
+    meta.locationsBefore = ml0;
+    meta.locationsAfter = ml1;
+    meta.stringsBefore = ms0;
+    meta.stringsAfter = ms1;
+    history.Push(std::move(meta));
+
+    history.Undo(doc);
+    const bool metaUndoOk = doc.triggers().Serialize() == mt0 &&
+                            doc.locations().Serialize() == ml0 &&
+                            doc.strings().Serialize() == ms0;
+    history.Redo(doc);
+    const bool metaRedoOk = doc.triggers().Serialize() == mt1 &&
+                            doc.locations().Serialize() == ml1 &&
+                            doc.strings().Serialize() == ms1;
+
     wchar_t msg[512];
     ::wsprintfW(msg,
         L"tileEdit=%d\ntileUndo=%d\ntileRedo=%d\nplaceOk=%d\nplaceUndo=%d\nplaceRedo=%d\n"
-        L"removeUndo=%d\nundoCount=%u\nredoCleared=%d\nregionOk=%d\n",
+        L"removeUndo=%d\nundoCount=%u\nredoCleared=%d\nregionOk=%d\nmetaUndo=%d\nmetaRedo=%d\n",
         tileEditOk ? 1 : 0, tileUndoOk ? 1 : 0, tileRedoOk ? 1 : 0,
         placeOk ? 1 : 0, placeUndoOk ? 1 : 0, placeRedoOk ? 1 : 0,
         removeUndoOk ? 1 : 0, static_cast<unsigned>(history.UndoCount()),
-        redoCleared ? 1 : 0, regionOk ? 1 : 0);
+        redoCleared ? 1 : 0, regionOk ? 1 : 0, metaUndoOk ? 1 : 0, metaRedoOk ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = tileEditOk && tileUndoOk && tileRedoOk && placeOk && placeUndoOk &&
-                    placeRedoOk && removeUndoOk && regionOk;
+                    placeRedoOk && removeUndoOk && regionOk && metaUndoOk && metaRedoOk;
     return ok ? 0 : 2;
 }
 
-// --section-test：校验 TRIG/MRGN/STR 的解析与无损重建
-int RunSectionTest(const std::wstring& mapPath) {
+// --player-test=<输出scx>：OWNR/SIDE/FORC/COLR 解析、修改、撤销、保存回归
+int RunPlayerTest(const std::wstring& mapPath, const std::wstring& outPath) {
     MapDocument doc;
+    if (!doc.Open(mapPath, std::wstring())) {
+        WriteDiag(L"open=FAIL\n");
+        return 2;
+    }
+
+    auto sectionOf = [](const MapDocument& d, const char* name) -> Buffer {
+        const Buffer* data = d.chk().Find(name);
+        return data ? *data : Buffer();
+    };
+    const Buffer upgr0 = sectionOf(doc, "UPGR");
+    const Buffer dim0 = sectionOf(doc, "DIM ");
+    const Buffer mtxm0 = sectionOf(doc, "MTXM");
+
+    const bool parsed = doc.players().hasOwnr() && doc.players().hasSide() &&
+                        doc.players().hasForc() && doc.players().hasColr();
+    const Buffer before = doc.players().Snapshot();
+
+    doc.mutablePlayers().SetController(0, static_cast<u8>(PlayerController::kHumanOpen));
+    doc.mutablePlayers().SetRace(0, static_cast<u8>(PlayerRace::kProtoss));
+    doc.mutablePlayers().SetColor(0, 5);
+    doc.mutablePlayers().SetForce(0, 2);
+    doc.mutablePlayers().SetForceNameId(1, 9);
+    doc.mutablePlayers().SetForceFlags(1, 3);
+    doc.mutablePlayers().SetController(11, static_cast<u8>(PlayerController::kNeutral));
+    const Buffer after = doc.players().Snapshot();
+
+    EditHistory history;
+    EditCommand cmd;
+    cmd.label = L"玩家/势力";
+    cmd.tilesBefore = doc.tiles();
+    cmd.tilesAfter = doc.tiles();
+    cmd.unitsBefore = doc.units();
+    cmd.unitsAfter = doc.units();
+    cmd.hasPlayers = true;
+    cmd.playersBefore = before;
+    cmd.playersAfter = after;
+    history.Push(std::move(cmd));
+    history.Undo(doc);
+    const bool undoOk = doc.players().Snapshot() == before;
+    history.Redo(doc);
+    const bool redoOk = doc.players().Snapshot() == after;
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    const PlayerSlot& p0 = check.players().player(0);
+    const PlayerSlot& p11 = check.players().player(11);
+    const ForceSettings& f1 = check.players().force(1);
+    const bool fieldsOk = reopened && p0.controller == 6 && p0.race == 2 && p0.color == 5 &&
+                          p0.force == 2 && p11.controller == 7 && f1.nameStringId == 9 &&
+                          f1.flags == 3;
+    const bool preserved = reopened && sectionOf(check, "UPGR") == upgr0 &&
+                           sectionOf(check, "DIM ") == dim0 &&
+                           sectionOf(check, "MTXM") == mtxm0;
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+                L"open=OK\nparsed=%d\nundo=%d\nredo=%d\nsaved=%d\nreopened=%d\n"
+                L"fields=%d\npreserved=%d\n",
+                parsed ? 1 : 0, undoOk ? 1 : 0, redoOk ? 1 : 0, saved ? 1 : 0,
+                reopened ? 1 : 0, fieldsOk ? 1 : 0, preserved ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = parsed && undoOk && redoOk && saved && reopened && fieldsOk && preserved;
+    return ok ? 0 : 2;
+}
+
+// --restriction-test=<输出scx>：UPGR/PTEC/PUPx/PTEx 解析、修改、撤销、保存回归
+int RunRestrictionTest(const std::wstring& mapPath, const std::wstring& outPath) {
+    MapDocument doc;
+    if (!doc.Open(mapPath, std::wstring())) {
+        WriteDiag(L"open=FAIL\n");
+        return 2;
+    }
+
+    auto sectionOf = [](const MapDocument& d, const char* name) -> Buffer {
+        const Buffer* data = d.chk().Find(name);
+        return data ? *data : Buffer();
+    };
+    const Buffer ownr0 = sectionOf(doc, "OWNR");
+    const Buffer dim0 = sectionOf(doc, "DIM ");
+    const Buffer mtxm0 = sectionOf(doc, "MTXM");
+    const bool parsed = doc.restrictions().upgr.present;
+    const Buffer before = doc.restrictions().Snapshot();
+
+    UpgradeTechRestrictions& restrictions = doc.mutableRestrictions();
+    restrictions.upgr.SetGlobalPrimary(0, 3);
+    restrictions.upgr.SetGlobalSecondary(0, 1);
+    restrictions.upgr.SetPrimary(0, 0, 2);
+    restrictions.upgr.SetSecondary(0, 0, 1);
+    restrictions.upgr.SetUseDefaults(0, 0, 0);
+    restrictions.ptec.SetGlobalPrimary(1, 1);
+    restrictions.ptec.SetPrimary(2, 1, 1);
+    restrictions.pupx.SetGlobalPrimary(0, 3);
+    restrictions.ptex.SetPrimary(0, 0, 1);
+    const Buffer after = restrictions.Snapshot();
+
+    EditHistory history;
+    EditCommand cmd;
+    cmd.label = L"升级/科技限制";
+    cmd.tilesBefore = doc.tiles();
+    cmd.tilesAfter = doc.tiles();
+    cmd.unitsBefore = doc.units();
+    cmd.unitsAfter = doc.units();
+    cmd.hasRestrictions = true;
+    cmd.restrictionsBefore = before;
+    cmd.restrictionsAfter = after;
+    history.Push(std::move(cmd));
+    history.Undo(doc);
+    const bool undoOk = doc.restrictions().Snapshot() == before;
+    history.Redo(doc);
+    const bool redoOk = doc.restrictions().Snapshot() == after;
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    const UpgradeTechRestrictions& r = check.restrictions();
+    const bool fieldsOk = reopened &&
+        r.upgr.present && r.upgr.GlobalPrimary(0) == 3 && r.upgr.GlobalSecondary(0) == 1 &&
+        r.upgr.Primary(0, 0) == 2 && r.upgr.Secondary(0, 0) == 1 &&
+        r.upgr.UseDefaults(0, 0) == 0 &&
+        r.ptec.present && r.ptec.GlobalPrimary(1) == 1 && r.ptec.Primary(2, 1) == 1 &&
+        r.pupx.present && r.pupx.GlobalPrimary(0) == 3 &&
+        r.ptex.present && r.ptex.Primary(0, 0) == 1;
+    const bool sizesOk = reopened &&
+        sectionOf(check, "UPGR").size() == 1748 &&
+        sectionOf(check, "PTEC").size() == 912 &&
+        sectionOf(check, "PUPx").size() == 2318 &&
+        sectionOf(check, "PTEx").size() == 1672;
+    const bool preserved = reopened && sectionOf(check, "OWNR") == ownr0 &&
+                           sectionOf(check, "DIM ") == dim0 &&
+                           sectionOf(check, "MTXM") == mtxm0;
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+                L"open=OK\nparsed=%d\nundo=%d\nredo=%d\nsaved=%d\nreopened=%d\n"
+                L"fields=%d\nsizes=%d\npreserved=%d\n",
+                parsed ? 1 : 0, undoOk ? 1 : 0, redoOk ? 1 : 0, saved ? 1 : 0,
+                reopened ? 1 : 0, fieldsOk ? 1 : 0, sizesOk ? 1 : 0, preserved ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = parsed && undoOk && redoOk && saved && reopened && fieldsOk &&
+                    sizesOk && preserved;
+    return ok ? 0 : 2;
+}
+
+// --location-test=<输出scx>：Location 171 → MRGN 写回回归
+// 修改一条地点的矩形/高程标志/名称，验证撤销重做、保存重开与其它记录不变。
+int RunLocationTest(const std::wstring& mapPath, const std::wstring& outPath) {
+    MapDocument doc;
+    if (!doc.Open(mapPath, std::wstring())) {
+        WriteDiag(L"open=FAIL\n");
+        return 2;
+    }
+
+    auto sectionOf = [](const MapDocument& d, const char* name) -> Buffer {
+        const Buffer* data = d.chk().Find(name);
+        return data ? *data : Buffer();
+    };
+    const Buffer upgr0 = sectionOf(doc, "UPGR");
+    const Buffer dim0 = sectionOf(doc, "DIM ");
+    const Buffer mtxm0 = sectionOf(doc, "MTXM");
+
+    const bool parsed = doc.locations().Count() > 0;
+    if (!parsed) {
+        WriteDiag(L"no-locations\n");
+        return 2;
+    }
+    const std::size_t locCount = doc.locations().Count();
+    const Buffer locBefore = doc.locations().Serialize();
+    const Buffer strBefore = doc.strings().Serialize();
+    const Buffer trigBefore = doc.triggers().Serialize();
+
+    Location& loc0 = doc.mutableLocations().MutableItems()[0];
+    const Location original = loc0;
+    loc0.left = 2;
+    loc0.top = 3;
+    loc0.right = 9;
+    loc0.bottom = 11;
+    loc0.flags = static_cast<u16>((original.flags & ~0x3Fu) | 0x04u);   // 高地
+    int sid = original.stringId;
+    if (sid <= 0) sid = static_cast<int>(std::max<std::size_t>(1, doc.strings().Count()));
+    doc.mutableStrings().Set(static_cast<std::size_t>(sid), "SCMD-LOC-TEST");
+    loc0.stringId = static_cast<u16>(sid);
+    doc.MarkDirty();
+
+    const Buffer locAfter = doc.locations().Serialize();
+    const Buffer strAfter = doc.strings().Serialize();
+
+    EditHistory history;
+    EditCommand cmd;
+    cmd.label = L"编辑地点";
+    cmd.tilesBefore = doc.tiles();
+    cmd.tilesAfter = doc.tiles();
+    cmd.unitsBefore = doc.units();
+    cmd.unitsAfter = doc.units();
+    cmd.hasMeta = true;
+    cmd.triggersBefore = trigBefore;
+    cmd.triggersAfter = trigBefore;
+    cmd.locationsBefore = locBefore;
+    cmd.locationsAfter = locAfter;
+    cmd.stringsBefore = strBefore;
+    cmd.stringsAfter = strAfter;
+    history.Push(std::move(cmd));
+    history.Undo(doc);
+    const bool undoOk = doc.locations().Serialize() == locBefore &&
+                        doc.strings().Serialize() == strBefore;
+    history.Redo(doc);
+    const bool redoOk = doc.locations().Serialize() == locAfter &&
+                        doc.strings().Serialize() == strAfter;
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    const Location& c0 = check.locations().Items()[0];
+    const bool fieldsOk = reopened && check.locations().Count() == locCount && c0.left == 2 &&
+                          c0.top == 3 && c0.right == 9 && c0.bottom == 11 &&
+                          (c0.flags & 0x3Fu) == 0x04u && c0.stringId == sid &&
+                          check.strings().At(static_cast<std::size_t>(sid)) == "SCMD-LOC-TEST";
+    const bool reservedOk = reopened && std::memcmp(c0.reserved, original.reserved, 8) == 0;
+
+    bool othersOk = reopened && check.locations().Count() == locCount;
+    if (othersOk) {
+        const Buffer after = check.locations().Serialize();
+        othersOk = after.size() == locBefore.size();
+        if (othersOk) {
+            for (std::size_t i = 1; i < locCount; i++) {
+                if (std::memcmp(after.data() + i * 20, locBefore.data() + i * 20, 20) != 0) {
+                    othersOk = false;
+                    break;
+                }
+            }
+        }
+    }
+    const bool preserved = reopened && sectionOf(check, "UPGR") == upgr0 &&
+                           sectionOf(check, "DIM ") == dim0 &&
+                           sectionOf(check, "MTXM") == mtxm0;
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+                L"open=OK\nparsed=%d\nundo=%d\nredo=%d\nsaved=%d\nreopened=%d\n"
+                L"fields=%d\nreserved=%d\nothers=%d\npreserved=%d\n",
+                parsed ? 1 : 0, undoOk ? 1 : 0, redoOk ? 1 : 0, saved ? 1 : 0,
+                reopened ? 1 : 0, fieldsOk ? 1 : 0, reservedOk ? 1 : 0, othersOk ? 1 : 0,
+                preserved ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = parsed && undoOk && redoOk && saved && reopened && fieldsOk && reservedOk &&
+                    othersOk && preserved;
+    return ok ? 0 : 2;
+}
+
+// --decor-test=<输出scx>：DD2 装饰物 / MASK 战争迷雾解析、修改、撤销、保存回归
+int RunDecorTest(const std::wstring& mapPath, const std::wstring& outPath) {
+    MapDocument doc;
+    if (!doc.Open(mapPath, std::wstring())) {
+        WriteDiag(L"open=FAIL\n");
+        return 2;
+    }
+
+    auto sectionOf = [](const MapDocument& d, const char* name) -> Buffer {
+        const Buffer* data = d.chk().Find(name);
+        return data ? *data : Buffer();
+    };
+    const Buffer dd2Orig = sectionOf(doc, "DD2 ");
+    const Buffer maskOrig = sectionOf(doc, "MASK");
+    const Buffer thg2Orig = sectionOf(doc, "THG2");
+    const Buffer upgrOrig = sectionOf(doc, "UPGR");
+    const Buffer dimOrig = sectionOf(doc, "DIM ");
+    const Buffer mtxmOrig = sectionOf(doc, "MTXM");
+
+    const bool parsed = doc.doodads().present() && doc.doodads().Count() > 0 &&
+                        doc.fog().present() &&
+                        doc.fog().Serialize().size() ==
+                            static_cast<std::size_t>(doc.width()) * doc.height();
+    const bool roundtrip = doc.doodads().Serialize() == dd2Orig &&
+                           doc.fog().Serialize() == maskOrig;
+
+    // 整图填充语义：0x00 已探索 / 0xFF 未探索
+    bool fillOk = true;
+    {
+        FogMask fill;
+        fill.SetAll(0x00, doc.width(), doc.height());
+        for (int ty = 0; ty < doc.height() && fillOk; ty += 7) {
+            for (int tx = 0; tx < doc.width(); tx += 7) {
+                if (fill.IsFogged(tx, ty)) { fillOk = false; break; }
+            }
+        }
+        fill.SetAll(0xFF, doc.width(), doc.height());
+        for (int ty = 0; ty < doc.height() && fillOk; ty += 7) {
+            for (int tx = 0; tx < doc.width(); tx += 7) {
+                if (!fill.IsFogged(tx, ty)) { fillOk = false; break; }
+            }
+        }
+    }
+
+    const Buffer dd2Before = doc.doodads().Serialize();
+    const Buffer fogBefore = doc.fog().Serialize();
+    const Doodad dd0Orig = doc.doodads().Items()[0];
+    doc.mutableDoodads().MutableItems()[0].x = static_cast<u16>(dd0Orig.x + 32);
+    const bool fogA = doc.mutableFog().SetFogged(2, 2, !doc.fog().IsFogged(2, 2));
+    const bool fogB = doc.mutableFog().SetFogged(3, 2, doc.fog().IsFogged(2, 2));
+    const bool fogTarget = doc.fog().IsFogged(2, 2);
+    doc.MarkDirty();
+
+    const Buffer dd2After = doc.doodads().Serialize();
+    const Buffer fogAfter = doc.fog().Serialize();
+
+    EditHistory history;
+    EditCommand cmd;
+    cmd.label = L"装饰物/战争迷雾";
+    cmd.tilesBefore = doc.tiles();
+    cmd.tilesAfter = doc.tiles();
+    cmd.unitsBefore = doc.units();
+    cmd.unitsAfter = doc.units();
+    cmd.hasDecor = true;
+    cmd.doodadsBefore = dd2Before;
+    cmd.doodadsAfter = dd2After;
+    cmd.fogBefore = fogBefore;
+    cmd.fogAfter = fogAfter;
+    history.Push(std::move(cmd));
+    history.Undo(doc);
+    const bool undoOk = doc.doodads().Serialize() == dd2Before &&
+                        doc.fog().Serialize() == fogBefore;
+    history.Redo(doc);
+    const bool redoOk = doc.doodads().Serialize() == dd2After &&
+                        doc.fog().Serialize() == fogAfter;
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    const bool doodadsOk = reopened && check.doodads().Count() > 0 &&
+                           check.doodads().Items()[0].x == dd0Orig.x + 32;
+    const bool fogOk = reopened && check.fog().IsFogged(2, 2) == fogTarget &&
+                       check.fog().IsFogged(3, 2) == fogTarget;
+
+    bool othersOk = reopened && check.doodads().Count() == doc.doodads().Count();
+    if (othersOk) {
+        const Buffer after = check.doodads().Serialize();
+        othersOk = after.size() == dd2Before.size();
+        if (othersOk) {
+            for (std::size_t i = 1; i < check.doodads().Count(); i++) {
+                if (std::memcmp(after.data() + i * 8, dd2Before.data() + i * 8, 8) != 0) {
+                    othersOk = false;
+                    break;
+                }
+            }
+            // 迷雾除 (2,2)/(3,2) 外应与原始一致
+            const Buffer& fog = check.fog().Serialize();
+            if (fog.size() != fogBefore.size()) {
+                othersOk = false;
+            } else {
+                for (std::size_t i = 0; i < fog.size() && othersOk; i++) {
+                    const int tx = static_cast<int>(i % check.width());
+                    const int ty = static_cast<int>(i / check.width());
+                    if ((tx == 2 || tx == 3) && ty == 2) continue;
+                    if (fog[i] != fogBefore[i]) othersOk = false;
+                }
+            }
+        }
+    }
+    const bool preserved = reopened && sectionOf(check, "THG2") == thg2Orig &&
+                           sectionOf(check, "UPGR") == upgrOrig &&
+                           sectionOf(check, "DIM ") == dimOrig &&
+                           sectionOf(check, "MTXM") == mtxmOrig;
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+                L"open=OK\nparsed=%d\nroundtrip=%d\nfill=%d\nundo=%d\nredo=%d\n"
+                L"saved=%d\nreopened=%d\ndoodads=%d\nfog=%d\nothers=%d\npreserved=%d\n",
+                parsed ? 1 : 0, roundtrip ? 1 : 0, fillOk ? 1 : 0, undoOk ? 1 : 0,
+                redoOk ? 1 : 0, saved ? 1 : 0, reopened ? 1 : 0, doodadsOk ? 1 : 0,
+                (fogA || fogB) && fogOk ? 1 : 0, othersOk ? 1 : 0, preserved ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = parsed && roundtrip && fillOk && undoOk && redoOk && saved && reopened &&
+                    doodadsOk && fogOk && othersOk && preserved;
+    return ok ? 0 : 2;
+}
+
+// --sprite-test=<输出scx>：THG2 SP 单位解析、写入、保存重开回归
+int RunSpriteTest(const std::wstring& mapPath, const std::wstring& outPath) {
+    // 独立构造 3 条记录，校验 10 字节布局与 bit12 语义
+    Buffer raw(30, 0);
+    auto put16 = [&raw](std::size_t off, u16 v) {
+        raw[off] = static_cast<u8>(v & 0xFF);
+        raw[off + 1] = static_cast<u8>(v >> 8);
+    };
+    put16(0, 100);
+    put16(2, 4 * 32);
+    put16(4, 4 * 32);
+    raw[6] = 0;
+    raw[7] = 0;
+    put16(8, 0x1000);
+    put16(10, 101);
+    put16(12, 6 * 32);
+    put16(14, 4 * 32);
+    raw[16] = 1;
+    put16(18, 0x0000);
+    put16(20, 102);
+    put16(22, 8 * 32);
+    put16(24, 5 * 32);
+    raw[26] = 2;
+    put16(28, 0x1000);
+
+    SpriteTable table;
+    const bool roundtrip = table.Parse(raw) && table.Serialize() == raw &&
+                           table.Count() == 3 && table.Items()[0].DrawAsSprite() &&
+                           !table.Items()[1].DrawAsSprite() &&
+                           table.Items()[2].DrawAsSprite();
+
+    // 长度异常：不解析，序列化原样返回
+    Buffer bad(7, 0xAA);
+    SpriteTable badTable;
+    const bool malformed = !badTable.Parse(bad) && badTable.Serialize() == bad;
+
+    MapDocument doc;
+    if (!doc.Open(mapPath, std::wstring())) {
+        WriteDiag(L"open=FAIL\n");
+        return 2;
+    }
+    auto sectionOf = [](const MapDocument& d, const char* name) -> Buffer {
+        const Buffer* data = d.chk().Find(name);
+        return data ? *data : Buffer();
+    };
+    const Buffer dd2Orig = sectionOf(doc, "DD2 ");
+    const Buffer maskOrig = sectionOf(doc, "MASK");
+    const Buffer upgrOrig = sectionOf(doc, "UPGR");
+    const Buffer dimOrig = sectionOf(doc, "DIM ");
+    const Buffer mtxmOrig = sectionOf(doc, "MTXM");
+
+    auto& items = doc.mutableSprites().MutableItems();
+    items.push_back({100, 4 * 32, 4 * 32, 0, 0, 0x1000});
+    items.push_back({101, 6 * 32, 4 * 32, 1, 0, 0x0000});
+    items.push_back({102, 8 * 32, 5 * 32, 2, 0, 0x1000});
+    doc.MarkDirty();
+
+    // 模拟 164：玩家 / 未用字节 / Flag 位（bit0 + 普通SP + Flipped + 禁用）
+    const Buffer spritesBefore = doc.sprites().Serialize();
+    const Buffer doodadsNow = doc.doodads().Serialize();
+    const Buffer fogNow = doc.fog().Serialize();
+    SpriteRecord& s0 = doc.mutableSprites().MutableItems()[0];
+    s0.owner = 2;
+    s0.unused = 0x7F;
+    s0.flags = static_cast<u16>(0x1000u | 0x2000u | 0x8000u | 0x0001u);
+    const Buffer spritesAfter = doc.sprites().Serialize();
+
+    EditHistory history;
+    EditCommand cmd;
+    cmd.label = L"SP单位属性";
+    cmd.tilesBefore = doc.tiles();
+    cmd.tilesAfter = doc.tiles();
+    cmd.unitsBefore = doc.units();
+    cmd.unitsAfter = doc.units();
+    cmd.hasDecor = true;
+    cmd.doodadsBefore = doodadsNow;
+    cmd.doodadsAfter = doodadsNow;
+    cmd.fogBefore = fogNow;
+    cmd.fogAfter = fogNow;
+    cmd.spritesBefore = spritesBefore;
+    cmd.spritesAfter = spritesAfter;
+    history.Push(std::move(cmd));
+    history.Undo(doc);
+    const bool undoOk = doc.sprites().Serialize() == spritesBefore;
+    history.Redo(doc);
+    const bool redoOk = doc.sprites().Serialize() == spritesAfter;
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    const bool fieldsOk = reopened && check.sprites().Count() == 3 &&
+                          check.sprites().Items()[0].type == 100 &&
+                          check.sprites().Items()[0].x == 4 * 32 &&
+                          check.sprites().Items()[0].owner == 2 &&
+                          check.sprites().Items()[0].unused == 0x7F &&
+                          check.sprites().Items()[0].flags == 0xB001u &&
+                          check.sprites().Items()[1].owner == 1 &&
+                          check.sprites().Items()[2].DrawAsSprite() &&
+                          sectionOf(check, "THG2").size() == 30;
+    const bool preserved = reopened && sectionOf(check, "DD2 ") == dd2Orig &&
+                           sectionOf(check, "MASK") == maskOrig &&
+                           sectionOf(check, "UPGR") == upgrOrig &&
+                           sectionOf(check, "DIM ") == dimOrig &&
+                           sectionOf(check, "MTXM") == mtxmOrig;
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+                L"open=OK\nroundtrip=%d\nmalformed=%d\nundo=%d\nredo=%d\nsaved=%d\n"
+                L"reopened=%d\nfields=%d\npreserved=%d\n",
+                roundtrip ? 1 : 0, malformed ? 1 : 0, undoOk ? 1 : 0, redoOk ? 1 : 0,
+                saved ? 1 : 0, reopened ? 1 : 0, fieldsOk ? 1 : 0, preserved ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = roundtrip && malformed && undoOk && redoOk && saved && reopened &&
+                    fieldsOk && preserved;
+    return ok ? 0 : 2;
+}
+
+// --radar-test=<输出scx>：小雷达（Map Revealer）与迷雾开关回归
+int RunRadarTest(const std::wstring& mapPath, const std::wstring& outPath) {
+    MapDocument doc;
+    if (!doc.Open(mapPath, std::wstring())) {
+        WriteDiag(L"open=FAIL\n");
+        return 2;
+    }
+
+    auto sectionOf = [](const MapDocument& d, const char* name) -> Buffer {
+        const Buffer* data = d.chk().Find(name);
+        return data ? *data : Buffer();
+    };
+    const Buffer dd2Orig = sectionOf(doc, "DD2 ");
+    const Buffer thg2Orig = sectionOf(doc, "THG2");
+    const Buffer upgrOrig = sectionOf(doc, "UPGR");
+    const Buffer dimOrig = sectionOf(doc, "DIM ");
+    const Buffer mtxmOrig = sectionOf(doc, "MTXM");
+
+    auto gridCount = [](int w, int h) {
+        int n = 0;
+        for (int y = kMapRevealerGridStep; y < h; y += kMapRevealerGridStep) {
+            for (int x = kMapRevealerGridStep; x < w; x += kMapRevealerGridStep) n++;
+        }
+        return n;
+    };
+    auto countRevealers = [&doc](int player) {
+        int n = 0;
+        for (const auto& u : doc.units()) {
+            if (u.type != kMapRevealerUnitType) continue;
+            if (player < 0 ? u.owner < 8 : u.owner == player) n++;
+        }
+        return n;
+    };
+
+    const int perPlayer = gridCount(doc.width(), doc.height());
+    const std::size_t baseUnits = doc.units().size();
+    const std::vector<UnitRecord> unitsBefore = doc.units();
+
+    const int placed0 = PlaceMapRevealers(doc, 0);
+    const bool placeOk = perPlayer > 0 && placed0 == perPlayer && countRevealers(0) == perPlayer;
+
+    EditHistory history;
+    EditCommand cmd;
+    cmd.label = L"放置小雷达";
+    cmd.tilesBefore = doc.tiles();
+    cmd.tilesAfter = doc.tiles();
+    cmd.unitsBefore = unitsBefore;
+    cmd.unitsAfter = doc.units();
+    history.Push(std::move(cmd));
+    history.Undo(doc);
+    const bool radarUndo = doc.units().size() == baseUnits && countRevealers(0) == 0;
+    history.Redo(doc);
+    const bool radarRedo = doc.units().size() == baseUnits + perPlayer &&
+                           countRevealers(0) == perPlayer;
+
+    const int placedAll = PlaceMapRevealers(doc, -1);
+    const bool placeAllOk = placedAll == 7 * perPlayer && countRevealers(-1) == 8 * perPlayer;
+    const int removed0 = RemoveMapRevealers(doc, 0);
+    const int removedAll = RemoveMapRevealers(doc, -1);
+    const bool removeOk = removed0 == perPlayer && removedAll == 7 * perPlayer &&
+                          countRevealers(-1) == 0 && doc.units().size() == baseUnits;
+
+    // 迷雾：按玩家清/置位，其它玩家的位保持不变
+    const Buffer fogOrig = doc.fog().Serialize();
+    bool fogOk = fogOrig.size() == static_cast<std::size_t>(doc.width()) * doc.height();
+    const Buffer doodadsNow = doc.doodads().Serialize();
+    SetFogForPlayers(doc, 0, false);
+    const Buffer fogAfter = doc.fog().Serialize();
+    if (fogAfter.size() == fogOrig.size()) {
+        for (std::size_t i = 0; i < fogAfter.size(); i++) {
+            if ((fogAfter[i] & 0x01u) != 0) fogOk = false;
+            if ((fogAfter[i] & 0xFEu) != (fogOrig[i] & 0xFEu)) fogOk = false;
+        }
+    } else {
+        fogOk = false;
+    }
+
+    EditCommand fcmd;
+    fcmd.label = L"禁止迷雾";
+    fcmd.tilesBefore = doc.tiles();
+    fcmd.tilesAfter = doc.tiles();
+    fcmd.unitsBefore = doc.units();
+    fcmd.unitsAfter = doc.units();
+    fcmd.hasDecor = true;
+    fcmd.doodadsBefore = doodadsNow;
+    fcmd.doodadsAfter = doodadsNow;
+    fcmd.fogBefore = fogOrig;
+    fcmd.fogAfter = fogAfter;
+    history.Push(std::move(fcmd));
+    history.Undo(doc);
+    const bool fogUndo = doc.fog().Serialize() == fogOrig;
+    history.Redo(doc);
+    const bool fogRedo = doc.fog().Serialize() == fogAfter;
+
+    SetFogForPlayers(doc, 1, true);
+    const Buffer fogP1 = doc.fog().Serialize();
+    bool p1Ok = fogP1.size() == fogAfter.size();
+    for (std::size_t i = 0; i < fogP1.size() && p1Ok; i++) {
+        if ((fogP1[i] & 0x02u) == 0) p1Ok = false;
+    }
+    SetFogForPlayers(doc, -1, false);
+    const Buffer fogNone = doc.fog().Serialize();
+    bool noneOk = fogNone.size() == fogOrig.size();
+    for (std::size_t i = 0; i < fogNone.size() && noneOk; i++) {
+        if (fogNone[i] != 0x00) noneOk = false;
+    }
+    SetFogForPlayers(doc, -1, true);
+    const Buffer fogFull = doc.fog().Serialize();
+    bool fullOk = fogFull.size() == fogOrig.size();
+    for (std::size_t i = 0; i < fogFull.size() && fullOk; i++) {
+        if (fogFull[i] != 0xFF) fullOk = false;
+    }
+    fogOk = fogOk && p1Ok && noneOk && fullOk;
+
+    // 最终落盘状态：Player 2 的小雷达 + 禁止 Player 2 迷雾（其余位保持 1）
+    PlaceMapRevealers(doc, 1);
+    SetFogForPlayers(doc, 1, false);
+    const bool saved = doc.Save(outPath);
+
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    int checkRevealers = 0;
+    for (const auto& u : check.units()) {
+        if (u.type == kMapRevealerUnitType && u.owner == 1) checkRevealers++;
+    }
+    const Buffer mask = check.fog().Serialize();
+    bool maskOk = mask.size() == static_cast<std::size_t>(check.width()) * check.height();
+    for (std::size_t i = 0; i < mask.size() && maskOk; i++) {
+        if (mask[i] != 0xFD) maskOk = false;   // 仅 bit1 被清除
+    }
+    const bool fieldsOk = reopened && checkRevealers == perPlayer && maskOk &&
+                          check.units().size() == baseUnits + perPlayer;
+    const bool preserved = reopened && sectionOf(check, "DD2 ") == dd2Orig &&
+                           sectionOf(check, "THG2") == thg2Orig &&
+                           sectionOf(check, "UPGR") == upgrOrig &&
+                           sectionOf(check, "DIM ") == dimOrig &&
+                           sectionOf(check, "MTXM") == mtxmOrig;
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+                L"open=OK\nplace=%d\nremove=%d\nfog=%d\nundo=%d\nredo=%d\n"
+                L"saved=%d\nreopened=%d\nfields=%d\npreserved=%d\n",
+                placeOk && placeAllOk ? 1 : 0, removeOk ? 1 : 0, fogOk ? 1 : 0,
+                radarUndo && fogUndo ? 1 : 0, radarRedo && fogRedo ? 1 : 0,
+                saved ? 1 : 0, reopened ? 1 : 0, fieldsOk ? 1 : 0,
+                preserved ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = placeOk && placeAllOk && removeOk && fogOk && radarUndo && fogUndo &&
+                    radarRedo && fogRedo && saved && reopened && fieldsOk && preserved;
+    return ok ? 0 : 2;
+}
+
+// --scenario-text-test=<输出scx>：WAV 声音 / SWNM 开关名 / MBRF 任务简报回归
+int RunScenarioTextTest(const std::wstring& mapPath, const std::wstring& outPath) {
+    MapDocument doc;
+    if (!doc.Open(mapPath, std::wstring())) {
+        WriteDiag(L"open=FAIL\n");
+        return 2;
+    }
+    auto sectionOf = [](const MapDocument& d, const char* name) -> Buffer {
+        const Buffer* data = d.chk().Find(name);
+        return data ? *data : Buffer();
+    };
+    const Buffer wavBefore = sectionOf(doc, "WAV ");
+    const Buffer swnmBefore = sectionOf(doc, "SWNM");
+    const Buffer mbrfBefore = sectionOf(doc, "MBRF");
+    const Buffer strBefore = sectionOf(doc, "STR ");
+    const Buffer trigBefore = sectionOf(doc, "TRIG");
+    const Buffer mrgnBefore = sectionOf(doc, "MRGN");
+    const Buffer dd2Orig = sectionOf(doc, "DD2 ");
+    const Buffer thg2Orig = sectionOf(doc, "THG2");
+    const Buffer upgrOrig = sectionOf(doc, "UPGR");
+    const Buffer dimOrig = sectionOf(doc, "DIM ");
+    const Buffer mtxmOrig = sectionOf(doc, "MTXM");
+
+    // 声音：槽 5 指向新建的 STR
+    const int sidSound = static_cast<int>(std::max<std::size_t>(1, doc.strings().Count()));
+    doc.mutableStrings().Set(static_cast<std::size_t>(sidSound), "sound\\test.wav");
+    doc.mutableSounds().Set(5, static_cast<u32>(sidSound));
+    const bool soundOk = doc.sounds().Get(5) == static_cast<u32>(sidSound);
+
+    // 开关名：开关 4（下标 3）
+    const int sidSwitch = static_cast<int>(std::max<std::size_t>(1, doc.strings().Count()));
+    doc.mutableStrings().Set(static_cast<std::size_t>(sidSwitch), "Switch 3 Name");
+    doc.mutableSwitchNames().Set(3, static_cast<u32>(sidSwitch));
+    const bool switchOk = doc.switchNames().Get(3) == static_cast<u32>(sidSwitch);
+
+    // 任务简报：编辑第一条文本/目标/传输行动；没有则补一条
+    auto& blocks = doc.mutableBriefing().MutableItems();
+    if (blocks.empty()) {
+        Trigger t;
+        t.conditions[0].type = 13;      // 任务简报
+        t.actions[0].type = 3;          // 文本消息
+        t.actions[0].player = 0;
+        blocks.push_back(t);
+    }
+    int bb = -1, aa = -1;
+    for (int b = 0; b < static_cast<int>(blocks.size()) && aa < 0; b++) {
+        for (int a = 0; a < static_cast<int>(TriggerSection::kActionCount); a++) {
+            const u8 type = blocks[static_cast<std::size_t>(b)].actions[a].type;
+            if (type == 0) break;
+            if (type == 3 || type == 4 || type == 8) {
+                bb = b;
+                aa = a;
+                break;
+            }
+        }
+    }
+    if (aa < 0) {
+        bb = 0;
+        for (int a = 0; a < static_cast<int>(TriggerSection::kActionCount); a++) {
+            if (blocks[0].actions[a].type == 0) {
+                blocks[0].actions[a].type = 3;
+                blocks[0].actions[a].player = 0;
+                aa = a;
+                break;
+            }
+        }
+    }
+    const int sidBrief = static_cast<int>(std::max<std::size_t>(1, doc.strings().Count()));
+    doc.mutableStrings().Set(static_cast<std::size_t>(sidBrief), "Briefing Text");
+    if (bb >= 0 && aa >= 0) {
+        blocks[static_cast<std::size_t>(bb)].actions[aa].stringId = static_cast<u32>(sidBrief);
+    }
+    const bool briefingOk = bb >= 0 && aa >= 0;
+    doc.MarkDirty();
+
+    const Buffer wavAfter = doc.sounds().Serialize();
+    const Buffer swnmAfter = doc.switchNames().Serialize();
+    const Buffer mbrfAfter = doc.briefing().Serialize();
+    const Buffer strAfter = doc.strings().Serialize();
+
+    EditHistory history;
+    EditCommand cmd;
+    cmd.label = L"声音/开关名/简报";
+    cmd.tilesBefore = doc.tiles();
+    cmd.tilesAfter = doc.tiles();
+    cmd.unitsBefore = doc.units();
+    cmd.unitsAfter = doc.units();
+    cmd.hasMeta = true;
+    cmd.triggersBefore = trigBefore;
+    cmd.triggersAfter = trigBefore;
+    cmd.locationsBefore = mrgnBefore;
+    cmd.locationsAfter = mrgnBefore;
+    cmd.stringsBefore = strBefore;
+    cmd.stringsAfter = strAfter;
+    cmd.hasScenarioExtra = true;
+    cmd.wavBefore = wavBefore;
+    cmd.wavAfter = wavAfter;
+    cmd.swnmBefore = swnmBefore;
+    cmd.swnmAfter = swnmAfter;
+    cmd.mbrfBefore = mbrfBefore;
+    cmd.mbrfAfter = mbrfAfter;
+    history.Push(std::move(cmd));
+    history.Undo(doc);
+    const bool undoOk = doc.sounds().Serialize() == wavBefore &&
+                        doc.switchNames().Serialize() == swnmBefore &&
+                        doc.briefing().Serialize() == mbrfBefore &&
+                        doc.strings().Serialize() == strBefore;
+    history.Redo(doc);
+    const bool redoOk = doc.sounds().Serialize() == wavAfter &&
+                        doc.switchNames().Serialize() == swnmAfter &&
+                        doc.briefing().Serialize() == mbrfAfter &&
+                        doc.strings().Serialize() == strAfter;
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    const u32 soundSid = check.sounds().Get(5);
+    const u32 switchSid = check.switchNames().Get(3);
+    bool briefTextOk = false;
+    for (const auto& t : check.briefing().Items()) {
+        for (int a = 0; a < static_cast<int>(TriggerSection::kActionCount); a++) {
+            if (t.actions[a].type == 0) break;
+            if ((t.actions[a].type == 3 || t.actions[a].type == 4 || t.actions[a].type == 8) &&
+                check.strings().At(t.actions[a].stringId) == "Briefing Text") {
+                briefTextOk = true;
+            }
+        }
+    }
+    const bool fieldsOk = reopened && soundSid != 0 &&
+                          check.strings().At(soundSid) == "sound\\test.wav" &&
+                          switchSid != 0 && check.strings().At(switchSid) == "Switch 3 Name" &&
+                          briefTextOk && sectionOf(check, "WAV ").size() == 2048 &&
+                          sectionOf(check, "SWNM").size() == 1024 &&
+                          sectionOf(check, "MBRF").size() % 2400 == 0;
+    const bool preserved = reopened && sectionOf(check, "DD2 ") == dd2Orig &&
+                           sectionOf(check, "THG2") == thg2Orig &&
+                           sectionOf(check, "UPGR") == upgrOrig &&
+                           sectionOf(check, "DIM ") == dimOrig &&
+                           sectionOf(check, "MTXM") == mtxmOrig;
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+                L"open=OK\nsounds=%d\nswitches=%d\nbriefing=%d\nundo=%d\nredo=%d\n"
+                L"saved=%d\nreopened=%d\nfields=%d\npreserved=%d\n",
+                soundOk ? 1 : 0, switchOk ? 1 : 0, briefingOk ? 1 : 0, undoOk ? 1 : 0,
+                redoOk ? 1 : 0, saved ? 1 : 0, reopened ? 1 : 0, fieldsOk ? 1 : 0,
+                preserved ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = soundOk && switchOk && briefingOk && undoOk && redoOk && saved &&
+                    reopened && fieldsOk && preserved;
+    return ok ? 0 : 2;
+}
+
+// --map-tools-test=<输出scx>：转换地形（删除 DD2）/ 矿物外形随机回归
+int RunMapToolsTest(const std::wstring& mapPath, const std::wstring& outPath) {
+    MapDocument doc;
+    if (!doc.Open(mapPath, ParseTsArg())) {
+        WriteDiag(L"open=FAIL\n");
+        return 2;
+    }
+    auto sectionOf = [](const MapDocument& d, const char* name) -> Buffer {
+        const Buffer* data = d.chk().Find(name);
+        return data ? *data : Buffer();
+    };
+    const Buffer maskOrig = sectionOf(doc, "MASK");
+    const Buffer thg2Orig = sectionOf(doc, "THG2");
+    const Buffer upgrOrig = sectionOf(doc, "UPGR");
+    const Buffer dimOrig = sectionOf(doc, "DIM ");
+    const Buffer mtxmOrig = sectionOf(doc, "MTXM");
+
+    // 转换地形：删除整图 DD2 记录（MTXM/THG2 保留）
+    const int doodadsBefore = static_cast<int>(doc.doodads().Count());
+    const Buffer doodadsBytesBefore = doc.doodads().Serialize();
+    const Buffer fogNow = doc.fog().Serialize();
+    const Buffer spritesNow = doc.sprites().Serialize();
+    const int removed = doc.mutableDoodads().RemoveInTileRect(0, 0, doc.width() - 1,
+                                                              doc.height() - 1);
+    const bool convertOk = removed == doodadsBefore && doc.doodads().Count() == 0;
+    const Buffer doodadsBytesAfter = doc.doodads().Serialize();
+
+    EditHistory history;
+    EditCommand dcmd;
+    dcmd.label = L"转换地形";
+    dcmd.tilesBefore = doc.tiles();
+    dcmd.tilesAfter = doc.tiles();
+    dcmd.unitsBefore = doc.units();
+    dcmd.unitsAfter = doc.units();
+    dcmd.hasDecor = true;
+    dcmd.doodadsBefore = doodadsBytesBefore;
+    dcmd.doodadsAfter = doodadsBytesAfter;
+    dcmd.fogBefore = fogNow;
+    dcmd.fogAfter = fogNow;
+    dcmd.spritesBefore = spritesNow;
+    dcmd.spritesAfter = spritesNow;
+    history.Push(std::move(dcmd));
+    history.Undo(doc);
+    const bool convertUndo = doc.doodads().Count() == doodadsBefore;
+    history.Redo(doc);
+    const bool convertRedo = doc.doodads().Count() == 0;
+
+    // 矿物外形随机：先统一为 176，再随机到 176..178
+    std::size_t mineralCount = 0;
+    for (auto& u : doc.mutableUnits()) {
+        if (u.type >= 176 && u.type <= 178) {
+            u.type = 176;
+            mineralCount++;
+        }
+    }
+    const std::vector<UnitRecord> unitsPre = doc.units();
+    const int changedMinerals = RandomizeMineralTypes(doc);
+    const std::vector<UnitRecord> unitsPost = doc.units();
+    bool mineralsOk = mineralCount > 0 && changedMinerals >= 0 &&
+                      static_cast<std::size_t>(changedMinerals) <= mineralCount;
+    if (unitsPost.size() == unitsPre.size()) {
+        for (std::size_t i = 0; i < unitsPost.size(); i++) {
+            const UnitRecord& a = unitsPre[i];
+            const UnitRecord& b = unitsPost[i];
+            if (a.serial != b.serial || a.resource != b.resource || a.x != b.x || a.y != b.y ||
+                a.owner != b.owner) {
+                mineralsOk = false;
+                break;
+            }
+            if (a.type >= 176 && a.type <= 178) {
+                if (b.type < 176 || b.type > 178) mineralsOk = false;
+            } else if (a.type != b.type) {
+                mineralsOk = false;
+            }
+        }
+    } else {
+        mineralsOk = false;
+    }
+
+    EditCommand ucmd;
+    ucmd.label = L"矿物外形随机";
+    ucmd.tilesBefore = doc.tiles();
+    ucmd.tilesAfter = doc.tiles();
+    ucmd.unitsBefore = unitsPre;
+    ucmd.unitsAfter = unitsPost;
+    history.Push(std::move(ucmd));
+    history.Undo(doc);
+    bool mineralUndo = doc.units().size() == unitsPre.size();
+    for (std::size_t i = 0; i < doc.units().size() && mineralUndo; i++) {
+        if (doc.units()[i].type != unitsPre[i].type) mineralUndo = false;
+    }
+    history.Redo(doc);
+    bool mineralRedo = doc.units().size() == unitsPost.size();
+    for (std::size_t i = 0; i < doc.units().size() && mineralRedo; i++) {
+        if (doc.units()[i].type != unitsPost[i].type) mineralRedo = false;
+    }
+
+    // 保存地图图像（渲染到内存，验证尺寸与颜色）
+    bool imageOk = false;
+    if (doc.hasTileset()) {
+        TerrainRenderer renderer;
+        renderer.SetTileset(&doc.tileset());
+        TerrainImage image;
+        imageOk = renderer.Render(doc.tiles(), doc.width(), doc.height(), 8, image) &&
+                  image.width == doc.width() * 8 && image.height == doc.height() * 8 &&
+                  !image.pixels.empty();
+        if (imageOk) {
+            std::unordered_set<unsigned> colors;
+            for (std::size_t i = 0; i + 3 < image.pixels.size(); i += 4) {
+                colors.insert((static_cast<unsigned>(image.pixels[i]) << 16) |
+                              (static_cast<unsigned>(image.pixels[i + 1]) << 8) |
+                              image.pixels[i + 2]);
+            }
+            imageOk = colors.size() > 1;
+        }
+    }
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, ParseTsArg());
+    bool mineralSaved = reopened && check.units().size() == unitsPost.size();
+    if (mineralSaved) {
+        for (std::size_t i = 0; i < check.units().size(); i++) {
+            const u16 t = check.units()[i].type;
+            if (t >= 176 && t <= 178) continue;
+            if (t != unitsPost[i].type) {
+                mineralSaved = false;
+                break;
+            }
+        }
+    }
+    const bool fieldsOk = reopened && check.doodads().Count() == 0 && mineralSaved;
+    const bool preserved = reopened && sectionOf(check, "MASK") == maskOrig &&
+                           sectionOf(check, "THG2") == thg2Orig &&
+                           sectionOf(check, "UPGR") == upgrOrig &&
+                           sectionOf(check, "DIM ") == dimOrig &&
+                           sectionOf(check, "MTXM") == mtxmOrig;
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+                L"open=OK\nconvert=%d\nundo=%d\nredo=%d\nminerals=%d\nimage=%d\n"
+                L"saved=%d\nreopened=%d\nfields=%d\npreserved=%d\n",
+                convertOk ? 1 : 0, convertUndo ? 1 : 0, convertRedo ? 1 : 0,
+                mineralsOk ? 1 : 0, imageOk ? 1 : 0,
+                saved ? 1 : 0, reopened ? 1 : 0, fieldsOk ? 1 : 0, preserved ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = convertOk && convertUndo && convertRedo && mineralsOk && imageOk &&
+                    saved && reopened && fieldsOk && preserved;
+    return ok ? 0 : 2;
+}
+
+// --tileset-render-test=<输出目录>：8 套地形集逐套创建合成地图，渲染结果与
+// 独立解码的参考图逐像素比对；每套导出一张 BMP，哈希必须互不相同。
+int RunTilesetRenderTest(const std::wstring& tsDir, const std::wstring& outDir) {
+    static const wchar_t* const kPrefix[8] = {
+        L"StarDat.mpq_badlands", L"StarDat.mpq_platform", L"StarDat.mpq_install",
+        L"StarDat.mpq_ashworld", L"StarDat.mpq_jungle",  L"BrooDat.mpq_desert",
+        L"BrooDat.mpq_ice",      L"BrooDat.mpq_twilight",
+    };
+    if (tsDir.empty() || outDir.empty()) { WriteDiag(L"no-dir\n"); return 2; }
+    ::CreateDirectoryW(outDir.c_str(), nullptr);
+
+    auto readFile = [](const std::wstring& path, Buffer& out) -> bool {
+        std::ifstream in(path.c_str(), std::ios::binary | std::ios::ate);
+        if (!in) return false;
+        const std::streamoff size = in.tellg();
+        if (size <= 0) return false;
+        in.seekg(0, std::ios::beg);
+        out.resize(static_cast<std::size_t>(size));
+        in.read(reinterpret_cast<char*>(out.data()), size);
+        return in.good();
+    };
+    auto u16At = [](const Buffer& b, std::size_t off) -> u16 {
+        return static_cast<u16>(b[off] | (b[off + 1] << 8));
+    };
+
+    std::wstring report;
+    int passed = 0;
+    std::unordered_set<unsigned long long> hashes;
+
+    for (int era = 0; era < 8; era++) {
+        Buffer cv5, vx4, vr4, wpe;
+        const std::wstring base = tsDir + L"\\" + kPrefix[era];
+        const bool files = readFile(base + L".cv5", cv5) && readFile(base + L".vx4", vx4) &&
+                           readFile(base + L".vr4", vr4) && readFile(base + L".wpe", wpe) &&
+                           wpe.size() >= 256 * 4;
+
+        MapDocument doc;
+        const bool created = doc.CreateNew(16, 16, static_cast<u16>(era), tsDir);
+
+        // 合成 MTXM：覆盖地形集的前若干组与全部 16 个索引
+        const int groups = static_cast<int>(cv5.size() / 52);
+        Buffer& mtxm = doc.mutableTiles();
+        const bool patternOk = groups > 0 && mtxm.size() == 16 * 16 * 2;
+        for (int y = 0; y < 16 && patternOk; y++) {
+            for (int x = 0; x < 16; x++) {
+                const int g = ((y * 16 + x) * 37) % groups;
+                const u16 v = static_cast<u16>((g << 4) | ((x + y) % 16));
+                mtxm[(y * 16 + x) * 2] = static_cast<u8>(v & 0xFF);
+                mtxm[(y * 16 + x) * 2 + 1] = static_cast<u8>(v >> 8);
+            }
+        }
+
+        TerrainRenderer renderer;
+        renderer.SetTileset(&doc.tileset());
+        TerrainImage image;
+        const bool rendered = created && doc.hasTileset() &&
+                              renderer.Render(doc.tiles(), doc.width(), doc.height(), 8, image);
+        const bool dimsOk = image.width == 128 && image.height == 128;
+
+        // 独立参考解码：直接读 CV5/VX4/VR4/WPE，不经过 Tileset/TerrainRenderer
+        bool pixelsOk = false;
+        int colors = 0;
+        if (files && dimsOk) {
+            const int step = 4;   // 8 px/瓦片 -> 每个源像素覆盖 4×4
+            const int megaCount = static_cast<int>(vx4.size() / 32);
+            const int vrCount = static_cast<int>(vr4.size() / 64);
+            bool mismatch = false;
+            std::unordered_set<unsigned> seen;
+            for (int ty = 0; ty < 16 && !mismatch; ty++) {
+                for (int tx = 0; tx < 16 && !mismatch; tx++) {
+                    const u16 v = u16At(mtxm, (ty * 16 + tx) * 2);
+                    const int group = (v & 0x7FF0) >> 4;
+                    const int index = v & 0x0F;
+                    const int mega =
+                        group < groups ? u16At(cv5, group * 52 + 20 + index * 2) : 0;
+                    u8 block[1024] = {};
+                    if (mega < megaCount) {
+                        for (int k = 0; k < 16; k++) {
+                            const u16 ref =
+                                u16At(vx4, static_cast<std::size_t>(mega) * 32 + k * 2);
+                            const int vrid = ref >> 1;
+                            if (vrid >= vrCount) continue;
+                            const u8* src = vr4.data() + static_cast<std::size_t>(vrid) * 64;
+                            const int bx = (k % 4) * 8;
+                            const int by = (k / 4) * 8;
+                            const bool hflip = (ref & 1) != 0;
+                            for (int yy = 0; yy < 8; yy++) {
+                                for (int xx = 0; xx < 8; xx++) {
+                                    block[(by + yy) * 32 + bx + xx] =
+                                        src[yy * 8 + (hflip ? (7 - xx) : xx)];
+                                }
+                            }
+                        }
+                    }
+                    for (int py = 0; py < 8 && !mismatch; py++) {
+                        for (int px = 0; px < 8; px++) {
+                            const u8 idx = block[(py * step) * 32 + px * step];
+                            const u8* rgb = wpe.data() + static_cast<std::size_t>(idx) * 4;
+                            const std::size_t off =
+                                ((static_cast<std::size_t>(ty * 8 + py)) * image.width +
+                                 (tx * 8 + px)) * 4;
+                            if (image.pixels[off + 0] != rgb[2] ||
+                                image.pixels[off + 1] != rgb[1] ||
+                                image.pixels[off + 2] != rgb[0] ||
+                                image.pixels[off + 3] != 0xFF) {
+                                mismatch = true;
+                            }
+                            seen.insert((static_cast<unsigned>(rgb[0]) << 16) |
+                                        (static_cast<unsigned>(rgb[1]) << 8) | rgb[2]);
+                        }
+                    }
+                }
+            }
+            pixelsOk = !mismatch;
+            colors = static_cast<int>(seen.size());
+        }
+
+        unsigned long long hash = 1469598103934665603ull;
+        for (u8 b : image.pixels) {
+            hash ^= b;
+            hash *= 1099511628211ull;
+        }
+        const bool unique = hashes.insert(hash).second;
+        const std::wstring bmp = outDir + L"\\ts_" + std::to_wstring(era) + L"_" +
+                                 kPrefix[era] + L".bmp";
+        const bool bmpOk = rendered && TerrainRenderer::WriteBmp24(bmp, image);
+        const bool ok = files && created && patternOk && rendered && dimsOk && pixelsOk &&
+                        colors > 1 && unique && bmpOk;
+        if (ok) passed++;
+
+        wchar_t line[512];
+        ::wsprintfW(line,
+                    L"era=%d name=%s files=%d created=%d groups=%d megas=%d vr=%d "
+                    L"render=%d dims=%d pixels=%d colors=%d unique=%d bmp=%d hash=%016I64x\n",
+                    era, doc.eraName(), files ? 1 : 0, created ? 1 : 0, groups,
+                    static_cast<int>(vx4.size() / 32), static_cast<int>(vr4.size() / 64),
+                    rendered ? 1 : 0, dimsOk ? 1 : 0, pixelsOk ? 1 : 0, colors,
+                    unique ? 1 : 0, bmpOk ? 1 : 0, hash);
+        report += line;
+    }
+
+    wchar_t tail[32];
+    ::wsprintfW(tail, L"pass=%d/8\n", passed);
+    report += tail;
+    WriteDiag(report);
+    return passed == 8 ? 0 : 2;
+}
+
+// --section-test：校验 TRIG/MRGN/STR 的解析与无损重建
+int RunSectionTest(const std::wstring& mapPath) {    MapDocument doc;
     if (!doc.Open(mapPath, std::wstring())) { WriteDiag(L"open=FAIL\n"); return 2; }
 
     auto compare = [&doc](const char* name, const Buffer& rebuilt) {
@@ -728,12 +2370,71 @@ int RunSectionTest(const std::wstring& mapPath) {
     const int mrgn = compare("MRGN", doc.locations().Serialize());
     const int str = compare("STR ", doc.strings().Serialize());
 
-    wchar_t msg[384];
-    ::wsprintfW(msg, L"trigBlocks=%u\nmrgn=%u\nstr=%u\ntrigEq=%d\nmrgnEq=%d\nstrEq=%d\n",
+    auto sectionSize = [&doc](const char* name) -> int {
+        const Buffer* data = doc.chk().Find(name);
+        return data ? static_cast<int>(data->size()) : -1;
+    };
+
+    int unit101 = 0;
+    for (const auto& u : doc.units()) {
+        if (u.type == 101) unit101++;   // Map Revealer（小雷达）
+    }
+    wchar_t msg[768];
+    ::wsprintfW(msg,
+                L"trigBlocks=%u\nmrgn=%u\nstr=%u\ntrigEq=%d\nmrgnEq=%d\nstrEq=%d\n"
+                L"OWNR=%d\nSIDE=%d\nFORC=%d\nCOLR=%d\nUPGR=%d\nTECH=%d\n"
+                L"DD2=%d\nTHG2=%d\nMASK=%d\nMASKexpect=%d\nunit101=%d\n"
+                L"WAV=%d\nSWNM=%d\nMBRF=%d\n",
                 static_cast<unsigned>(doc.triggers().BlockCount()),
                 static_cast<unsigned>(doc.locations().Count()),
-                static_cast<unsigned>(doc.strings().Count()), trig, mrgn, str);
-    WriteDiag(msg);
+                static_cast<unsigned>(doc.strings().Count()), trig, mrgn, str,
+                sectionSize("OWNR"), sectionSize("SIDE"), sectionSize("FORC"),
+                sectionSize("COLR"), sectionSize("UPGR"), sectionSize("TECH"),
+                sectionSize("DD2 "), sectionSize("THG2"), sectionSize("MASK"),
+                doc.width() * doc.height(), unit101,
+                sectionSize("WAV "), sectionSize("SWNM"), sectionSize("MBRF"));
+
+    auto hexOf = [&doc](const char* name, int maxBytes) -> std::wstring {
+        const Buffer* data = doc.chk().Find(name);
+        if (!data) return L"-";
+        const int n = std::min<int>(maxBytes, static_cast<int>(data->size()));
+        std::wstring out;
+        out.reserve(static_cast<std::size_t>(n) * 3);
+        for (int i = 0; i < n; i++) {
+            wchar_t part[4];
+            ::wsprintfW(part, L"%02X", (*data)[i]);
+            out += part;
+            if (i + 1 < n) out += L' ';
+        }
+        return out;
+    };
+    std::wstring details;
+    details += L"OWNRhex=" + hexOf("OWNR", 12) + L"\n";
+    details += L"SIDEhex=" + hexOf("SIDE", 12) + L"\n";
+    details += L"FORChex=" + hexOf("FORC", 24) + L"\n";
+    details += L"COLRhex=" + hexOf("COLR", 8) + L"\n";
+    details += L"UPGRhex=" + hexOf("UPGR", 24) + L"\n";
+    details += L"TECHhex=" + hexOf("TECH", 24) + L"\n";
+    details += L"DD2hex=" + hexOf("DD2 ", 32) + L"\n";
+    details += L"MASKhex=" + hexOf("MASK", 32) + L"\n";
+
+    std::wstring pos;
+    int shown = 0;
+    for (const auto& u : doc.units()) {
+        if (u.type != 101 || shown >= 12) continue;
+        wchar_t one[32];
+        ::wsprintfW(one, L" (%u,%u)", static_cast<unsigned>(u.x), static_cast<unsigned>(u.y));
+        pos += one;
+        shown++;
+    }
+    if (!pos.empty()) details += L"unit101pos=" + pos + L"\n";
+    if (const Buffer* upgr = doc.chk().Find("UPGR"); upgr && upgr->size() == 1748) {
+        wchar_t global[64];
+        ::wsprintfW(global, L"UPGRglobal0=%u/%u\n", static_cast<unsigned>((*upgr)[1104]),
+                    static_cast<unsigned>((*upgr)[1150]));
+        details += global;
+    }
+    WriteDiag(std::wstring(msg) + details);
 
     const bool ok = trig != 0 && mrgn != 0 && str != 0;
     return ok ? 0 : 2;
@@ -801,7 +2502,7 @@ int RunMenuTest(HWND hwnd) {
 
     if (accel) ::DestroyAcceleratorTable(accel);
     ::DestroyMenu(menu);
-    const bool ok = topCount == 10 && items == 224 && accelCount == 34 && idFileNew == 0x8005 &&
+    const bool ok = topCount == 10 && items == 226 && accelCount == 34 && idFileNew == 0x8005 &&
                     idEditUndo == 0x807F && idHelpAbout == 0x0068 && escHandled;
     return ok ? 0 : 2;
 }
@@ -878,6 +2579,21 @@ int RunMpqSelfTest(const std::wstring& path) {
     return 0;
 }
 
+int RunExtractTilesets(const std::wstring& gameDir, const std::wstring& outDir) {
+    if (gameDir.empty() || outDir.empty()) {
+        WriteDiag(L"ts=FAIL missing --game-dir / --extract-ts\n");
+        return 2;
+    }
+
+    const TilesetExportResult result = ExtractTilesets(gameDir, outDir);
+    wchar_t summary[256];
+    ::wsprintfW(summary, L"ts=%s files=%d failed=%d bytes=%u dir=%s\n",
+                (result.failed == 0 && result.files == 32) ? L"OK" : L"FAIL",
+                result.files, result.failed, static_cast<unsigned>(result.bytes), outDir.c_str());
+    WriteDiag(std::wstring(summary) + result.log);
+    return (result.failed == 0 && result.files == 32) ? 0 : 2;
+}
+
 }  // namespace
 
 App& App::Instance() {
@@ -886,6 +2602,11 @@ App& App::Instance() {
 }
 
 int App::Run(HINSTANCE hInstance) {
+    // 无窗口工具：从游戏 MPQ 导出地形集
+    if (const std::wstring tsOut = ParseExtractTsArg(); !tsOut.empty()) {
+        return RunExtractTilesets(ParseGameDirArg(), tsOut);
+    }
+
     ::InitCommonControls();
     // 187 号对话框含 RichEdit20A 控件，必须先让 riched20 注册窗口类
     if (!::LoadLibraryW(L"riched20.dll")) {
@@ -897,16 +2618,47 @@ int App::Run(HINSTANCE hInstance) {
     }
     Log(L"[app] started");
 
-    // 地形集目录：--ts 优先，否则用 exe 目录下的 ts
+    // 地形集目录：--ts 优先；否则用构建时复制到 exe 旁的 ts，再回退工程根目录的 ts
     std::wstring tsDir = ParseTsArg();
     if (tsDir.empty()) {
         wchar_t exePath[MAX_PATH] = L"";
         ::GetModuleFileNameW(nullptr, exePath, MAX_PATH);
         wchar_t* slash = std::wcsrchr(exePath, L'\\');
         if (slash) *slash = L'\0';
-        tsDir = std::wstring(exePath) + L"\\ts";
+        const std::wstring exeDir(exePath);
+        tsDir = exeDir + L"\\ts";
+        if (::GetFileAttributesW(tsDir.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            // exe 在 bin\<Platform>\<Config> 下，工程根目录再往上 3 层
+            const std::wstring rootTs = exeDir + L"\\..\\..\\..\\ts";
+            wchar_t full[MAX_PATH] = L"";
+            if (::GetFullPathNameW(rootTs.c_str(), MAX_PATH, full, nullptr) > 0 &&
+                ::GetFileAttributesW(full) != INVALID_FILE_ATTRIBUTES) {
+                tsDir = full;
+            }
+        }
     }
     mainWindow_.SetTilesetDir(tsDir);
+
+    // 单位放置参数回归（无头）
+    if (const std::wstring unitOut = ParseUnitParamTestArg(); !unitOut.empty()) {
+        const int rc = RunUnitParamTest(mainWindow_, unitOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 框选/剪贴板回归（无头）
+    if (const std::wstring clipOut = ParseClipTestArg(); !clipOut.empty()) {
+        const int rc = RunClipTest(mainWindow_, clipOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 多格图案刷回归（无头）
+    if (const std::wstring brushOut = ParseBrushPatternTestArg(); !brushOut.empty()) {
+        const int rc = RunBrushPatternTest(mainWindow_, brushOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
 
     // 菜单/加速键导入自检（无头）
     {
@@ -964,6 +2716,85 @@ int App::Run(HINSTANCE hInstance) {
         }
     }
 
+    // 玩家/势力模型回归（无头）
+    if (const std::wstring playerOut = ParsePlayerTestArg(); !playerOut.empty()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) { WriteDiag(L"no-map\n"); return 2; }
+        const int rc = RunPlayerTest(mapPath, playerOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 升级/科技限制回归（无头）
+    if (const std::wstring restrictionOut = ParseRestrictionTestArg(); !restrictionOut.empty()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) { WriteDiag(L"no-map\n"); return 2; }
+        const int rc = RunRestrictionTest(mapPath, restrictionOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // Location 171 → MRGN 写回回归（无头）
+    if (const std::wstring locationOut = ParseLocationTestArg(); !locationOut.empty()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) { WriteDiag(L"no-map\n"); return 2; }
+        const int rc = RunLocationTest(mapPath, locationOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 装饰物 / 战争迷雾回归（无头）
+    if (const std::wstring decorOut = ParseDecorTestArg(); !decorOut.empty()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) { WriteDiag(L"no-map\n"); return 2; }
+        const int rc = RunDecorTest(mapPath, decorOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // SP 单位（THG2）回归（无头）
+    if (const std::wstring spriteOut = ParseSpriteTestArg(); !spriteOut.empty()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) { WriteDiag(L"no-map\n"); return 2; }
+        const int rc = RunSpriteTest(mapPath, spriteOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 小雷达 / 迷雾开关回归（无头）
+    if (const std::wstring radarOut = ParseRadarTestArg(); !radarOut.empty()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) { WriteDiag(L"no-map\n"); return 2; }
+        const int rc = RunRadarTest(mapPath, radarOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 声音 / 开关名 / 任务简报回归（无头）
+    if (const std::wstring textOut = ParseScenarioTextTestArg(); !textOut.empty()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) { WriteDiag(L"no-map\n"); return 2; }
+        const int rc = RunScenarioTextTest(mapPath, textOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 地图片级工具回归（无头）
+    if (const std::wstring toolsOut = ParseMapToolsTestArg(); !toolsOut.empty()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) { WriteDiag(L"no-map\n"); return 2; }
+        const int rc = RunMapToolsTest(mapPath, toolsOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 8 套地形集逐套渲染回归（无头）
+    if (const std::wstring tsRenderOut = ParseTilesetRenderTestArg(); !tsRenderOut.empty()) {
+        const int rc = RunTilesetRenderTest(tsDir, tsRenderOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
     // 自定义 MPQ 文件保留回归（无头）
     if (const std::wstring extraOut = ParseExtraTestArg(); !extraOut.empty()) {
         const std::wstring mapPath = ParseOpenArg();
@@ -996,6 +2827,19 @@ int App::Run(HINSTANCE hInstance) {
         const std::wstring mapPath = ParseOpenArg();
         if (mapPath.empty()) { WriteDiag(L"open=FAIL no-map\n"); return 2; }
         const int rc = RunEditTest(mapPath, editOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 地形刷调色板回归（无头）
+    if (HasBrushTestArg()) {
+        const std::wstring mapPath = ParseOpenArg();
+        if (mapPath.empty()) {
+            WriteDiag(L"no-map\n");
+            ::DestroyWindow(mainWindow_.hwnd());
+            return 2;
+        }
+        const int rc = RunBrushTest(mapPath, ParseTsArg());
         ::DestroyWindow(mainWindow_.hwnd());
         return rc;
     }

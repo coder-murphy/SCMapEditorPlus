@@ -2,20 +2,25 @@
 
 #include <algorithm>
 #include <commdlg.h>
+#include <cstdlib>
 #include <cstring>
 #include <cwchar>
+#include <utility>
 #include <windows.h>
 #include <windowsx.h>
 
 #include "common/log.h"
 #include "common/string_util.h"
 #include "platform/file_dialog.h"
+#include "map/map_switches.h"
 #include "res/resource.h"
 #include "ui/command_ids.h"
 #include "ui/dialog_registry.h"
 #include "ui/dlg_common.h"
 #include "ui/dlg_procs.h"
 #include "ui/dialogs.h"
+
+#pragma comment(lib, "msimg32.lib")   // DrawFog 的 AlphaBlend
 
 namespace scmd {
 
@@ -122,10 +127,12 @@ int GridPresetOf(bool enabled, int cellX, int cellY) {
 
 bool MainWindow::Create(HINSTANCE hInstance) {
     hInstance_ = hInstance;
+    brushPattern_.SetSingle(brushTile_, L"单格");
     renderer_.SetTileset(&map_.tileset());
 
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
+    wc.style = CS_DBLCLKS;          // 地点层双击打开 171
     wc.lpfnWndProc = &MainWindow::WndProcThunk;
     wc.hInstance = hInstance;
     wc.lpszClassName = kWindowClass;
@@ -152,7 +159,8 @@ bool MainWindow::Create(HINSTANCE hInstance) {
             ::AppendMenuW(help, MF_STRING, kDebugDialogs, L"恢复的界面...");
         }
         // 原程序把显示选项里的 4 项灰掉了；本工程可用，解除灰显
-        const int kEnableIds[] = {kDispAllColors, kDispUnits, kDispDoodads, kDispSpUnits};
+        const int kEnableIds[] = {kDispAllColors, kDispUnits, kDispDoodads, kDispSpUnits,
+                                  kWindowSpUnits, kEditConvertTerrain};
         for (int id : kEnableIds) {
             if (HMENU menu = FindMenuContaining(bar, id)) {
                 ::EnableMenuItem(menu, id, MF_BYCOMMAND | MF_ENABLED);
@@ -251,8 +259,10 @@ bool MainWindow::OpenMap(const std::wstring& path) {
     fileName_ = FileNameOf(path);
     history_.Clear();
     editOpen_ = false;
+    ClearSelection();
     UpdateTitle();
     RebuildView(pxPerTile_);
+    RefreshBrushPalette();
     return true;
 }
 
@@ -266,8 +276,10 @@ void MainWindow::NewMap() {
     fileName_.clear();
     history_.Clear();
     editOpen_ = false;
+    ClearSelection();
     UpdateTitle();
     RebuildView(pxPerTile_);
+    RefreshBrushPalette();
 }
 
 void MainWindow::CloseMap() {
@@ -277,8 +289,10 @@ void MainWindow::CloseMap() {
     fileName_.clear();
     history_.Clear();
     editOpen_ = false;
+    ClearSelection();
     ReleaseBackBuffer();
     UpdateTitle();
+    RefreshBrushPalette();
     ::InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
@@ -322,6 +336,7 @@ void MainWindow::ResizeMapDialog() {
     }
     history_.Clear();     // 旧快照与新尺寸不兼容
     editOpen_ = false;
+    ClearSelection();
     RebuildView(pxPerTile_);
     UpdateTitle();
 }
@@ -372,6 +387,129 @@ void MainWindow::EditUnitProps() {
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
+void MainWindow::EditLocation(int index) {
+    if (!map_.IsOpen()) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+    auto& items = map_.mutableLocations().MutableItems();
+    if (index < 0 || static_cast<std::size_t>(index) >= items.size()) return;
+    const Location& loc = items[index];
+
+    LocationRect seed;
+    seed.left = loc.left;
+    seed.top = loc.top;
+    seed.right = loc.right;
+    seed.bottom = loc.bottom;
+    seed.elevationMask = loc.flags & 0x3Fu;
+    seed.stringId = loc.stringId;
+    seed.name = Utf8ToWide(map_.strings().At(loc.stringId));
+    SeedLocation(seed);
+
+    BeginEdit();
+    ShowRecoveredDialog(IDD_DLG_171, hwnd_);
+    if (LastDialogResult() == IDOK) {
+        const LocationRect& r = LastLocation();
+        Location& target = map_.mutableLocations().MutableItems()[index];
+        target.left = static_cast<u16>(r.left);
+        target.top = static_cast<u16>(r.top);
+        target.right = static_cast<u16>(r.right);
+        target.bottom = static_cast<u16>(r.bottom);
+        target.flags = static_cast<u16>((target.flags & ~0x3Fu) |
+                                        (r.elevationMask & 0x3Fu));
+
+        // 名称写回 STR：0 号下标保留为空，非空名称优先复用现有下标
+        int sid = r.stringId;
+        const std::string newName = WideToUtf8(r.name);
+        if (!newName.empty()) {
+            if (sid <= 0) {
+                sid = static_cast<int>(std::max<std::size_t>(1, map_.strings().Count()));
+            } else if (static_cast<std::size_t>(sid) >= map_.strings().Count()) {
+                sid = static_cast<int>(map_.strings().Count());
+            }
+            map_.mutableStrings().Set(static_cast<std::size_t>(sid), newName);
+            target.stringId = static_cast<u16>(sid);
+        } else if (sid > 0 && static_cast<std::size_t>(sid) < map_.strings().Count()) {
+            map_.mutableStrings().Set(static_cast<std::size_t>(sid), std::string());
+            target.stringId = static_cast<u16>(sid);
+        } else {
+            target.stringId = static_cast<u16>(sid);
+        }
+        map_.MarkDirty();
+    }
+    CommitEdit(L"编辑地点");
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+int MainWindow::SpriteIndexAtTile(int tx, int ty) const {
+    if (!map_.IsOpen()) return -1;
+    const auto& items = map_.sprites().Items();
+    int best = -1;
+    int bestDist = 0x7FFFFFFF;
+    for (int i = 0; i < static_cast<int>(items.size()); i++) {
+        const int dx = std::abs(static_cast<int>(items[i].x) - (tx * kTilePixels + kTilePixels / 2));
+        const int dy = std::abs(static_cast<int>(items[i].y) - (ty * kTilePixels + kTilePixels / 2));
+        if (dx > 24 || dy > 24) continue;
+        if (dx + dy < bestDist) {
+            bestDist = dx + dy;
+            best = i;
+        }
+    }
+    return best;
+}
+
+void MainWindow::OpenSpUnitEditor(int selected) {
+    if (!map_.IsOpen()) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+    if (map_.sprites().Count() == 0) {
+        ::MessageBoxW(hwnd_, L"地图没有 SP 单位（THG2）。", kWindowTitle, MB_ICONINFORMATION);
+        return;
+    }
+    std::vector<SpriteRecord> units = map_.sprites().Items();
+    if (selected < 0) selected = 0;
+    SeedSpUnits(units, selected);
+
+    BeginEdit();
+    ShowRecoveredDialog(IDD_DLG_164, hwnd_);
+    if (LastDialogResult() == IDOK) {
+        const auto& edited = LastSpUnits();
+        bool changed = edited.size() != map_.sprites().Count();
+        if (!changed) {
+            for (std::size_t i = 0; i < edited.size(); i++) {
+                const SpriteRecord& a = edited[i];
+                const SpriteRecord& b = map_.sprites().Items()[i];
+                if (a.type != b.type || a.x != b.x || a.y != b.y || a.owner != b.owner ||
+                    a.unused != b.unused || a.flags != b.flags) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (changed) {
+            map_.mutableSprites().MutableItems() = edited;
+            map_.MarkDirty();
+        }
+    }
+    CommitEdit(L"SP单位属性");
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+int MainWindow::LocationIndexAtTile(int tx, int ty) const {
+    const auto& items = map_.locations().Items();
+    for (int i = static_cast<int>(items.size()) - 1; i >= 0; i--) {
+        const Location& loc = items[static_cast<std::size_t>(i)];
+        if (tx >= static_cast<int>(loc.left) && tx <= static_cast<int>(loc.right) &&
+            ty >= static_cast<int>(loc.top) && ty <= static_cast<int>(loc.bottom)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void MainWindow::EditMapText(int stringIndex, bool richText) {
     if (!map_.IsOpen()) {
         MessageBeep(MB_ICONWARNING);
@@ -379,20 +517,27 @@ void MainWindow::EditMapText(int stringIndex, bool richText) {
     }
     const std::wstring seed = Utf8ToWide(map_.strings().At(static_cast<std::size_t>(stringIndex)));
 
+    BeginEdit();
+    bool applied = false;
     if (richText) {
         SeedRichText(seed);
         ShowRecoveredDialog(IDD_DLG_187, hwnd_);
-        if (LastDialogResult() != IDOK) return;
-        map_.mutableStrings().Set(static_cast<std::size_t>(stringIndex),
-                                   WideToUtf8(LastRichText()));
+        if (LastDialogResult() == IDOK) {
+            map_.mutableStrings().Set(static_cast<std::size_t>(stringIndex),
+                                       WideToUtf8(LastRichText()));
+            applied = true;
+        }
     } else {
         SeedEditedString(seed);
         ShowRecoveredDialog(IDD_DLG_189, hwnd_);
-        if (LastDialogResult() != IDOK) return;
-        map_.mutableStrings().Set(static_cast<std::size_t>(stringIndex),
-                                   WideToUtf8(LastEditedString()));
+        if (LastDialogResult() == IDOK) {
+            map_.mutableStrings().Set(static_cast<std::size_t>(stringIndex),
+                                       WideToUtf8(LastEditedString()));
+            applied = true;
+        }
     }
-    map_.MarkDirty();
+    if (applied) map_.MarkDirty();
+    CommitEdit(L"编辑字符串");
     UpdateTitle();
 }
 
@@ -415,6 +560,468 @@ void MainWindow::GotoStartPosition() {
     ::MessageBoxW(hwnd_, L"地图中没有出生点。", kWindowTitle, MB_ICONINFORMATION);
 }
 
+void MainWindow::SaveMapImage() {
+    if (!map_.IsOpen() || !map_.hasTileset()) {
+        ::MessageBoxW(hwnd_, L"地图未打开或地形集未载入，无法导出图像。", kWindowTitle,
+                      MB_ICONINFORMATION);
+        return;
+    }
+    std::wstring initial;
+    if (!mapPath_.empty()) {
+        initial = mapPath_;
+        const std::size_t dot = initial.find_last_of(L'.');
+        const std::size_t slash = initial.find_last_of(L"\\/");
+        if (dot != std::wstring::npos && (slash == std::wstring::npos || dot > slash)) {
+            initial = initial.substr(0, dot);
+        }
+        initial += L".bmp";
+    } else {
+        initial = L"map.bmp";
+    }
+    std::wstring path;
+    if (!SaveFileDialog(hwnd_, L"BMP 图像 (*.bmp)\0*.bmp\0所有文件 (*.*)\0*.*\0\0", L"bmp",
+                        path, initial.c_str())) {
+        return;
+    }
+    TerrainRenderer renderer;
+    renderer.SetTileset(&map_.tileset());
+    TerrainImage image;
+    if (!renderer.Render(map_.tiles(), map_.width(), map_.height(), 8, image) ||
+        !TerrainRenderer::WriteBmp24(path, image)) {
+        ::MessageBoxW(hwnd_, L"导出地图图像失败。", kWindowTitle, MB_ICONERROR);
+        return;
+    }
+    Log(L"[ui] map image saved: %s (%dx%d)", path.c_str(), image.width, image.height);
+}
+
+void MainWindow::ShowBrushPalette() {
+    if (!map_.IsOpen() || !map_.hasTileset()) {
+        Log(L"[brush] 需要先打开地图并载入地形集");
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+    brushPalette_.Show(hInstance_, hwnd_, &map_.tileset(), brushTile_);
+}
+
+void MainWindow::SetUnitPlacement(u16 type, u8 owner, u32 resource) {
+    unitType_ = type;
+    unitOwner_ = owner;
+    unitResource_ = resource;
+}
+
+void MainWindow::OpenUnitPlacement() {
+    UnitPlacementParams seed;
+    seed.type = static_cast<int>(unitType_);
+    seed.owner = static_cast<int>(unitOwner_);
+    seed.resource = static_cast<int>(unitResource_);
+    SeedUnitPlacement(seed);
+
+    ShowRecoveredDialog(IDD_UNIT_PLACE, hwnd_);
+    if (LastDialogResult() != IDOK) return;
+
+    const UnitPlacementParams& p = LastUnitPlacement();
+    unitType_ = static_cast<u16>(p.type);
+    unitOwner_ = static_cast<u8>(p.owner);
+    unitResource_ = static_cast<u32>(p.resource);
+    if (layer_ != EditLayer::kUnits) SetLayer(EditLayer::kUnits);
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+void MainWindow::OpenPlayerRoster() {
+    if (!map_.IsOpen()) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+
+    BeginEdit();
+    SeedPlayerRoster(map_.players());
+    SetDialogDocument(&map_);
+    ShowRecoveredDialog(IDD_PLAYER_ROSTER, hwnd_);
+    SetDialogDocument(nullptr);
+
+    if (LastDialogResult() == IDOK) {
+        const PlayerRoster& edited = LastPlayerRoster();
+        if (edited.Snapshot() != map_.players().Snapshot()) {
+            map_.mutablePlayers() = edited;
+            map_.MarkDirty();
+        }
+    }
+
+    CommitEdit(L"玩家/势力设定");
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::OpenRestrictions() {
+    if (!map_.IsOpen()) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+
+    BeginEdit();
+    SeedRestrictions(map_.restrictions());
+    ShowRecoveredDialog(IDD_RESTRICTIONS, hwnd_);
+    if (LastDialogResult() == IDOK) {
+        const UpgradeTechRestrictions& edited = LastRestrictions();
+        if (edited.Snapshot() != map_.restrictions().Snapshot()) {
+            map_.mutableRestrictions() = edited;
+            map_.MarkDirty();
+        }
+    }
+
+    CommitEdit(L"升级/科技限制");
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::TogglePlacementRule(int commandId) {    switch (commandId) {
+        case kPlaceBuildNormal:
+            buildNormalRules_ = true;
+            placeBuildingsAnywhere_ = false;
+            break;
+        case kPlaceBuildingAnywhere:
+            placeBuildingsAnywhere_ = true;
+            buildNormalRules_ = false;
+            break;
+        case kPlaceUnitAnywhere: placeUnitsAnywhere_ = !placeUnitsAnywhere_; break;
+        case kPlaceUnitGrid: unitGridDisplay_ = !unitGridDisplay_; break;
+        case kPlaceGroundOverlap: allowGroundOverlap_ = !allowGroundOverlap_; break;
+        case kPlaceAirOverlap: allowAirOverlap_ = !allowAirOverlap_; break;
+        case kPlaceAutoAddon: autoConnectAddon_ = !autoConnectAddon_; break;
+        case kPlaceMineralDistance: mineralBaseDistance_ = !mineralBaseDistance_; break;
+        case kClipboardDoodads: clipboardDoodads_ = !clipboardDoodads_; break;
+        default:
+            return;
+    }
+    SyncMenuChecks();
+    ::InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+bool MainWindow::PlaceUnitAtTile(int tx, int ty) {
+    if (!map_.IsOpen()) return false;
+
+    BeginEdit();
+    const bool force = placeUnitsAnywhere_ || placeBuildingsAnywhere_;
+    if (!map_.PlaceUnit(tx, ty, unitType_, unitOwner_, unitResource_, force)) {
+        editOpen_ = false;
+        return false;
+    }
+    CommitEdit(L"放置单位");
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+    return true;
+}
+
+void MainWindow::BeginSelection(int tx, int ty) {
+    if (!map_.IsOpen()) return;
+    if (tx < 0 || ty < 0 || tx >= map_.width() || ty >= map_.height()) return;
+    selecting_ = true;
+    hasSelection_ = true;
+    selAnchorX_ = selX0_ = selX1_ = tx;
+    selAnchorY_ = selY0_ = selY1_ = ty;
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::UpdateSelection(int tx, int ty) {
+    if (!selecting_ || !map_.IsOpen()) return;
+    tx = std::clamp(tx, 0, map_.width() - 1);
+    ty = std::clamp(ty, 0, map_.height() - 1);
+    selX0_ = std::min(selAnchorX_, tx);
+    selX1_ = std::max(selAnchorX_, tx);
+    selY0_ = std::min(selAnchorY_, ty);
+    selY1_ = std::max(selAnchorY_, ty);
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::SelectRect(int x0, int y0, int x1, int y1) {
+    if (!map_.IsOpen() || map_.width() <= 0 || map_.height() <= 0) {
+        hasSelection_ = false;
+        selecting_ = false;
+        return;
+    }
+    x0 = std::clamp(x0, 0, map_.width() - 1);
+    x1 = std::clamp(x1, 0, map_.width() - 1);
+    y0 = std::clamp(y0, 0, map_.height() - 1);
+    y1 = std::clamp(y1, 0, map_.height() - 1);
+    selX0_ = std::min(x0, x1);
+    selX1_ = std::max(x0, x1);
+    selY0_ = std::min(y0, y1);
+    selY1_ = std::max(y0, y1);
+    hasSelection_ = true;
+    selecting_ = false;
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::SelectAllTiles() {
+    if (!map_.IsOpen()) return;
+    SelectRect(0, 0, map_.width() - 1, map_.height() - 1);
+}
+
+void MainWindow::ClearSelection() {
+    hasSelection_ = false;
+    selecting_ = false;
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::DrawSelection(HDC dc, const RECT&) const {
+    if (!hasSelection_ || !map_.IsOpen() || pxPerTile_ <= 0) return;
+    RECT r;
+    r.left = selX0_ * pxPerTile_ - scrollX_;
+    r.top = selY0_ * pxPerTile_ - scrollY_;
+    r.right = (selX1_ + 1) * pxPerTile_ - scrollX_;
+    r.bottom = (selY1_ + 1) * pxPerTile_ - scrollY_;
+    const HBRUSH brush = ::CreateSolidBrush(RGB(255, 255, 0));
+    ::FrameRect(dc, &r, brush);
+    ::DeleteObject(brush);
+}
+
+void MainWindow::CopySelection(bool cut) {
+    if (!map_.IsOpen() || !hasSelection_) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+
+    const int w = selX1_ - selX0_ + 1;
+    const int h = selY1_ - selY0_ + 1;
+    clipboard_.width = w;
+    clipboard_.height = h;
+    clipboard_.tiles.assign(static_cast<std::size_t>(w) * h, 0);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            clipboard_.tiles[static_cast<std::size_t>(y) * w + x] =
+                map_.TileAt(selX0_ + x, selY0_ + y);
+        }
+    }
+
+    clipboard_.units.clear();
+    for (const UnitRecord& u : map_.units()) {
+        const int tx = static_cast<int>(u.x) / 32;
+        const int ty = static_cast<int>(u.y) / 32;
+        if (tx < selX0_ || tx > selX1_ || ty < selY0_ || ty > selY1_) continue;
+        UnitRecord relative = u;
+        relative.x = static_cast<u16>(u.x - selX0_ * 32);
+        relative.y = static_cast<u16>(u.y - selY0_ * 32);
+        clipboard_.units.push_back(relative);
+    }
+
+    if (cut) {
+        BeginEdit();
+        map_.PaintRect(selX0_, selY0_, selX1_, selY1_, 0);
+        auto& units = map_.mutableUnits();
+        units.erase(std::remove_if(units.begin(), units.end(),
+                                   [this](const UnitRecord& u) {
+                                       const int tx = static_cast<int>(u.x) / 32;
+                                       const int ty = static_cast<int>(u.y) / 32;
+                                       return tx >= selX0_ && tx <= selX1_ &&
+                                              ty >= selY0_ && ty <= selY1_;
+                                   }),
+                    units.end());
+        map_.MarkDirty();
+        CommitEdit(L"剪切选区");
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    }
+
+    Log(L"[clip] copy %dx%d units=%u cut=%d", w, h,
+        static_cast<unsigned>(clipboard_.units.size()), cut ? 1 : 0);
+    UpdateTitle();
+}
+
+void MainWindow::PasteClipboard() {
+    if (!map_.IsOpen() || clipboard_.Empty()) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+
+    int tx = 0;
+    int ty = 0;
+    if (cursorTx_ >= 0) {
+        tx = cursorTx_;
+        ty = cursorTy_;
+    } else if (hasSelection_) {
+        tx = selX0_;
+        ty = selY0_;
+    } else {
+        tx = (map_.width() - clipboard_.width) / 2;
+        ty = (map_.height() - clipboard_.height) / 2;
+    }
+    if (!PasteClipboardAt(tx, ty)) MessageBeep(MB_ICONWARNING);
+}
+
+bool MainWindow::PasteClipboardAt(int tx, int ty) {
+    if (!map_.IsOpen() || clipboard_.Empty()) return false;
+    const int w = std::min(clipboard_.width, map_.width());
+    const int h = std::min(clipboard_.height, map_.height());
+    if (w <= 0 || h <= 0) return false;
+    tx = std::clamp(tx, 0, map_.width() - w);
+    ty = std::clamp(ty, 0, map_.height() - h);
+
+    BeginEdit();
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            map_.PaintTile(tx + x, ty + y, clipboard_.tiles[static_cast<std::size_t>(y) * clipboard_.width + x]);
+        }
+    }
+
+    auto& units = map_.mutableUnits();
+    units.erase(std::remove_if(units.begin(), units.end(),
+                               [tx, ty, w, h](const UnitRecord& u) {
+                                   const int ux = static_cast<int>(u.x) / 32;
+                                   const int uy = static_cast<int>(u.y) / 32;
+                                   return ux >= tx && ux < tx + w && uy >= ty && uy < ty + h;
+                               }),
+                units.end());
+
+    u32 nextSerial = 1;
+    for (const UnitRecord& u : units) {
+        if (u.serial >= nextSerial) nextSerial = u.serial + 1;
+    }
+    for (const UnitRecord& src : clipboard_.units) {
+        if (static_cast<int>(src.x) / 32 >= w || static_cast<int>(src.y) / 32 >= h) continue;
+        const int nx = static_cast<int>(src.x) + tx * 32;
+        const int ny = static_cast<int>(src.y) + ty * 32;
+        if (nx < 0 || ny < 0 || nx >= map_.width() * 32 || ny >= map_.height() * 32) continue;
+        UnitRecord r = src;
+        r.serial = nextSerial++;
+        r.x = static_cast<u16>(nx);
+        r.y = static_cast<u16>(ny);
+        units.push_back(r);
+    }
+
+    map_.MarkDirty();
+    CommitEdit(L"粘贴");
+    SelectRect(tx, ty, tx + w - 1, ty + h - 1);
+    Log(L"[clip] paste at %d,%d size=%dx%d units=%u", tx, ty, w, h,
+        static_cast<unsigned>(clipboard_.units.size()));
+    UpdateTitle();
+    return true;
+}
+
+int MainWindow::OverlapSelectedUnitsAt(int tx, int ty) {
+    if (!map_.IsOpen() || !hasSelection_) return 0;
+    if (tx < 0 || ty < 0 || tx >= map_.width() || ty >= map_.height()) return 0;
+
+    BeginEdit();
+    int moved = 0;
+    for (UnitRecord& u : map_.mutableUnits()) {
+        const int ux = static_cast<int>(u.x) / 32;
+        const int uy = static_cast<int>(u.y) / 32;
+        if (ux < selX0_ || ux > selX1_ || uy < selY0_ || uy > selY1_) continue;
+        u.x = static_cast<u16>(tx * 32);
+        if (u.type == 188) {
+            u.y = static_cast<u16>(ty * 32);
+        } else {
+            u.y = static_cast<u16>(ty * 32 + 16);
+        }
+        moved++;
+    }
+
+    if (moved > 0) {
+        map_.MarkDirty();
+        CommitEdit(L"重叠所选单位");
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    } else {
+        editOpen_ = false;
+    }
+    return moved;
+}
+
+int MainWindow::DeleteInvalidUnits() {
+    if (!map_.IsOpen()) return 0;
+
+    BeginEdit();
+    const int removed = map_.RemoveInvalidUnits();
+    if (removed > 0) {
+        CommitEdit(L"删除非法单位");
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    } else {
+        editOpen_ = false;
+    }
+    return removed;
+}
+
+void MainWindow::SetBrushTile(u16 value) {
+    brushTile_ = value;
+    brushPattern_.SetSingle(value, L"单格");
+    SetLayer(EditLayer::kTerrain);   // 选中刷子即切回地形工具
+}
+
+void MainWindow::RefreshBrushPalette() {
+    if (!brushPalette_.IsOpen()) return;
+    brushPalette_.Refresh(map_.hasTileset() ? &map_.tileset() : nullptr, brushTile_);
+}
+
+void MainWindow::OpenCustomBrush() {
+    if (!map_.IsOpen()) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+
+    TerrainBrush current;
+    if (hasSelection_) {
+        const int w = selX1_ - selX0_ + 1;
+        const int h = selY1_ - selY0_ + 1;
+        std::vector<u16> tiles;
+        tiles.reserve(static_cast<std::size_t>(w) * h);
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                tiles.push_back(map_.TileAt(selX0_ + x, selY0_ + y));
+            }
+        }
+        current.SetFromTiles(w, h, std::move(tiles), L"当前选择");
+    } else {
+        current.SetSingle(brushTile_, L"当前刷子");
+    }
+
+    SeedCustomBrushes(customBrushes_, current, customBrushIndex_);
+    ShowRecoveredDialog(IDD_DLG_182, hwnd_);
+    customBrushes_ = LastCustomBrushes();
+    if (LastCustomBrushAccepted()) {
+        SetBrushPattern(LastCustomBrush());
+        customBrushIndex_ = -1;
+        SetLayer(EditLayer::kTerrain);
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    }
+}
+
+void MainWindow::SetBrushPattern(const TerrainBrush& brush) {
+    brushPattern_ = brush;
+    if (brushPattern_.Empty()) brushPattern_.SetSingle(brushTile_, L"单格");
+    brushTile_ = brushPattern_.At(brushPattern_.width / 2, brushPattern_.height / 2);
+    if (brushPalette_.IsOpen()) brushPalette_.SetSelected(brushTile_);
+}
+
+bool MainWindow::PaintBrushAt(int tx, int ty) {
+    if (!map_.IsOpen() || tx < 0 || ty < 0 || tx >= map_.width() || ty >= map_.height()) {
+        return false;
+    }
+    BeginEdit();
+    StampBrushAt(tx, ty);
+    CommitEdit(L"绘制地形");
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+    return true;
+}
+
+void MainWindow::StampBrushAt(int tx, int ty) {
+    if (!map_.IsOpen()) return;
+    if (brushPattern_.Empty()) {
+        PaintTileToBuffer(tx, ty, brushTile_);
+        return;
+    }
+
+    const int ox = tx - brushPattern_.width / 2;
+    const int oy = ty - brushPattern_.height / 2;
+    for (int y = 0; y < brushPattern_.height; y++) {
+        for (int x = 0; x < brushPattern_.width; x++) {
+            PaintTileToBuffer(ox + x, oy + y, brushPattern_.At(x, y));
+        }
+    }
+}
+
 void MainWindow::SetLayer(EditLayer layer) {
     layer_ = layer;
     switch (layer) {
@@ -422,14 +1029,19 @@ void MainWindow::SetLayer(EditLayer layer) {
             tool_ = Tool::kTerrain;
             break;
         case EditLayer::kUnits:
-        case EditLayer::kSpUnits:
             tool_ = Tool::kUnit;
+            break;
+        case EditLayer::kSpUnits:
+            tool_ = Tool::kNone;   // SP 单位尚无类型选择面板，仅显示
+            showSpUnits_ = true;
             break;
         default:
             tool_ = Tool::kNone;   // 装饰物/迷雾/地点：只显示，不放置
             break;
     }
     if (layer == EditLayer::kLocations) showLocations_ = true;
+    else if (layer == EditLayer::kDoodads) showDoodads_ = true;
+    else if (layer == EditLayer::kFog) showFog_ = true;
     SyncMenuChecks();
     ::InvalidateRect(hwnd_, nullptr, TRUE);
 }
@@ -524,6 +1136,23 @@ void MainWindow::SyncMenuChecks() {
             ::CheckMenuItem(menu, t.id, MF_BYCOMMAND | (t.on ? MF_CHECKED : MF_UNCHECKED));
         }
     }
+
+    const Toggle placementToggles[] = {
+        {kPlaceBuildNormal, buildNormalRules_},
+        {kPlaceUnitGrid, unitGridDisplay_},
+        {kPlaceGroundOverlap, allowGroundOverlap_},
+        {kPlaceAirOverlap, allowAirOverlap_},
+        {kPlaceUnitAnywhere, placeUnitsAnywhere_},
+        {kPlaceBuildingAnywhere, placeBuildingsAnywhere_},
+        {kPlaceAutoAddon, autoConnectAddon_},
+        {kPlaceMineralDistance, mineralBaseDistance_},
+        {kClipboardDoodads, clipboardDoodads_},
+    };
+    for (const Toggle& t : placementToggles) {
+        if (HMENU menu = FindMenuContaining(bar, t.id)) {
+            ::CheckMenuItem(menu, t.id, MF_BYCOMMAND | (t.on ? MF_CHECKED : MF_UNCHECKED));
+        }
+    }
     ::DrawMenuBar(hwnd_);
 }
 
@@ -596,6 +1225,107 @@ void MainWindow::DrawLocations(HDC dc, const RECT& client) const {
     ::DeleteObject(pen);
 }
 
+void MainWindow::DrawDoodads(HDC dc, const RECT& client) const {
+    if (!map_.IsOpen() || pxPerTile_ <= 0) return;
+    const HPEN pen = ::CreatePen(PS_SOLID, 1, RGB(255, 80, 255));
+    const HGDIOBJ oldPen = ::SelectObject(dc, pen);
+    const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
+
+    for (const Doodad& d : map_.doodads().Items()) {
+        const int sx = static_cast<int>(d.x) * pxPerTile_ / kTilePixels - scrollX_;
+        const int sy = static_cast<int>(d.y) * pxPerTile_ / kTilePixels - scrollY_;
+        const int size = std::max(3, pxPerTile_ / 2);
+        RECT r = {sx - size / 2, sy - size / 2, sx - size / 2 + size, sy - size / 2 + size};
+        if (r.right < client.left || r.bottom < client.top || r.left > client.right ||
+            r.top > client.bottom) {
+            continue;
+        }
+        ::Rectangle(dc, r.left, r.top, r.right, r.bottom);
+    }
+
+    ::SelectObject(dc, oldBrush);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(pen);
+}
+
+void MainWindow::DrawSprites(HDC dc, const RECT& client) const {
+    if (!map_.IsOpen() || pxPerTile_ <= 0) return;
+    const HPEN pen = ::CreatePen(PS_SOLID, 1, RGB(120, 220, 255));
+    const HGDIOBJ oldPen = ::SelectObject(dc, pen);
+    const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
+
+    for (const SpriteRecord& s : map_.sprites().Items()) {
+        const int sx = static_cast<int>(s.x) * pxPerTile_ / kTilePixels - scrollX_;
+        const int sy = static_cast<int>(s.y) * pxPerTile_ / kTilePixels - scrollY_;
+        const int size = std::max(3, pxPerTile_ / 2);
+        RECT r = {sx - size / 2, sy - size / 2, sx - size / 2 + size, sy - size / 2 + size};
+        if (r.right < client.left || r.bottom < client.top || r.left > client.right ||
+            r.top > client.bottom) {
+            continue;
+        }
+        if (s.DrawAsSprite()) {
+            ::Ellipse(dc, r.left, r.top, r.right, r.bottom);   // bit12：按精灵绘制
+        } else {
+            ::Rectangle(dc, r.left, r.top, r.right, r.bottom);
+        }
+    }
+
+    ::SelectObject(dc, oldBrush);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(pen);
+}
+
+void MainWindow::DrawFog(HDC dc, const RECT& client) const {
+    if (!map_.IsOpen() || !map_.fog().present() || pxPerTile_ <= 0) return;
+
+    const int w = map_.width();
+    const int h = map_.height();
+    const int tx0 = std::max(0, scrollX_ / pxPerTile_);
+    const int ty0 = std::max(0, scrollY_ / pxPerTile_);
+    const int tx1 = std::min(w - 1, (scrollX_ + static_cast<int>(client.right)) / pxPerTile_);
+    const int ty1 = std::min(h - 1, (scrollY_ + static_cast<int>(client.bottom)) / pxPerTile_);
+    if (tx0 > tx1 || ty0 > ty1) return;
+
+    // 1×1 预乘黑色源，逐行把连续的迷雾格合并成一个矩形做 AlphaBlend
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = 1;
+    bi.bmiHeader.biHeight = -1;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    const HDC mem = ::CreateCompatibleDC(dc);
+    const HBITMAP bmp = ::CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!mem || !bmp || !bits) {
+        if (bmp) ::DeleteObject(bmp);
+        if (mem) ::DeleteDC(mem);
+        return;
+    }
+    *static_cast<u32*>(bits) = 0x78000000u;   // ARGB：黑色，alpha 0x78
+    const HGDIOBJ old = ::SelectObject(mem, bmp);
+    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 0xFF, AC_SRC_ALPHA};
+
+    for (int ty = ty0; ty <= ty1; ty++) {
+        int runStart = -1;
+        for (int tx = tx0; tx <= tx1 + 1; tx++) {
+            const bool fog = tx <= tx1 && map_.fog().IsFogged(tx, ty);
+            if (fog && runStart < 0) runStart = tx;
+            if (!fog && runStart >= 0) {
+                const int left = runStart * pxPerTile_ - scrollX_;
+                const int top = ty * pxPerTile_ - scrollY_;
+                ::AlphaBlend(dc, left, top, (tx - runStart) * pxPerTile_, pxPerTile_, mem, 0, 0,
+                             1, 1, bf);
+                runStart = -1;
+            }
+        }
+    }
+
+    ::SelectObject(mem, old);
+    ::DeleteObject(bmp);
+    ::DeleteDC(mem);
+}
+
 void MainWindow::TileCoordsFromClient(int mx, int my, int& tx, int& ty) const {
     tx = -1;
     ty = -1;
@@ -647,22 +1377,41 @@ void MainWindow::OnLButtonDown(int mx, int my) {
     TileCoordsFromClient(mx, my, tx, ty);
     if (tx < 0) return;
 
+    if (layer_ == EditLayer::kFog) {
+        BeginEdit();
+        fogPaint_ = !map_.fog().IsFogged(tx, ty);
+        if (map_.mutableFog().SetFogged(tx, ty, fogPaint_)) {
+            map_.MarkDirty();
+            RECT r;
+            r.left = tx * pxPerTile_ - scrollX_;
+            r.top = ty * pxPerTile_ - scrollY_;
+            r.right = r.left + pxPerTile_;
+            r.bottom = r.top + pxPerTile_;
+            ::InvalidateRect(hwnd_, &r, FALSE);
+        }
+        cursorTx_ = tx;
+        cursorTy_ = ty;
+        UpdateTitle();
+        return;
+    }
+
     switch (tool_) {
         case Tool::kTerrain:
             BeginEdit();
-            PaintTileToBuffer(tx, ty, brushTile_);
+            StampBrushAt(tx, ty);
             break;
         case Tool::kPicker:
-            brushTile_ = map_.TileAt(tx, ty);
+            SetBrushTile(map_.TileAt(tx, ty));
             tool_ = Tool::kTerrain;
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         case Tool::kUnit:
-            BeginEdit();
-            if (map_.PlaceUnit(tx, ty, unitType_, 11, 1500)) {
-                ::InvalidateRect(hwnd_, nullptr, FALSE);
-            } else {
-                MessageBeep(MB_ICONWARNING);   // 不可行走，拒绝放置
+            if (!PlaceUnitAtTile(tx, ty)) {
+                MessageBeep(MB_ICONWARNING);   // 坐标越界或不可行走
             }
+            break;
+        case Tool::kSelect:
+            BeginSelection(tx, ty);
             break;
         default:
             break;
@@ -672,14 +1421,47 @@ void MainWindow::OnLButtonDown(int mx, int my) {
     UpdateTitle();
 }
 
+void MainWindow::OnLButtonDblClk(int mx, int my) {
+    int tx = -1, ty = -1;
+    TileCoordsFromClient(mx, my, tx, ty);
+    if (tx < 0) return;
+    if (layer_ == EditLayer::kLocations) {
+        const int index = LocationIndexAtTile(tx, ty);
+        if (index >= 0) EditLocation(index);
+        return;
+    }
+    if (layer_ == EditLayer::kSpUnits) {
+        const int index = SpriteIndexAtTile(tx, ty);
+        if (index >= 0) OpenSpUnitEditor(index);
+    }
+}
+
 void MainWindow::OnMouseMove(int mx, int my, bool leftDown) {
     int tx = -1, ty = -1;
     TileCoordsFromClient(mx, my, tx, ty);
     cursorTx_ = tx;
     cursorTy_ = ty;
+    if (leftDown && layer_ == EditLayer::kFog && tx >= 0) {
+        if (map_.mutableFog().SetFogged(tx, ty, fogPaint_)) {
+            map_.MarkDirty();
+            RECT r;
+            r.left = tx * pxPerTile_ - scrollX_;
+            r.top = ty * pxPerTile_ - scrollY_;
+            r.right = r.left + pxPerTile_;
+            r.bottom = r.top + pxPerTile_;
+            ::InvalidateRect(hwnd_, &r, FALSE);
+        }
+        UpdateTitle();
+        return;
+    }
+    if (leftDown && tool_ == Tool::kSelect && selecting_ && tx >= 0) {
+        UpdateSelection(tx, ty);
+        UpdateTitle();
+        return;
+    }
     if (leftDown && tool_ == Tool::kTerrain && tx >= 0) {
         BeginEdit();                 // 拖出窗口再回来时保持同一笔画
-        PaintTileToBuffer(tx, ty, brushTile_);
+        StampBrushAt(tx, ty);
         UpdateTitle();
     }
 }
@@ -688,6 +1470,10 @@ void MainWindow::OnRButtonDown(int mx, int my) {
     int tx = -1, ty = -1;
     TileCoordsFromClient(mx, my, tx, ty);
     if (tx < 0) return;
+    if (tool_ == Tool::kSelect) {
+        ClearSelection();
+        return;
+    }
     BeginEdit();
     if (map_.RemoveUnitsAtTile(tx, ty) > 0) {
         CommitEdit(L"删除单位");
@@ -712,6 +1498,7 @@ void MainWindow::OnKeyDown(int vk) {
         case '1': SetLayer(EditLayer::kTerrain); break;
         case '2': SetLayer(EditLayer::kUnits); break;
         case '3': tool_ = Tool::kPicker; break;
+        case '4': tool_ = Tool::kSelect; break;
         case VK_DELETE:
             if (cursorTx_ >= 0) {
                 BeginEdit();
@@ -752,10 +1539,11 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
 }
 
 void MainWindow::DrawHud(HDC dc) const {
-    wchar_t text[256];
+    wchar_t text[512];
     const wchar_t* toolName = L"地形刷";
     if (tool_ == Tool::kUnit) toolName = L"单位";
     else if (tool_ == Tool::kPicker) toolName = L"吸管";
+    else if (tool_ == Tool::kSelect) toolName = L"框选";
     else if (tool_ == Tool::kNone) toolName = L"仅查看";
 
     const wchar_t* layerName = L"地形";
@@ -768,10 +1556,14 @@ void MainWindow::DrawHud(HDC dc) const {
         default: break;
     }
 
-    ::wsprintfW(text, L"层: %s   工具: %s   刷子: 0x%04X   单位: %u   缩放: %dpx/瓦片   撤销: %u / 重做: %u\n"
-                      L"左键应用 / 右键删单位 / 1地形 2单位 3吸管 / 滚轮缩放 / Ctrl+Z 撤销 / Ctrl+Y 重做",
-                layerName, toolName, static_cast<unsigned>(brushTile_),
-                static_cast<unsigned>(unitType_), pxPerTile_,
+    const unsigned brushGroup = (brushTile_ & 0x7FF0u) >> 4;
+    const unsigned brushIndex = brushTile_ & 0x000Fu;
+    ::wsprintfW(text, L"层: %s   工具: %s   刷子: 0x%04X (组 %u/索引 %u) [%ls %dx%d]   单位: %u / 玩家 %u / 资源 %u   缩放: %dpx/瓦片   撤销: %u / 重做: %u\n"
+                      L"左键应用 / 右键删单位 / 1地形 2单位 3吸管 4框选 / Ctrl+X/C/V 剪贴板 / 滚轮缩放 / Ctrl+Z 撤销 / 编辑层→刷子 自定义图案",
+                layerName, toolName, static_cast<unsigned>(brushTile_), brushGroup, brushIndex,
+                brushPattern_.name.c_str(), brushPattern_.width, brushPattern_.height,
+                static_cast<unsigned>(unitType_), static_cast<unsigned>(unitOwner_),
+                static_cast<unsigned>(unitResource_), pxPerTile_,
                 static_cast<unsigned>(history_.UndoCount()),
                 static_cast<unsigned>(history_.RedoCount()));
 
@@ -779,7 +1571,7 @@ void MainWindow::DrawHud(HDC dc) const {
     const int oldMode = ::SetBkMode(dc, OPAQUE);
     const COLORREF oldColor = ::SetTextColor(dc, RGB(255, 255, 255));
     const COLORREF oldBk = ::SetBkColor(dc, RGB(32, 32, 32));
-    RECT box = {6, 6, 6 + 560, 6 + 44};
+    RECT box = {6, 6, 6 + 980, 6 + 48};
     ::DrawTextW(dc, text, -1, &box, DT_LEFT | DT_TOP | DT_NOPREFIX);
     ::SetBkColor(dc, oldBk);
     ::SetTextColor(dc, oldColor);
@@ -804,9 +1596,13 @@ void MainWindow::Present(HDC dc, const RECT& client) {
         }
     }
 
+    if (showDoodads_) DrawDoodads(dc, client);
+    if (showSpUnits_) DrawSprites(dc, client);
+    if (showFog_) DrawFog(dc, client);
     DrawGrid(dc, client);
     if (showUnits_) DrawUnits(dc, client);
     if (showLocations_) DrawLocations(dc, client);
+    DrawSelection(dc, client);
 
     // 光标所在格高亮
     if (cursorTx_ >= 0) {
@@ -824,6 +1620,17 @@ void MainWindow::BeginEdit() {
     editOpen_ = true;
     tilesSnapshot_ = map_.tiles();
     unitsSnapshot_ = map_.units();
+    triggersSnapshot_ = map_.triggers().Serialize();
+    locationsSnapshot_ = map_.locations().Serialize();
+    stringsSnapshot_ = map_.strings().Serialize();
+    playersSnapshot_ = map_.players().Snapshot();
+    restrictionsSnapshot_ = map_.restrictions().Snapshot();
+    doodadsSnapshot_ = map_.doodads().Serialize();
+    fogSnapshot_ = map_.fog().Serialize();
+    spritesSnapshot_ = map_.sprites().Serialize();
+    wavSnapshot_ = map_.sounds().Serialize();
+    swnmSnapshot_ = map_.switchNames().Serialize();
+    mbrfSnapshot_ = map_.briefing().Serialize();
 }
 
 void MainWindow::CommitEdit(const wchar_t* label) {
@@ -836,9 +1643,47 @@ void MainWindow::CommitEdit(const wchar_t* label) {
         !std::equal(map_.units().begin(), map_.units().end(), unitsSnapshot_.begin(),
                     [](const UnitRecord& a, const UnitRecord& b) {
                         return a.serial == b.serial && a.x == b.x && a.y == b.y &&
-                               a.type == b.type && a.owner == b.owner && a.resource == b.resource;
+                               a.type == b.type && a.owner == b.owner && a.resource == b.resource &&
+                               a.hpPercent == b.hpPercent && a.shieldPercent == b.shieldPercent &&
+                               a.energyPercent == b.energyPercent;
                     });
-    if (!tilesChanged && !unitsChanged) {
+
+    const Buffer triggersAfter = map_.triggers().Serialize();
+    const Buffer locationsAfter = map_.locations().Serialize();
+    const Buffer stringsAfter = map_.strings().Serialize();
+    const Buffer playersAfter = map_.players().Snapshot();
+    const Buffer restrictionsAfter = map_.restrictions().Snapshot();
+    const Buffer doodadsAfter = map_.doodads().Serialize();
+    const Buffer fogAfter = map_.fog().Serialize();
+    const Buffer spritesAfter = map_.sprites().Serialize();
+    const Buffer wavAfter = map_.sounds().Serialize();
+    const Buffer swnmAfter = map_.switchNames().Serialize();
+    const Buffer mbrfAfter = map_.briefing().Serialize();
+    const bool metaChanged = triggersAfter != triggersSnapshot_ ||
+                             locationsAfter != locationsSnapshot_ ||
+                             stringsAfter != stringsSnapshot_;
+    const bool playersChanged = playersAfter != playersSnapshot_;
+    const bool restrictionsChanged = restrictionsAfter != restrictionsSnapshot_;
+    const bool decorChanged = doodadsAfter != doodadsSnapshot_ || fogAfter != fogSnapshot_ ||
+                              spritesAfter != spritesSnapshot_;
+    const bool extraChanged = wavAfter != wavSnapshot_ || swnmAfter != swnmSnapshot_ ||
+                              mbrfAfter != mbrfSnapshot_;
+
+    if (!tilesChanged && !unitsChanged && !metaChanged && !playersChanged &&
+        !restrictionsChanged && !decorChanged && !extraChanged) {
+        tilesSnapshot_.clear();
+        unitsSnapshot_.clear();
+        triggersSnapshot_.clear();
+        locationsSnapshot_.clear();
+        stringsSnapshot_.clear();
+        playersSnapshot_.clear();
+        restrictionsSnapshot_.clear();
+        doodadsSnapshot_.clear();
+        fogSnapshot_.clear();
+        spritesSnapshot_.clear();
+        wavSnapshot_.clear();
+        swnmSnapshot_.clear();
+        mbrfSnapshot_.clear();
         UpdateTitle();
         return;
     }
@@ -849,10 +1694,56 @@ void MainWindow::CommitEdit(const wchar_t* label) {
     cmd.tilesAfter = tiles;
     cmd.unitsBefore = std::move(unitsSnapshot_);
     cmd.unitsAfter = map_.units();
+    if (metaChanged) {
+        cmd.hasMeta = true;
+        cmd.triggersBefore = std::move(triggersSnapshot_);
+        cmd.triggersAfter = triggersAfter;
+        cmd.locationsBefore = std::move(locationsSnapshot_);
+        cmd.locationsAfter = locationsAfter;
+        cmd.stringsBefore = std::move(stringsSnapshot_);
+        cmd.stringsAfter = stringsAfter;
+    }
+    if (playersChanged) {
+        cmd.hasPlayers = true;
+        cmd.playersBefore = std::move(playersSnapshot_);
+        cmd.playersAfter = playersAfter;
+    }
+    if (restrictionsChanged) {
+        cmd.hasRestrictions = true;
+        cmd.restrictionsBefore = std::move(restrictionsSnapshot_);
+        cmd.restrictionsAfter = restrictionsAfter;
+    }
+    if (decorChanged) {
+        cmd.hasDecor = true;
+        cmd.doodadsBefore = std::move(doodadsSnapshot_);
+        cmd.doodadsAfter = doodadsAfter;
+        cmd.fogBefore = std::move(fogSnapshot_);
+        cmd.fogAfter = fogAfter;
+        cmd.spritesBefore = std::move(spritesSnapshot_);
+        cmd.spritesAfter = spritesAfter;
+    }
+    if (extraChanged) {
+        cmd.hasScenarioExtra = true;
+        cmd.wavBefore = std::move(wavSnapshot_);
+        cmd.wavAfter = wavAfter;
+        cmd.swnmBefore = std::move(swnmSnapshot_);
+        cmd.swnmAfter = swnmAfter;
+        cmd.mbrfBefore = std::move(mbrfSnapshot_);
+        cmd.mbrfAfter = mbrfAfter;
+    }
     history_.Push(std::move(cmd));
 
-    tilesSnapshot_.clear();
-    unitsSnapshot_.clear();
+    triggersSnapshot_.clear();
+    locationsSnapshot_.clear();
+    stringsSnapshot_.clear();
+    playersSnapshot_.clear();
+    restrictionsSnapshot_.clear();
+    doodadsSnapshot_.clear();
+    fogSnapshot_.clear();
+    spritesSnapshot_.clear();
+    wavSnapshot_.clear();
+    swnmSnapshot_.clear();
+    mbrfSnapshot_.clear();
     UpdateTitle();
 }
 
@@ -929,7 +1820,78 @@ bool MainWindow::Redo() {
     return true;
 }
 
+bool MainWindow::ApplyRadarFogCommand(int id) {
+    enum class Kind { kNone, kPlace, kRemove, kDisableFog, kAllowFog } kind = Kind::kNone;
+    int player = -2;
+    if (id >= kPlaceRadarP1 && id <= kPlaceRadarP1 + 7) {
+        kind = Kind::kPlace;
+        player = id - kPlaceRadarP1;
+    } else if (id == kPlaceRadarAll) {
+        kind = Kind::kPlace;
+        player = -1;
+    } else if (id >= kRemoveRadarP1 && id <= kRemoveRadarP1 + 7) {
+        kind = Kind::kRemove;
+        player = id - kRemoveRadarP1;
+    } else if (id == kRemoveRadarAll) {
+        kind = Kind::kRemove;
+        player = -1;
+    } else if (id >= kDisableFogP1 && id <= kDisableFogP1 + 7) {
+        kind = Kind::kDisableFog;
+        player = id - kDisableFogP1;
+    } else if (id == kDisableFogAll) {
+        kind = Kind::kDisableFog;
+        player = -1;
+    } else if (id >= kAllowFogP1 && id <= kAllowFogP1 + 7) {
+        kind = Kind::kAllowFog;
+        player = id - kAllowFogP1;
+    } else if (id == kAllowFogAll) {
+        kind = Kind::kAllowFog;
+        player = -1;
+    } else {
+        return false;
+    }
+
+    if (!map_.IsOpen()) {
+        MessageBeep(MB_ICONWARNING);
+        return true;
+    }
+
+    BeginEdit();
+    int changed = 0;
+    const wchar_t* label = L"";
+    switch (kind) {
+        case Kind::kPlace:
+            changed = PlaceMapRevealers(map_, player);
+            label = L"放置小雷达";
+            break;
+        case Kind::kRemove:
+            changed = RemoveMapRevealers(map_, player);
+            label = L"删除小雷达";
+            break;
+        case Kind::kDisableFog:
+            changed = SetFogForPlayers(map_, player, false) ? 1 : 0;
+            label = L"禁止迷雾";
+            break;
+        case Kind::kAllowFog:
+            changed = SetFogForPlayers(map_, player, true) ? 1 : 0;
+            label = L"允许迷雾";
+            break;
+        default:
+            break;
+    }
+
+    if (changed == 0) {
+        editOpen_ = false;   // 没有实际改动，不产生历史
+    } else {
+        CommitEdit(label);
+    }
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+    return true;
+}
+
 void MainWindow::OnCommand(int id) {
+    if (ApplyRadarFogCommand(id)) return;
     switch (id) {
         case kFileNew:
             NewMap();
@@ -948,6 +1910,9 @@ void MainWindow::OnCommand(int id) {
             break;
         case kFileSaveAs:
             SaveMap(true);
+            break;
+        case kFileSaveImage:
+            SaveMapImage();
             break;
         case kEditUndo:
             Undo();
@@ -968,6 +1933,11 @@ void MainWindow::OnCommand(int id) {
             break;
         case kEditDeselect:
             cursorTx_ = cursorTy_ = -1;
+            ClearSelection();
+            break;
+        case kEditSelectTool:
+            tool_ = Tool::kSelect;
+            UpdateTitle();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         case kEditProperties:
@@ -983,25 +1953,72 @@ void MainWindow::OnCommand(int id) {
             EditMapText(1, false);     // STR[1] 地图名
             break;
         case kScenarioForces:
-            ShowRecoveredDialog(IDD_DLG_183, hwnd_);
+            OpenPlayerRoster();
             break;
         case kScenarioUnits:
             ShowRecoveredDialog(IDD_DLG_172, hwnd_);
             break;
         case kScenarioUpgrades:
+            OpenRestrictions();
+            break;
         case kScenarioTech:
-            ShowRecoveredDialog(IDD_DLG_184, hwnd_);
+            OpenRestrictions();
             break;
         case kScenarioGotoStart:
             GotoStartPosition();
             break;
-        case kScenarioSounds:
-            Log(L"[ui] 编辑声音暂未实现");
-            MessageBeep(MB_ICONWARNING);
+        case kScenarioSounds: {
+            if (!map_.IsOpen()) {
+                MessageBeep(MB_ICONWARNING);
+                break;
+            }
+            BeginEdit();
+            SetDialogDocument(&map_);
+            ShowRecoveredDialog(IDD_SOUNDS, hwnd_);
+            SetDialogDocument(nullptr);
+            CommitEdit(L"编辑声音");
+            UpdateTitle();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
+        }
+        case kScenarioBriefing: {
+            if (!map_.IsOpen()) {
+                MessageBeep(MB_ICONWARNING);
+                break;
+            }
+            BeginEdit();
+            SetDialogDocument(&map_);
+            ShowRecoveredDialog(IDD_BRIEFING, hwnd_);
+            SetDialogDocument(nullptr);
+            CommitEdit(L"编辑任务简报");
+            UpdateTitle();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        }
         case kLayerBrush:
+            OpenCustomBrush();
+            break;
         case kWindowBrush:
-            ShowRecoveredDialog(IDD_DLG_182, hwnd_);
+            ShowBrushPalette();
+            break;
+        case kWindowUnitPanel:
+            OpenUnitPlacement();
+            break;
+        case kWindowSpUnits: {
+            const int index = cursorTx_ >= 0 ? SpriteIndexAtTile(cursorTx_, cursorTy_) : -1;
+            OpenSpUnitEditor(index);
+            break;
+        }
+        case kPlaceBuildNormal:
+        case kPlaceUnitGrid:
+        case kPlaceGroundOverlap:
+        case kPlaceAirOverlap:
+        case kPlaceUnitAnywhere:
+        case kPlaceBuildingAnywhere:
+        case kPlaceAutoAddon:
+        case kPlaceMineralDistance:
+        case kClipboardDoodads:
+            TogglePlacementRule(id);
             break;
         case kOptionsEditorSettings:
             ShowRecoveredDialog(IDD_DLG_155, hwnd_);
@@ -1020,12 +2037,78 @@ void MainWindow::OnCommand(int id) {
             MessageBeep(MB_ICONWARNING);
             break;
         case kEditCut:
-        case kEditCopy:
-        case kEditPaste:
-        case kEditSelectAll:
-            Log(L"[ui] 编辑命令 0x%04X 暂未实现（需要选择/剪贴板模型）", id);
-            MessageBeep(MB_ICONWARNING);
+            CopySelection(true);
             break;
+        case kEditCopy:
+            CopySelection(false);
+            break;
+        case kEditPaste:
+            PasteClipboard();
+            break;
+        case kEditSelectAll:
+            SelectAllTiles();
+            break;
+        case kEditOverlapUnits: {
+            if (!map_.IsOpen() || !hasSelection_) {
+                MessageBeep(MB_ICONWARNING);
+                break;
+            }
+            const bool cursorInside = cursorTx_ >= selX0_ && cursorTx_ <= selX1_ &&
+                                      cursorTy_ >= selY0_ && cursorTy_ <= selY1_;
+            const int tx = cursorInside ? cursorTx_ : SelectionCenterX();
+            const int ty = cursorInside ? cursorTy_ : SelectionCenterY();
+            if (OverlapSelectedUnitsAt(tx, ty) == 0) MessageBeep(MB_ICONWARNING);
+            break;
+        }
+        case kDeleteInvalidUnits:
+            if (DeleteInvalidUnits() == 0) MessageBeep(MB_ICONWARNING);
+            break;
+        case kEditConvertTerrain: {
+            if (!map_.IsOpen()) {
+                MessageBeep(MB_ICONWARNING);
+                break;
+            }
+            int x0 = 0, y0 = 0, x1 = map_.width() - 1, y1 = map_.height() - 1;
+            if (hasSelection_) {
+                x0 = std::min(selX0_, selX1_);
+                x1 = std::max(selX0_, selX1_);
+                y0 = std::min(selY0_, selY1_);
+                y1 = std::max(selY0_, selY1_);
+            } else if (cursorTx_ >= 0) {
+                x0 = x1 = cursorTx_;
+                y0 = y1 = cursorTy_;
+            } else {
+                MessageBeep(MB_ICONWARNING);
+                break;
+            }
+            BeginEdit();
+            const int removed = map_.mutableDoodads().RemoveInTileRect(x0, y0, x1, y1);
+            if (removed > 0) {
+                map_.MarkDirty();
+                CommitEdit(L"转换地形");
+            } else {
+                editOpen_ = false;
+                MessageBeep(MB_ICONWARNING);
+            }
+            UpdateTitle();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        }
+        case kRandomizeMinerals: {
+            if (!map_.IsOpen()) {
+                MessageBeep(MB_ICONWARNING);
+                break;
+            }
+            BeginEdit();
+            if (RandomizeMineralTypes(map_) > 0) {
+                CommitEdit(L"矿物外形随机");
+            } else {
+                editOpen_ = false;
+            }
+            UpdateTitle();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        }
         case kLayerTerrain:
             SetLayer(EditLayer::kTerrain);
             break;
@@ -1035,6 +2118,21 @@ void MainWindow::OnCommand(int id) {
         case kLayerFog:
             SetLayer(EditLayer::kFog);
             break;
+        case kFogDefaultUnexplored:
+        case kFogDefaultExplored: {
+            if (!map_.IsOpen()) {
+                MessageBeep(MB_ICONWARNING);
+                break;
+            }
+            BeginEdit();
+            map_.mutableFog().SetAll(id == kFogDefaultUnexplored ? 0xFF : 0x00,
+                                     map_.width(), map_.height());
+            map_.MarkDirty();
+            CommitEdit(L"战争迷雾默认");
+            UpdateTitle();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        }
         case kLayerLocations:
             SetLayer(EditLayer::kLocations);
             break;
@@ -1099,18 +2197,37 @@ void MainWindow::OnCommand(int id) {
         case kDispLocations:
             ToggleDisplay(id);
             break;
+        case kLocRename: {
+            if (!map_.IsOpen()) {
+                MessageBeep(MB_ICONWARNING);
+                break;
+            }
+            POINT pt;
+            ::GetCursorPos(&pt);
+            ::ScreenToClient(hwnd_, &pt);
+            int tx = -1, ty = -1;
+            TileCoordsFromClient(pt.x, pt.y, tx, ty);
+            const int index = tx >= 0 ? LocationIndexAtTile(tx, ty) : -1;
+            if (index < 0) {
+                ::MessageBoxW(hwnd_, L"光标不在任何地点上。", kWindowTitle,
+                              MB_ICONINFORMATION);
+                break;
+            }
+            EditLocation(index);
+            break;
+        }
         case kTriggerEditor:
             if (!map_.IsOpen()) {
                 MessageBeep(MB_ICONWARNING);
                 break;
             }
+            BeginEdit();
             SetDialogDocument(&map_);
             ShowRecoveredDialog(IDD_DLG_181, hwnd_);
             SetDialogDocument(nullptr);
-            if (map_.IsDirty()) {
-                UpdateTitle();
-                ::InvalidateRect(hwnd_, nullptr, FALSE);
-            }
+            CommitEdit(L"编辑触发");
+            UpdateTitle();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         case kDebugDialogs:
             ShowRecoveredDialog(IDD_DLG_155, hwnd_);
@@ -1140,6 +2257,9 @@ LRESULT CALLBACK MainWindow::WndProcThunk(HWND hwnd, UINT msg, WPARAM wParam, LP
 
 LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+        case BrushPalette::kMsgSelected:
+            SetBrushTile(static_cast<u16>(wParam));
+            return 0;
         case WM_COMMAND:
             OnCommand(LOWORD(wParam));
             return 0;
@@ -1158,9 +2278,18 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             ::SetCapture(hwnd_);
             OnLButtonDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             return 0;
+        case WM_LBUTTONDBLCLK:
+            OnLButtonDblClk(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+            return 0;
         case WM_LBUTTONUP:
             ::ReleaseCapture();
-            if (tool_ == Tool::kTerrain) CommitEdit(L"绘制地形");
+            if (selecting_) {
+                selecting_ = false;
+                UpdateTitle();
+                return 0;
+            }
+            if (layer_ == EditLayer::kFog && editOpen_) CommitEdit(L"编辑战争迷雾");
+            else if (tool_ == Tool::kTerrain) CommitEdit(L"绘制地形");
             else if (tool_ == Tool::kUnit) CommitEdit(L"放置单位");
             else editOpen_ = false;
             UpdateTitle();
