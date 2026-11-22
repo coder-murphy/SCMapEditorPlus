@@ -266,6 +266,10 @@ bool MainWindow::RebuildView(int pxPerTile) {
     ReleaseBackBuffer();
     pxPerTile_ = pxPerTile;
     if (!map_.IsOpen() || !map_.hasTileset()) return false;
+    // 防御超大位图：与地图显示比率菜单共用 256 MB 上限
+    const double pixels =
+        static_cast<double>(map_.width()) * map_.height() * pxPerTile * pxPerTile;
+    if (pixels > 64.0 * 1024.0 * 1024.0) return false;
     if (!renderer_.Render(map_.tiles(), map_.width(), map_.height(), pxPerTile, image_)) return false;
 
     BITMAPINFO bi = {};
