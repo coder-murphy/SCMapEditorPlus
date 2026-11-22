@@ -57,6 +57,13 @@ COLORREF UnitColor(u16 type) {
     return RGB(255, 150, 0);
 }
 
+// “所有颜色”：按单位类型散列出稳定且互不相同的颜色；关闭时沿用分类色
+COLORREF UnitColorFor(u16 type, bool allColors) {
+    if (!allColors) return UnitColor(type);
+    const unsigned h = static_cast<unsigned>(type) * 2654435761u;
+    return RGB(64 + (h & 0x7Fu), 64 + ((h >> 8) & 0x7Fu), 64 + ((h >> 16) & 0x7Fu));
+}
+
 // 递归找到直接包含命令 ID 的子菜单（用于按命令 ID 勾选/启用）
 HMENU FindMenuContaining(HMENU menu, int id) {
     if (!menu) return nullptr;
@@ -1604,7 +1611,7 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
         if (sx > client.right || sy > client.bottom) continue;
 
         const int size = std::max(3, pxPerTile_ / 2);
-        const HBRUSH brush = ::CreateSolidBrush(UnitColor(u.type));
+        const HBRUSH brush = ::CreateSolidBrush(UnitColorFor(u.type, showAllColors_));
         RECT r;
         r.left = sx + (pxPerTile_ - size) / 2;
         r.top = sy + (pxPerTile_ - size) / 2;
@@ -1657,7 +1664,7 @@ void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
         const int x = mx + static_cast<int>(u.x) * mw / mapPxW;
         const int y = my + static_cast<int>(u.y) * mh / mapPxH;
         RECT r = {x, y, x + 2, y + 2};
-        HBRUSH b = ::CreateSolidBrush(UnitColor(u.type));
+        HBRUSH b = ::CreateSolidBrush(UnitColorFor(u.type, showAllColors_));
         ::FillRect(dc, &r, b);
         ::DeleteObject(b);
     }

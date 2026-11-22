@@ -235,7 +235,8 @@ reopened=1 sizeOk=1 painted=16/16 closed=1 freshOk=1
 - **显示选项**：单位、装饰物、SP单位、所有颜色、Zerg地皮、特殊状态、隐藏小雷达、颜色循环、
   死亡效果、战争迷雾、显示Location 均可勾选；其中单位、SP单位、装饰物、战争迷雾与 Location
   立即影响绘制（Location 按 MRGN 矩形画绿框并标序号；SP单位画青色标记；装饰物画品红空心标记；
-  迷雾按 MASK 半透明覆盖），其余为状态位。
+  迷雾按 MASK 半透明覆盖），所有颜色按单位类型散列着色，隐藏小雷达控制小地图显隐；
+  其余（Zerg地皮/特殊状态/颜色循环/死亡效果）仍为状态位，待单位/地形属性数据。
   原资源里被灰掉的 4 项（所有颜色/单位/装饰物/SP单位）在创建时解除灰显。
 
 无头回归 `--menu-cmd-test`：
@@ -243,7 +244,8 @@ reopened=1 sizeOk=1 painted=16/16 closed=1 freshOk=1
 ```
 layerInit=1 layerUnits=1 layerLoc=1 layerBack=1
 gridLarge=1 gridOff=1 gridBack=1 gridRed=1
-unitsOff=1 unitsOn=1 fogOn=1
+unitsOff=1 unitsOn=1 fogOn=1 zoom=1
+minimapOff=1 minimapOn=1 fogAlias=1 allColors=1
 ```
 
 
