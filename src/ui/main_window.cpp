@@ -144,6 +144,29 @@ bool MainWindow::Create(HINSTANCE hInstance) {
     renderer_.SetTileset(&map_.tileset());
     history_.SetLimit(static_cast<std::size_t>(AppSettings::Instance().undoLimit()));
 
+    // 恢复上次会话的视图状态
+    {
+        const ViewState& view = AppSettings::Instance().view();
+        pxPerTile_ = std::clamp(view.zoomPx, 1, 128);
+        gridEnabled_ = view.gridEnabled;
+        gridCellX_ = std::clamp(view.gridCellX, 1, 256);
+        gridCellY_ = std::clamp(view.gridCellY, 1, 256);
+        gridColorCommand_ = view.gridColorId;
+        gridColor_ = static_cast<COLORREF>(view.gridColorValue);
+        layer_ = static_cast<EditLayer>(std::clamp(view.layer, 0, 5));
+        showUnits_ = view.showUnits;
+        showDoodads_ = view.showDoodads;
+        showSpUnits_ = view.showSpUnits;
+        showAllColors_ = view.showAllColors;
+        showZergGround_ = view.showZergGround;
+        showSpecialStates_ = view.showSpecialStates;
+        hideMinimap_ = view.hideMinimap;
+        allowColorCycle_ = view.allowColorCycle;
+        showDeathFx_ = view.showDeathFx;
+        showFog_ = view.showFog;
+        showLocations_ = view.showLocations;
+    }
+
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.style = CS_DBLCLKS;          // 地点层双击打开 171
@@ -2594,10 +2617,34 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_CLOSE:
             if (MaybeSave()) ::DestroyWindow(hwnd_);
             return 0;
-        case WM_DESTROY:
+        case WM_DESTROY: {
+            // 保存视图状态（缩放/方格/编辑层/显示选项）；无头回归时跳过
+            if (AppSettings::Instance().persistViewOnExit()) {
+                ViewState& view = AppSettings::Instance().mutableView();
+                view.zoomPx = pxPerTile_;
+                view.gridEnabled = gridEnabled_;
+                view.gridCellX = gridCellX_;
+                view.gridCellY = gridCellY_;
+                view.gridColorId = gridColorCommand_;
+                view.gridColorValue = static_cast<unsigned>(gridColor_);
+                view.layer = static_cast<int>(layer_);
+                view.showUnits = showUnits_;
+                view.showDoodads = showDoodads_;
+                view.showSpUnits = showSpUnits_;
+                view.showAllColors = showAllColors_;
+                view.showZergGround = showZergGround_;
+                view.showSpecialStates = showSpecialStates_;
+                view.hideMinimap = hideMinimap_;
+                view.allowColorCycle = allowColorCycle_;
+                view.showDeathFx = showDeathFx_;
+                view.showFog = showFog_;
+                view.showLocations = showLocations_;
+                AppSettings::Instance().Save();
+            }
             ReleaseBackBuffer();
             ::PostQuitMessage(0);
             return 0;
+        }
         default:
             return ::DefWindowProcW(hwnd_, msg, wParam, lParam);
     }

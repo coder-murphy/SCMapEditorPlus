@@ -40,8 +40,13 @@ bool WriteWholeFile(const std::wstring& path, const std::string& data) {
     return ok;
 }
 
-std::wstring TrimW(const std::wstring& in) {
-    std::size_t b = 0;
+int ClampInt(int value, int lo, int hi) {
+    if (value < lo) return lo;
+    if (value > hi) return hi;
+    return value;
+}
+
+std::wstring TrimW(const std::wstring& in) {    std::size_t b = 0;
     std::size_t e = in.size();
     while (b < e && (in[b] == L' ' || in[b] == L'\t' || in[b] == L'\r')) b++;
     while (e > b && (in[e - 1] == L' ' || in[e - 1] == L'\t' || in[e - 1] == L'\r')) e--;
@@ -126,6 +131,7 @@ bool AppSettings::Load() {
     backupCount_ = 5;
     autoBackupEnabled_ = false;
     autoBackupMinutes_ = 5;
+    view_ = ViewState{};
     const std::wstring path = filePath();
     if (path.empty()) return false;
     std::string text;
@@ -174,6 +180,27 @@ bool AppSettings::Load() {
             autoBackupEnabled_ = std::atoi(line.c_str() + eq + 1) != 0;
         } else if (key == "autoBackupMinutes") {
             SetAutoBackupMinutes(std::atoi(line.c_str() + eq + 1));
+        } else if (key.compare(0, 5, "view.") == 0) {
+            const std::string sub = key.substr(5);
+            const int iv = std::atoi(line.c_str() + eq + 1);
+            if (sub == "zoom") view_.zoomPx = ClampInt(iv, 1, 128);
+            else if (sub == "gridEnabled") view_.gridEnabled = iv != 0;
+            else if (sub == "gridCellX") view_.gridCellX = ClampInt(iv, 1, 256);
+            else if (sub == "gridCellY") view_.gridCellY = ClampInt(iv, 1, 256);
+            else if (sub == "gridColorId") view_.gridColorId = iv;
+            else if (sub == "gridColorValue") view_.gridColorValue = static_cast<unsigned>(iv);
+            else if (sub == "layer") view_.layer = ClampInt(iv, 0, 5);
+            else if (sub == "units") view_.showUnits = iv != 0;
+            else if (sub == "doodads") view_.showDoodads = iv != 0;
+            else if (sub == "spUnits") view_.showSpUnits = iv != 0;
+            else if (sub == "allColors") view_.showAllColors = iv != 0;
+            else if (sub == "zergGround") view_.showZergGround = iv != 0;
+            else if (sub == "specialStates") view_.showSpecialStates = iv != 0;
+            else if (sub == "hideMinimap") view_.hideMinimap = iv != 0;
+            else if (sub == "colorCycle") view_.allowColorCycle = iv != 0;
+            else if (sub == "deathFx") view_.showDeathFx = iv != 0;
+            else if (sub == "fog") view_.showFog = iv != 0;
+            else if (sub == "locations") view_.showLocations = iv != 0;
         }
     }
     for (const std::wstring& p : slots) {
@@ -207,6 +234,24 @@ bool AppSettings::Save() {
     out += "backupCount=" + std::to_string(backupCount_) + "\n";
     out += "autoBackup=" + std::to_string(autoBackupEnabled_ ? 1 : 0) + "\n";
     out += "autoBackupMinutes=" + std::to_string(autoBackupMinutes_) + "\n";
+    out += "view.zoom=" + std::to_string(view_.zoomPx) + "\n";
+    out += "view.gridEnabled=" + std::to_string(view_.gridEnabled ? 1 : 0) + "\n";
+    out += "view.gridCellX=" + std::to_string(view_.gridCellX) + "\n";
+    out += "view.gridCellY=" + std::to_string(view_.gridCellY) + "\n";
+    out += "view.gridColorId=" + std::to_string(view_.gridColorId) + "\n";
+    out += "view.gridColorValue=" + std::to_string(view_.gridColorValue) + "\n";
+    out += "view.layer=" + std::to_string(view_.layer) + "\n";
+    out += "view.units=" + std::to_string(view_.showUnits ? 1 : 0) + "\n";
+    out += "view.doodads=" + std::to_string(view_.showDoodads ? 1 : 0) + "\n";
+    out += "view.spUnits=" + std::to_string(view_.showSpUnits ? 1 : 0) + "\n";
+    out += "view.allColors=" + std::to_string(view_.showAllColors ? 1 : 0) + "\n";
+    out += "view.zergGround=" + std::to_string(view_.showZergGround ? 1 : 0) + "\n";
+    out += "view.specialStates=" + std::to_string(view_.showSpecialStates ? 1 : 0) + "\n";
+    out += "view.hideMinimap=" + std::to_string(view_.hideMinimap ? 1 : 0) + "\n";
+    out += "view.colorCycle=" + std::to_string(view_.allowColorCycle ? 1 : 0) + "\n";
+    out += "view.deathFx=" + std::to_string(view_.showDeathFx ? 1 : 0) + "\n";
+    out += "view.fog=" + std::to_string(view_.showFog ? 1 : 0) + "\n";
+    out += "view.locations=" + std::to_string(view_.showLocations ? 1 : 0) + "\n";
     out += "undoLimit=" + std::to_string(undoLimit_) + "\n";
     return WriteWholeFile(filePath(), out);
 }

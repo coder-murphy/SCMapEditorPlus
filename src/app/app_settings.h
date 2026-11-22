@@ -5,6 +5,28 @@
 
 namespace scmd {
 
+// 界面状态：缩放、方格、编辑层与显示选项（随 settings.ini 持久化）
+struct ViewState {
+    int zoomPx = 8;
+    bool gridEnabled = true;
+    int gridCellX = 32;
+    int gridCellY = 32;
+    int gridColorId = 0x8036;
+    unsigned gridColorValue = 0;   // COLORREF
+    int layer = 0;                 // EditLayer
+    bool showUnits = true;
+    bool showDoodads = true;
+    bool showSpUnits = true;
+    bool showAllColors = false;
+    bool showZergGround = true;
+    bool showSpecialStates = true;
+    bool hideMinimap = false;
+    bool allowColorCycle = false;
+    bool showDeathFx = false;
+    bool showFog = false;
+    bool showLocations = true;
+};
+
 // 编辑器本地设置：最近编辑地图（MRU）与撤销步数。
 // 以 UTF-8 文本保存在 %APPDATA%\SCMDPlus\settings.ini；测试可通过 SetDirectory 指定目录。
 class AppSettings {
@@ -43,6 +65,12 @@ public:
     int autoBackupMinutes() const { return autoBackupMinutes_; }
     void SetAutoBackupMinutes(int minutes);
 
+    const ViewState& view() const { return view_; }
+    ViewState& mutableView() { return view_; }
+    // 无头回归时关闭退出保存，避免污染用户设置
+    void SetPersistViewOnExit(bool persist) { persistViewOnExit_ = persist; }
+    bool persistViewOnExit() const { return persistViewOnExit_; }
+
     static constexpr std::size_t kMaxRecent = 8;
 
 private:
@@ -60,6 +88,8 @@ private:
     int backupCount_ = 5;
     bool autoBackupEnabled_ = false;
     int autoBackupMinutes_ = 5;
+    ViewState view_;
+    bool persistViewOnExit_ = true;
 };
 
 }  // namespace scmd

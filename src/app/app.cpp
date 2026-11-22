@@ -119,6 +119,28 @@ bool HasBackupTestArg() {
     return want;
 }
 
+// 是否无头回归/工具模式（不保存交互视图状态）
+bool IsHeadlessRun() {
+    int argc = 0;
+    bool headless = false;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            const wchar_t* a = argv[i];
+            if (std::wcsstr(a, L"-test") != nullptr ||
+                std::wcsncmp(a, L"--save-to=", 10) == 0 ||
+                std::wcsncmp(a, L"--dump-render=", 14) == 0 ||
+                std::wcsncmp(a, L"--dialog=", 9) == 0 ||
+                std::wcsncmp(a, L"--extract-ts=", 13) == 0 ||
+                std::wcsncmp(a, L"--mpq=", 6) == 0) {
+                headless = true;
+            }
+        }
+        ::LocalFree(argv);
+    }
+    return headless;
+}
+
 // --ts=<目录>：地形集四件套所在目录
 std::wstring ParseTsArg() {
     int argc = 0;
@@ -2379,6 +2401,18 @@ int RunRecentTest() {
     settings.SetBackupCount(3);
     settings.SetAutoBackupEnabled(true);
     settings.SetAutoBackupMinutes(7);
+    {
+        ViewState& view = settings.mutableView();
+        view.zoomPx = 16;
+        view.gridEnabled = false;
+        view.gridCellX = 48;
+        view.gridColorId = 0x8039;
+        view.gridColorValue = 220;
+        view.layer = 4;
+        view.showUnits = false;
+        view.hideMinimap = true;
+        view.showFog = true;
+    }
     const bool saved = settings.Save();
     settings.ClearRecentMaps();
     settings.SetUndoLimit(50);
@@ -2394,7 +2428,11 @@ int RunRecentTest() {
                             settings.mpqFiles()[0] == L"C:\\a.mpq" &&
                             !settings.backupEnabled() && settings.backupCount() == 3 &&
                             settings.autoBackupEnabled() &&
-                            settings.autoBackupMinutes() == 7;
+                            settings.autoBackupMinutes() == 7 &&
+                            settings.view().zoomPx == 16 && !settings.view().gridEnabled &&
+                            settings.view().gridCellX == 48 && settings.view().layer == 4 &&
+                            !settings.view().showUnits && settings.view().hideMinimap &&
+                            settings.view().showFog;
 
     wchar_t msg[384];
     ::wsprintfW(msg,
@@ -2863,6 +2901,7 @@ int App::Run(HINSTANCE hInstance) {
         AppSettings::Instance().SetDirectory(settingsDir);
     }
     AppSettings::Instance().Load();
+    AppSettings::Instance().SetPersistViewOnExit(!IsHeadlessRun());
 
     // 最近地图 / 设置持久化回归（无窗口）
     if (HasRecentTestArg()) return RunRecentTest();
