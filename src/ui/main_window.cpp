@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
+#include <objbase.h>
+#include <shlobj.h>
 #include <unordered_map>
 #include <utility>
 #include <windows.h>
@@ -677,6 +679,71 @@ void MainWindow::SaveMapImage() {
         return;
     }
     Log(L"[ui] map image saved: %s (%dx%d)", path.c_str(), image.width, image.height);
+}
+
+void MainWindow::SetDefaultMapEditor() {
+    if (::MessageBoxW(hwnd_, L"将 .scx / .scm 文件关联到 SCMD Plus？\n（写入当前用户注册表）",
+                      kWindowTitle, MB_YESNO | MB_ICONQUESTION) != IDYES) {
+        return;
+    }
+    wchar_t exe[MAX_PATH] = L"";
+    ::GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    const std::wstring command = std::wstring(L"\"") + exe + L"\" \"%1\"";
+
+    auto setValue = [](const std::wstring& sub, const wchar_t* name, const std::wstring& value) {
+        HKEY key = nullptr;
+        if (::RegCreateKeyExW(HKEY_CURRENT_USER, sub.c_str(), 0, nullptr, 0, KEY_WRITE, nullptr,
+                              &key, nullptr) != ERROR_SUCCESS) {
+            return false;
+        }
+        const DWORD bytes = static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t));
+        const bool ok = ::RegSetValueExW(key, name, 0, REG_SZ,
+                                         reinterpret_cast<const BYTE*>(value.c_str()),
+                                         bytes) == ERROR_SUCCESS;
+        ::RegCloseKey(key);
+        return ok;
+    };
+
+    bool ok = true;
+    ok = setValue(L"Software\\Classes\\.scx", nullptr, L"SCMDPlus.Map") && ok;
+    ok = setValue(L"Software\\Classes\\.scm", nullptr, L"SCMDPlus.Map") && ok;
+    ok = setValue(L"Software\\Classes\\SCMDPlus.Map", nullptr, L"SCMD Plus 地图") && ok;
+    ok = setValue(L"Software\\Classes\\SCMDPlus.Map\\shell\\open\\command", nullptr, command) && ok;
+    ::SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    ::MessageBoxW(hwnd_, ok ? L"已设置为默认地图编辑器。" : L"写入注册表失败。", kWindowTitle,
+                  ok ? MB_ICONINFORMATION : MB_ICONWARNING);
+}
+
+void MainWindow::CreateStartMenuShortcut() {
+    wchar_t exe[MAX_PATH] = L"";
+    ::GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    wchar_t appData[MAX_PATH] = L"";
+    if (::GetEnvironmentVariableW(L"APPDATA", appData, MAX_PATH) == 0) return;
+    const std::wstring linkPath = std::wstring(appData) +
+                                  L"\\Microsoft\\Windows\\Start Menu\\Programs\\SCMD Plus 3.0.lnk";
+
+    wchar_t workDir[MAX_PATH] = L"";
+    ::lstrcpynW(workDir, exe, MAX_PATH);
+    if (wchar_t* slash = std::wcsrchr(workDir, L'\\')) *slash = L'\0';
+
+    const HRESULT hr = ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    bool saved = false;
+    IShellLinkW* link = nullptr;
+    if (SUCCEEDED(::CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+                                     IID_IShellLinkW, reinterpret_cast<void**>(&link)))) {
+        link->SetPath(exe);
+        link->SetWorkingDirectory(workDir);
+        link->SetDescription(L"SCMD Plus 3.0 地图编辑器");
+        IPersistFile* file = nullptr;
+        if (SUCCEEDED(link->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&file)))) {
+            saved = SUCCEEDED(file->Save(linkPath.c_str(), TRUE));
+            file->Release();
+        }
+        link->Release();
+    }
+    if (SUCCEEDED(hr)) ::CoUninitialize();
+    ::MessageBoxW(hwnd_, saved ? L"开始菜单快捷方式已创建。" : L"创建快捷方式失败。", kWindowTitle,
+                  saved ? MB_ICONINFORMATION : MB_ICONWARNING);
 }
 
 void MainWindow::ShowBrushPalette() {
@@ -2374,6 +2441,12 @@ void MainWindow::OnCommand(int id) {
             break;
         case kAdvancedBackup:
             ShowRecoveredDialog(IDD_DLG_173, hwnd_);
+            break;
+        case kAdvancedDefaultEditor:
+            SetDefaultMapEditor();
+            break;
+        case kAdvancedShortcut:
+            CreateStartMenuShortcut();
             break;
         case kWindowTerrain:
             InvalidateRect(hwnd_, nullptr, FALSE);   // 地形视图即主视图，重绘即可

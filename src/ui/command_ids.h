@@ -73,6 +73,8 @@ enum CommandId : int {
     kOptionsEditorSettings = 0x80C4,
     kAdvancedCheckUpdate = 0x8071,
     kAdvancedBackup = 0x80F9,
+    kAdvancedDefaultEditor = 0x806B, // 设置为默认地图编辑器
+    kAdvancedShortcut = 0x806C,      // 创建开始菜单快捷方式
 
     kLayerTerrain = 0x803A,     // 编辑 → 编辑层 → 地形
     kLayerDoodads = 0x803B,

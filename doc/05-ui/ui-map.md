@@ -519,6 +519,7 @@ minimapOff=1 minimapOn=1 fogAlias=1 allColors=1
 | 选项 → 单位 | 0x8032/0x80E9/0x80EA 等 | 放置规则勾选状态；“任意放置”影响可行走校验，0x80B5 在单位层显示方格 |
 | 选项 → 编辑器设定 | 0x80C4 | 155 基本设置（持久化到 settings.ini） |
 | 高级 → 检查更新 / 打开备份数据 | 0x8071 / 0x80F9 | 174 / 173（备份可恢复） |
+| 高级 → 设为默认编辑器 / 创建快捷方式 | 0x806B / 0x806C | HKCU 关联 .scx/.scm；当前用户开始菜单 .lnk |
 | 帮助 → 关于 | 0x0068 | 103（替换原 MessageBox） |
 
 - 新增 `LastDialogResult()`，调用方用 `IDOK` 判断是否应用对话框结果。

@@ -117,6 +117,8 @@ private:
     int UnitIndexAtTile(int tx, int ty) const;
     void GotoStartPosition();
     void SaveMapImage();
+    void SetDefaultMapEditor();
+    void CreateStartMenuShortcut();
 
     // 地形刷选择窗口（窗口 → 刷子窗口）
     void ShowBrushPalette();
