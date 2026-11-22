@@ -832,6 +832,19 @@ void MainWindow::CopySelection(bool cut) {
         clipboard_.units.push_back(relative);
     }
 
+    clipboard_.doodads.clear();
+    if (clipboardDoodads_) {
+        for (const Doodad& d : map_.doodads().Items()) {
+            const int tx = static_cast<int>(d.x) / 32;
+            const int ty = static_cast<int>(d.y) / 32;
+            if (tx < selX0_ || tx > selX1_ || ty < selY0_ || ty > selY1_) continue;
+            Doodad relative = d;
+            relative.x = static_cast<u16>(d.x - selX0_ * 32);
+            relative.y = static_cast<u16>(d.y - selY0_ * 32);
+            clipboard_.doodads.push_back(relative);
+        }
+    }
+
     if (cut) {
         BeginEdit();
         map_.PaintRect(selX0_, selY0_, selX1_, selY1_, 0);
@@ -844,6 +857,9 @@ void MainWindow::CopySelection(bool cut) {
                                               ty >= selY0_ && ty <= selY1_;
                                    }),
                     units.end());
+        if (clipboardDoodads_) {
+            map_.mutableDoodads().RemoveInTileRect(selX0_, selY0_, selX1_, selY1_);
+        }
         map_.MarkDirty();
         CommitEdit(L"剪切选区");
         ::InvalidateRect(hwnd_, nullptr, FALSE);
@@ -913,6 +929,19 @@ bool MainWindow::PasteClipboardAt(int tx, int ty) {
         r.x = static_cast<u16>(nx);
         r.y = static_cast<u16>(ny);
         units.push_back(r);
+    }
+
+    if (!clipboard_.doodads.empty()) {
+        map_.mutableDoodads().RemoveInTileRect(tx, ty, tx + w - 1, ty + h - 1);
+        for (const Doodad& src : clipboard_.doodads) {
+            const int nx = static_cast<int>(src.x) + tx * 32;
+            const int ny = static_cast<int>(src.y) + ty * 32;
+            if (nx < 0 || ny < 0 || nx >= map_.width() * 32 || ny >= map_.height() * 32) continue;
+            Doodad d = src;
+            d.x = static_cast<u16>(nx);
+            d.y = static_cast<u16>(ny);
+            map_.mutableDoodads().MutableItems().push_back(d);
+        }
     }
 
     map_.MarkDirty();

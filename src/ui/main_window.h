@@ -224,6 +224,7 @@ private:
         int height = 0;
         std::vector<u16> tiles;
         std::vector<UnitRecord> units;   // x/y 已归一化为选区相对像素
+        std::vector<Doodad> doodads;     // 仅在“包括装饰物”开启时复制；x/y 同样归一化
         bool Empty() const { return width <= 0 || height <= 0; }
     };
     bool hasSelection_ = false;

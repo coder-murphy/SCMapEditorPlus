@@ -28,7 +28,8 @@
   - 框选工具（0x8FFB / 数字键 4）、全选/取消、复制/剪切/粘贴（0x80E6/80E7/80E8/809A）。
   - 内部剪贴板可跨地图；粘贴替换目标区单位并重新分配 serial。
   - 重叠所选单位（0x811A）、删除非法单位（0x8105，越界/重复 serial）。
-  - 回归：`--clip-test`。
+  - 选项 → 剪切 复制 粘贴 → 包括装饰物（0x811C）：复制/剪切/粘贴同步处理选区内 DD2。
+  - 回归：`--clip-test`（新增 `doodadNo/doodadPaste/doodadCut`）。
 - [x] **撤销范围**
   - `EditCommand` 增加 TRIG/MRGN/STR 序列化快照；触发编辑器、字符串编辑与地点编辑已包进事务。
   - 回归：`--undo-test` 新增 `metaUndo/metaRedo`。

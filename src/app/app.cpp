@@ -555,6 +555,30 @@ int RunClipTest(MainWindow& win, const std::wstring& outPath) {
     const bool tile2Ok = doc.TileAt(5, 5) == sample;
     const bool unit2Ok = doc.UnitCountAtTile(5, 5) == 1;
 
+    // 剪贴板包含装饰物（0x811C）
+    doc.mutableDoodads().MutableItems().push_back(
+        Doodad{1, static_cast<u16>(5 * 32), static_cast<u16>(5 * 32 + 16), 0, 0});
+    win.SelectRect(5, 5, 5, 5);
+    win.CopySelection(false);                         // 默认不含装饰物
+    win.PasteClipboardAt(9, 9);
+    const bool doodadPasteNo = doc.doodads().Count() == 1;
+    doc.RemoveUnitsAtTile(9, 9);
+
+    win.OnCommand(0x811C);                            // 打开“包括装饰物”
+    win.SelectRect(5, 5, 5, 5);
+    win.CopySelection(false);
+    win.PasteClipboardAt(9, 9);
+    bool doodadAt99 = false;
+    for (const Doodad& d : doc.doodads().Items()) {
+        if (d.x == 9 * 32 && d.y == 9 * 32 + 16) doodadAt99 = true;
+    }
+    const bool doodadPaste = doc.doodads().Count() == 2 && doodadAt99;
+    doc.RemoveUnitsAtTile(9, 9);
+
+    win.SelectRect(9, 9, 9, 9);
+    win.CopySelection(true);                          // 剪切时同步删除装饰物
+    const bool doodadCut = doc.doodads().Count() == 1;
+
     // 重叠所选单位
     doc.PlaceUnit(6, 6, 188, 11, 5000, true);
     win.SelectRect(5, 5, 6, 6);
@@ -581,14 +605,17 @@ int RunClipTest(MainWindow& win, const std::wstring& outPath) {
     wchar_t msg[512];
     ::wsprintfW(msg,
         L"paste=%d\ntile=%d\nunit=%d\ncutTile=%d\ncutUnit=%d\npaste2=%d\ntile2=%d\nunit2=%d\n"
+        L"doodadNo=%d\ndoodadPaste=%d\ndoodadCut=%d\n"
         L"overlap=%d\nremoved=%d\ninvalidOk=%d\nsaved=%d\nreopened=%d\nreopenOk=%d\n",
         pasted ? 1 : 0, tileOk ? 1 : 0, unitOk ? 1 : 0, cutTileOk ? 1 : 0, cutUnitOk ? 1 : 0,
-        pasted2 ? 1 : 0, tile2Ok ? 1 : 0, unit2Ok ? 1 : 0, overlapOk ? 1 : 0, removed,
+        pasted2 ? 1 : 0, tile2Ok ? 1 : 0, unit2Ok ? 1 : 0, doodadPasteNo ? 1 : 0,
+        doodadPaste ? 1 : 0, doodadCut ? 1 : 0, overlapOk ? 1 : 0, removed,
         invalidOk ? 1 : 0, saved ? 1 : 0, reopened ? 1 : 0, reopenOk ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = pasted && tileOk && unitOk && cutTileOk && cutUnitOk && pasted2 &&
-                    tile2Ok && unit2Ok && overlapOk && invalidOk && saved && reopenOk;
+                    tile2Ok && unit2Ok && doodadPasteNo && doodadPaste && doodadCut &&
+                    overlapOk && invalidOk && saved && reopenOk;
     return ok ? 0 : 2;
 }
 
