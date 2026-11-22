@@ -1143,18 +1143,31 @@ int RunResizeTest(const std::wstring& mapPath, const std::wstring& outPath) {
     const bool reopenDim = reopened && check.width() == newW && check.height() == newH;
     const bool reopenTile = reopened && fx >= 0 && check.TileAt(fx + 1, fy + 1) == expected;
 
+    // 平滑扩边：新增列/行沿用最近的原始瓦片
+    MapDocument smoothDoc;
+    bool smoothOk = false;
+    if (smoothDoc.Open(mapPath, ParseTsArg())) {
+        const u16 edgeTile = smoothDoc.TileAt(oldW - 1, oldH / 2);
+        const u16 innerTile = smoothDoc.TileAt(oldW / 2, oldH / 2);
+        const bool grew = smoothDoc.Resize(oldW + 8, oldH + 8, 0, 0, true);
+        smoothOk = grew && smoothDoc.TileAt(oldW + 4, oldH / 2) == edgeTile &&
+                   smoothDoc.TileAt(oldW / 2, oldH / 2) == innerTile;
+    }
+
     wchar_t msg[512];
     ::wsprintfW(msg,
         L"old=%dx%d\nnew=%dx%d\nresized=%d\ndimOk=%d\ntileMove=%d\nborderZero=%d\n"
-        L"unitsInBounds=%d\nunits=%u->%u\ndirty=%d\nsaved=%d\nreopened=%d\nreopenDim=%d\nreopenTile=%d\n",
+        L"unitsInBounds=%d\nunits=%u->%u\ndirty=%d\nsaved=%d\nreopened=%d\nreopenDim=%d\n"
+        L"reopenTile=%d\nsmooth=%d\n",
         oldW, oldH, newW, newH, resized ? 1 : 0, dimOk ? 1 : 0, tileMoveOk ? 1 : 0,
         borderOk ? 1 : 0, unitsInBounds ? 1 : 0, static_cast<unsigned>(oldUnits),
         static_cast<unsigned>(doc.unitCount()), dirty ? 1 : 0,
-        saved ? 1 : 0, reopened ? 1 : 0, reopenDim ? 1 : 0, reopenTile ? 1 : 0);
+        saved ? 1 : 0, reopened ? 1 : 0, reopenDim ? 1 : 0, reopenTile ? 1 : 0,
+        smoothOk ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = resized && dimOk && tileMoveOk && borderOk && unitsInBounds && dirty &&
-                    saved && reopened && reopenDim && reopenTile;
+                    saved && reopened && reopenDim && reopenTile && smoothOk;
     return ok ? 0 : 2;
 }
 

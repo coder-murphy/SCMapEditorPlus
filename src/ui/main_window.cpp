@@ -715,7 +715,8 @@ void MainWindow::OpenRestrictions() {
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
-void MainWindow::TogglePlacementRule(int commandId) {    switch (commandId) {
+void MainWindow::TogglePlacementRule(int commandId) {
+    switch (commandId) {
         case kPlaceBuildNormal:
             buildNormalRules_ = true;
             placeBuildingsAnywhere_ = false;
@@ -1247,19 +1248,25 @@ void MainWindow::SyncMenuChecks() {
 }
 
 void MainWindow::DrawGrid(HDC dc, const RECT& client) const {
-    if (!gridEnabled_ || !map_.IsOpen() || pxPerTile_ <= 0) return;
+    const bool unitGrid = unitGridDisplay_ && layer_ == EditLayer::kUnits;
+    if ((!gridEnabled_ && !unitGrid) || !map_.IsOpen() || pxPerTile_ <= 0) return;
 
-    // 方格尺寸按源像素定义（32 = 一格），随缩放换算到屏幕
-    const int cellX = gridCellX_ * pxPerTile_ / 32;
-    const int cellY = gridCellY_ * pxPerTile_ / 32;
+    // 方格尺寸按源像素定义（32 = 一格），随缩放换算到屏幕；
+    // 单位层“按方格显示”在网格关闭时使用 1 格（32 px）间距
+    const int srcCellX = gridEnabled_ ? gridCellX_ : 32;
+    const int srcCellY = gridEnabled_ ? gridCellY_ : 32;
+    const int cellX = srcCellX * pxPerTile_ / 32;
+    const int cellY = srcCellY * pxPerTile_ / 32;
     if (cellX < 2 && cellY < 2) return;
 
     const HPEN pen = ::CreatePen(PS_DOT, 1, gridColor_);
     const HGDIOBJ oldPen = ::SelectObject(dc, pen);
     const int oldBk = ::SetBkMode(dc, TRANSPARENT);
+    const int offX = gridEnabled_ ? gridOffsetX_ : 0;
+    const int offY = gridEnabled_ ? gridOffsetY_ : 0;
 
     if (cellX >= 2) {
-        int x = gridOffsetX_ * pxPerTile_ / 32 - scrollX_;
+        int x = offX * pxPerTile_ / 32 - scrollX_;
         while (x < client.left) x += cellX;
         for (; x < client.right; x += cellX) {
             ::MoveToEx(dc, x, client.top, nullptr);
@@ -1267,7 +1274,7 @@ void MainWindow::DrawGrid(HDC dc, const RECT& client) const {
         }
     }
     if (cellY >= 2) {
-        int y = gridOffsetY_ * pxPerTile_ / 32 - scrollY_;
+        int y = offY * pxPerTile_ / 32 - scrollY_;
         while (y < client.top) y += cellY;
         for (; y < client.bottom; y += cellY) {
             ::MoveToEx(dc, client.left, y, nullptr);

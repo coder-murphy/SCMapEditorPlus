@@ -245,23 +245,24 @@ bool MapDocument::Resize(int width, int height, int offsetX, int offsetY, bool s
     if (!opened_ || width <= 0 || height <= 0 || width > kMaxMapSize || height > kMaxMapSize) {
         return false;
     }
-    if (smoothEdges) Log(L"[map] resize: 平滑边缘暂未实现，按硬边处理");
 
     Buffer next(static_cast<std::size_t>(width) * height * 2, 0);
-    const int copyW = std::min(width_, width);
-    const int copyH = std::min(height_, height);
-    for (int y = 0; y < copyH; y++) {
-        const int ny = y + offsetY;
-        if (ny < 0 || ny >= height) continue;
-        const std::size_t src = (static_cast<std::size_t>(y) * width_);
-        const std::size_t dst = (static_cast<std::size_t>(ny) * width);
-        for (int x = 0; x < copyW; x++) {
-            const int nx = x + offsetX;
-            if (nx < 0 || nx >= width) continue;
-            const std::size_t s = (src + x) * 2;
+    // 平滑模式：新增边缘按最近的原始瓦片延伸；否则填充 0
+    const bool smooth = smoothEdges && width_ > 0 && height_ > 0;
+    for (int ny = 0; ny < height; ny++) {
+        for (int nx = 0; nx < width; nx++) {
+            int sx = nx - offsetX;
+            int sy = ny - offsetY;
+            if (sx < 0 || sy < 0 || sx >= width_ || sy >= height_) {
+                if (!smooth) continue;
+                sx = std::clamp(sx, 0, width_ - 1);
+                sy = std::clamp(sy, 0, height_ - 1);
+            }
+            const std::size_t s = (static_cast<std::size_t>(sy) * width_ + sx) * 2;
             if (s + 1 >= tiles_.size()) continue;
-            next[(dst + nx) * 2] = tiles_[s];
-            next[(dst + nx) * 2 + 1] = tiles_[s + 1];
+            const std::size_t d = (static_cast<std::size_t>(ny) * width + nx) * 2;
+            next[d] = tiles_[s];
+            next[d + 1] = tiles_[s + 1];
         }
     }
 
