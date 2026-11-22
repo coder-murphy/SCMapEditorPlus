@@ -134,6 +134,8 @@ enum CommandId : int {
     kDebugDataExact = 0x80FD,   // 显示数据(精确模式)
     kDebugDataFinal = 0x80FE,   // 显示数据(最终模式)
     kDebugOverlaps = 0x80E1,    // 显示重叠标记
+    kDebugCompare = 0x80E0,     // 显示对比数据
+    kDebugUnitConflict = 0x811D,// 显示单位冲突大小
     kDebugCpu = 0x80F2,         // 显示CPU测试数据
     kDebugClearScreen = 0x80E2, // 清除屏幕
     kDebugImageSize = 0x810A,   // 显示图像大小

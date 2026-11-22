@@ -201,7 +201,8 @@ bool MainWindow::Create(HINSTANCE hInstance) {
                                   kWindowSpUnits, kEditConvertTerrain,
                                   kDebugEnable, kDebugDataNormal, kDebugDataExact,
                                   kDebugDataFinal, kDebugOverlaps, kDebugCpu,
-                                  kDebugClearScreen, kDebugImageSize};
+                                  kDebugClearScreen, kDebugImageSize,
+                                  kDebugCompare, kDebugUnitConflict};
         for (int id : kEnableIds) {
             if (HMENU menu = FindMenuContaining(bar, id)) {
                 ::EnableMenuItem(menu, id, MF_BYCOMMAND | MF_ENABLED);
@@ -1271,6 +1272,7 @@ void MainWindow::SyncMenuChecks() {
         {kDispLocations, showLocations_},
         {kDebugEnable, debugMode_}, {kDebugOverlaps, showOverlapMarkers_},
         {kDebugCpu, showCpuTiming_}, {kDebugImageSize, showDebugImageSize_},
+        {kDebugCompare, showCompareData_}, {kDebugUnitConflict, showUnitConflict_},
     };
     for (const Toggle& t : toggles) {
         if (HMENU menu = FindMenuContaining(bar, t.id)) {
@@ -1709,6 +1711,23 @@ void MainWindow::DrawOverlapMarkers(HDC dc, const RECT& client) const {
     ::DeleteObject(brush);
 }
 
+void MainWindow::DrawUnitConflictSizes(HDC dc, const RECT& client) const {
+    if (!showUnitConflict_ || !map_.IsOpen() || pxPerTile_ <= 0) return;
+    const HPEN pen = ::CreatePen(PS_DOT, 1, RGB(255, 80, 80));
+    const HGDIOBJ oldPen = ::SelectObject(dc, pen);
+    const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
+    for (const UnitRecord& u : map_.units()) {
+        const int sx = static_cast<int>(u.x) / kTilePixels * pxPerTile_ - scrollX_;
+        const int sy = static_cast<int>(u.y) / kTilePixels * pxPerTile_ - scrollY_;
+        RECT r = {sx - pxPerTile_, sy - pxPerTile_, sx + pxPerTile_ * 2, sy + pxPerTile_ * 2};
+        if (r.right < 0 || r.bottom < 0 || r.left > client.right || r.top > client.bottom) continue;
+        ::Rectangle(dc, r.left, r.top, r.right, r.bottom);
+    }
+    ::SelectObject(dc, oldBrush);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(pen);
+}
+
 void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
     if (hideMinimap_ || !map_.IsOpen() || pxPerTile_ <= 0) return;
     const int viewW = client.right - client.left;
@@ -1828,6 +1847,29 @@ void MainWindow::DrawHud(HDC dc) const {
         ::lstrcatW(text, dbg);
         extraLines++;
     }
+    if (showCompareData_) {
+        wchar_t cmp[192];
+        if (editOpen_) {
+            const Buffer& now = map_.tiles();
+            int changed = 0;
+            const std::size_t n = std::max(now.size(), tilesSnapshot_.size());
+            for (std::size_t i = 0; i + 1 < n; i += 2) {
+                const u8 b0 = i < now.size() ? now[i] : 0;
+                const u8 b1 = i < tilesSnapshot_.size() ? tilesSnapshot_[i] : 0;
+                const u8 b2 = i + 1 < now.size() ? now[i + 1] : 0;
+                const u8 b3 = i + 1 < tilesSnapshot_.size() ? tilesSnapshot_[i + 1] : 0;
+                if (b0 != b1 || b2 != b3) changed++;
+            }
+            ::wsprintfW(cmp, L"[对比] 地形改动 %d 格   单位 %u -> %u", changed,
+                        static_cast<unsigned>(unitsSnapshot_.size()),
+                        static_cast<unsigned>(map_.units().size()));
+        } else {
+            ::lstrcpyW(cmp, L"[对比] 当前无未提交编辑");
+        }
+        ::lstrcatW(text, L"\n");
+        ::lstrcatW(text, cmp);
+        extraLines++;
+    }
     if (showDebugImageSize_) {
         wchar_t sizeText[128];
         ::wsprintfW(sizeText, L"[图像] %dx%d 像素   缩放 %d px/瓦片", image_.width, image_.height,
@@ -1872,6 +1914,7 @@ void MainWindow::Present(HDC dc, const RECT& client) {
     DrawGrid(dc, client);
     if (showUnits_) DrawUnits(dc, client);
     if (showOverlapMarkers_) DrawOverlapMarkers(dc, client);
+    if (showUnitConflict_) DrawUnitConflictSizes(dc, client);
     if (showLocations_) DrawLocations(dc, client);
     DrawSelection(dc, client);
 
@@ -2528,6 +2571,16 @@ void MainWindow::OnCommand(int id) {
             break;
         case kDebugOverlaps:
             showOverlapMarkers_ = !showOverlapMarkers_;
+            SyncMenuChecks();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kDebugCompare:
+            showCompareData_ = !showCompareData_;
+            SyncMenuChecks();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kDebugUnitConflict:
+            showUnitConflict_ = !showUnitConflict_;
             SyncMenuChecks();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;

@@ -1097,6 +1097,12 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     cmd(0x810A);   // 图像大小
     const bool imageSizeOn = ItemChecked(hwnd, 0x810A);
     cmd(0x810A);
+    cmd(0x80E0);   // 对比数据
+    const bool compareOn = ItemChecked(hwnd, 0x80E0);
+    cmd(0x80E0);
+    cmd(0x811D);   // 单位冲突大小
+    const bool conflictOn = ItemChecked(hwnd, 0x811D);
+    cmd(0x811D);
     cmd(0x80DE);   // 关闭调试
 
     // 地图显示比率（需要已打开地图；--menu-cmd-test 可配合 --open）
@@ -1116,19 +1122,21 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         L"layerInit=%d\nlayerUnits=%d\nlayerLoc=%d\nlayerBack=%d\n"
         L"gridLarge=%d\ngridOff=%d\ngridBack=%d\ngridRed=%d\n"
         L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\nzoom=%d\nminimapOff=%d\nminimapOn=%d\n"
-        L"fogAlias=%d\nallColors=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n",
+        L"fogAlias=%d\nallColors=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n"
+        L"compare=%d\nconflict=%d\n",
         layerInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0, layerBack ? 1 : 0,
         gridLarge ? 1 : 0, gridOff ? 1 : 0, gridBack ? 1 : 0, gridRed ? 1 : 0,
         unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0, zoomOk ? 1 : 0,
         minimapOff ? 1 : 0, minimapOn ? 1 : 0, fogAlias ? 1 : 0, allColorsOn ? 1 : 0,
         debugOn ? 1 : 0, (debugData1 && debugData2) ? 1 : 0, overlapOn ? 1 : 0,
-        imageSizeOn ? 1 : 0);
+        imageSizeOn ? 1 : 0, compareOn ? 1 : 0, conflictOn ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = layerInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
                     gridBack && gridRed && unitsOff && unitsOn && fogOn && zoomOk &&
                     minimapOff && minimapOn && fogAlias && allColorsOn && debugOn &&
-                    debugData1 && debugData2 && overlapOn && imageSizeOn;
+                    debugData1 && debugData2 && overlapOn && imageSizeOn && compareOn &&
+                    conflictOn;
     return ok ? 0 : 2;
 }
 
