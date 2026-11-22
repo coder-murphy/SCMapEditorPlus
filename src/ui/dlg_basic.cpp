@@ -68,6 +68,9 @@ INT_PTR CALLBACK ProcSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
             ::SetDlgItemInt(dlg, IDC_D155_1010, static_cast<UINT>(s.defaultGas()), FALSE);
             ::SetDlgItemInt(dlg, IDC_D155_1013, static_cast<UINT>(s.undoLimit()), FALSE);
             ::SetDlgItemTextW(dlg, IDC_D155_1008, s.gameDir().c_str());
+            ::SetDlgItemInt(dlg, IDC_D155_1079, static_cast<UINT>(s.backupCount()), FALSE);
+            ::CheckDlgButton(dlg, IDC_D155_1082,
+                             s.backupEnabled() ? BST_CHECKED : BST_UNCHECKED);
             FillMpqList(dlg, s.mpqFiles());
             Log(L"[settings] dialog opened");
             return TRUE;
@@ -84,6 +87,8 @@ INT_PTR CALLBACK ProcSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     wchar_t dir[MAX_PATH] = L"";
                     ::GetDlgItemTextW(dlg, IDC_D155_1008, dir, MAX_PATH);
                     s.SetGameDir(dir);
+                    s.SetBackupEnabled(::IsDlgButtonChecked(dlg, IDC_D155_1082) == BST_CHECKED);
+                    s.SetBackupCount(ReadClampedInt(dlg, IDC_D155_1079, s.backupCount(), 1, 99));
                     std::vector<std::wstring> files;
                     CollectMpqList(dlg, files);
                     s.SetMpqFiles(std::move(files));
@@ -98,6 +103,8 @@ INT_PTR CALLBACK ProcSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     ::SetDlgItemInt(dlg, IDC_D155_1009, 8, FALSE);    // 默认水晶
                     ::SetDlgItemInt(dlg, IDC_D155_1010, 1, FALSE);    // 默认气矿
                     ::SetDlgItemInt(dlg, IDC_D155_1013, 50, FALSE);   // 撤销次数
+                    ::SetDlgItemInt(dlg, IDC_D155_1079, 5, FALSE);    // 最大备份数量
+                    ::CheckDlgButton(dlg, IDC_D155_1082, BST_CHECKED);
                     Log(L"[settings] reset to defaults");
                     return TRUE;
                 case IDC_D155_1004: {  // 添加 MPQ

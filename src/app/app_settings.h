@@ -33,6 +33,12 @@ public:
     const std::vector<std::wstring>& mpqFiles() const { return mpqFiles_; }
     void SetMpqFiles(std::vector<std::wstring> files) { mpqFiles_ = std::move(files); }
 
+    // 自动备份（155 的“启动备份 / 最大备份数量”）
+    bool backupEnabled() const { return backupEnabled_; }
+    void SetBackupEnabled(bool enabled) { backupEnabled_ = enabled; }
+    int backupCount() const { return backupCount_; }
+    void SetBackupCount(int count);
+
     static constexpr std::size_t kMaxRecent = 8;
 
 private:
@@ -46,6 +52,8 @@ private:
     int defaultGas_ = 1;
     std::wstring gameDir_;
     std::vector<std::wstring> mpqFiles_;
+    bool backupEnabled_ = true;
+    int backupCount_ = 5;
 };
 
 }  // namespace scmd

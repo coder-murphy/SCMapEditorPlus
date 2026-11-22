@@ -91,6 +91,12 @@ void AppSettings::SetDefaultGas(int value) {
     defaultGas_ = value;
 }
 
+void AppSettings::SetBackupCount(int count) {
+    if (count < 1) count = 1;
+    if (count > 99) count = 99;
+    backupCount_ = count;
+}
+
 void AppSettings::AddRecentMap(const std::wstring& path) {
     if (path.empty()) return;
     for (auto it = recent_.begin(); it != recent_.end(); ++it) {
@@ -110,6 +116,8 @@ bool AppSettings::Load() {
     defaultGas_ = 1;
     gameDir_.clear();
     mpqFiles_.clear();
+    backupEnabled_ = true;
+    backupCount_ = 5;
     const std::wstring path = filePath();
     if (path.empty()) return false;
     std::string text;
@@ -150,6 +158,10 @@ bool AppSettings::Load() {
             SetDefaultGas(std::atoi(line.c_str() + eq + 1));
         } else if (key == "gameDir") {
             gameDir_ = value;
+        } else if (key == "backup") {
+            backupEnabled_ = std::atoi(line.c_str() + eq + 1) != 0;
+        } else if (key == "backupCount") {
+            SetBackupCount(std::atoi(line.c_str() + eq + 1));
         }
     }
     for (const std::wstring& p : slots) {
@@ -179,6 +191,8 @@ bool AppSettings::Save() {
     out += "defaultMineral=" + std::to_string(defaultMineral_) + "\n";
     out += "defaultGas=" + std::to_string(defaultGas_) + "\n";
     out += "gameDir=" + WideToUtf8(gameDir_) + "\n";
+    out += "backup=" + std::to_string(backupEnabled_ ? 1 : 0) + "\n";
+    out += "backupCount=" + std::to_string(backupCount_) + "\n";
     out += "undoLimit=" + std::to_string(undoLimit_) + "\n";
     return WriteWholeFile(filePath(), out);
 }

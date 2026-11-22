@@ -18,6 +18,7 @@
     <ClCompile Include="app\main.cpp"><Filter>app</Filter></ClCompile>
     <ClCompile Include="app\app.cpp"><Filter>app</Filter></ClCompile>
     <ClCompile Include="app\app_settings.cpp"><Filter>app</Filter></ClCompile>
+    <ClCompile Include="app\backups.cpp"><Filter>app</Filter></ClCompile>
     <ClCompile Include="ui\main_window.cpp"><Filter>ui</Filter></ClCompile>
     <ClCompile Include="ui\brush_palette.cpp"><Filter>ui</Filter></ClCompile>
     <ClCompile Include="ui\dialogs.cpp"><Filter>ui</Filter></ClCompile>
@@ -43,6 +44,7 @@
   <ItemGroup>
     <ClInclude Include="app\app.h"><Filter>app</Filter></ClInclude>
     <ClInclude Include="app\app_settings.h"><Filter>app</Filter></ClInclude>
+    <ClInclude Include="app\backups.h"><Filter>app</Filter></ClInclude>
     <ClInclude Include="ui\main_window.h"><Filter>ui</Filter></ClInclude>
     <ClInclude Include="ui\brush_palette.h"><Filter>ui</Filter></ClInclude>
     <ClInclude Include="ui\dialogs.h"><Filter>ui</Filter></ClInclude>

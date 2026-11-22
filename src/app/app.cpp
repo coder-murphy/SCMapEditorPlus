@@ -6,11 +6,13 @@
 #include <algorithm>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <string>
 #include <unordered_set>
 
 #include "res/resource.h"
 #include "app/app_settings.h"
+#include "app/backups.h"
 #include "ui/brush_palette.h"
 #include "ui/dialog_registry.h"
 #include "ui/dialogs.h"
@@ -97,6 +99,20 @@ bool HasRecentTestArg() {
     if (argv) {
         for (int i = 1; i < argc; ++i) {
             if (std::wcscmp(argv[i], L"--recent-test") == 0) want = true;
+        }
+        ::LocalFree(argv);
+    }
+    return want;
+}
+
+// --backup-test：自动备份 / 恢复 / 清理回归（配合 --settings-dir）
+bool HasBackupTestArg() {
+    int argc = 0;
+    bool want = false;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcscmp(argv[i], L"--backup-test") == 0) want = true;
         }
         ::LocalFree(argv);
     }
@@ -2374,6 +2390,54 @@ int RunRecentTest() {
                : 2;
 }
 
+// --backup-test：备份、上限裁剪、恢复与删除
+int RunBackupTest(const std::wstring& mapPath, const std::wstring& settingsDir) {
+    if (mapPath.empty() || settingsDir.empty()) {
+        WriteDiag(L"backup=FAIL missing --open / --settings-dir\n");
+        return 2;
+    }
+    const std::wstring target = settingsDir + L"\\backup_probe.scx";
+    if (!::CopyFileW(mapPath.c_str(), target.c_str(), FALSE)) {
+        WriteDiag(L"backup=FAIL copy\n");
+        return 2;
+    }
+
+    auto readAll = [](const std::wstring& path) {
+        std::ifstream in(path, std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    };
+    const std::string original = readAll(target);
+
+    ClearAllBackups();
+    bool made = true;
+    for (int i = 0; i < 4; i++) made = MakeBackup(target, 3) && made;
+
+    const std::vector<BackupGroup> groups = ListBackupGroups();
+    const bool groupsOk = made && groups.size() == 1 && groups[0].source == target;
+    std::vector<BackupEntry> entries;
+    if (!groups.empty()) entries = ListBackups(groups[0].key);
+    const bool pruneOk = entries.size() == 3;
+
+    {
+        std::ofstream out(target, std::ios::binary | std::ios::trunc);
+        out << "broken";
+    }
+    const bool restored = !entries.empty() && RestoreBackup(entries.front().file, target) &&
+                          readAll(target) == original;
+
+    if (!groups.empty()) DeleteBackupGroup(groups[0].key);
+    const bool cleaned = ListBackupGroups().empty();
+    ::DeleteFileW(target.c_str());
+
+    wchar_t msg[384];
+    ::wsprintfW(msg,
+                L"backup=1\nmade=%d\ngroups=%d\nprune=%d\nentries=%u\nrestored=%d\ncleaned=%d\n",
+                made ? 1 : 0, groupsOk ? 1 : 0, pruneOk ? 1 : 0,
+                static_cast<unsigned>(entries.size()), restored ? 1 : 0, cleaned ? 1 : 0);
+    WriteDiag(msg);
+    return (made && groupsOk && pruneOk && restored && cleaned) ? 0 : 2;
+}
+
 // --tileset-render-test=<输出目录>：8 套地形集逐套创建合成地图，渲染结果与
 // 独立解码的参考图逐像素比对；每套导出一张 BMP，哈希必须互不相同。
 int RunTilesetRenderTest(const std::wstring& tsDir, const std::wstring& outDir) {
@@ -2782,6 +2846,11 @@ int App::Run(HINSTANCE hInstance) {
 
     // 最近地图 / 设置持久化回归（无窗口）
     if (HasRecentTestArg()) return RunRecentTest();
+
+    // 自动备份回归（无窗口）
+    if (HasBackupTestArg()) {
+        return RunBackupTest(ParseOpenArg(), ParseSettingsDirArg());
+    }
 
     ::InitCommonControls();
     // 187 号对话框含 RichEdit20A 控件，必须先让 riched20 注册窗口类

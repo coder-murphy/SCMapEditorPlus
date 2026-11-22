@@ -12,6 +12,7 @@
 #include "common/log.h"
 #include "common/string_util.h"
 #include "app/app_settings.h"
+#include "app/backups.h"
 #include "platform/file_dialog.h"
 #include "map/map_switches.h"
 #include "res/resource.h"
@@ -335,6 +336,11 @@ bool MainWindow::SaveMap(bool saveAs) {
     std::wstring path = mapPath_;
     if (saveAs || path.empty()) {
         if (!SaveFileDialog(hwnd_, kMapFilter, L"scx", path)) return false;
+    }
+    // 覆盖已有文件前自动备份（可在 155 关闭）
+    if (!saveAs && !path.empty() && map_.IsOpen()) {
+        const AppSettings& settings = AppSettings::Instance();
+        if (settings.backupEnabled()) MakeBackup(path, settings.backupCount());
     }
     if (!map_.Save(path)) {
         ::MessageBoxW(hwnd_, L"保存地图失败。", kWindowTitle, MB_ICONWARNING);
