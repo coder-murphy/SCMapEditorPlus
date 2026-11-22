@@ -146,6 +146,7 @@ bool MainWindow::Create(HINSTANCE hInstance) {
     brushPattern_.SetSingle(brushTile_, L"单格");
     renderer_.SetTileset(&map_.tileset());
     history_.SetLimit(static_cast<std::size_t>(AppSettings::Instance().undoLimit()));
+    soundEnabled_ = AppSettings::Instance().soundEnabled();
 
     // 恢复上次会话的视图状态
     {
@@ -261,7 +262,7 @@ int MainWindow::FitZoom() const {
 
 void MainWindow::ApplyZoomPercent(int percent) {
     if (!map_.IsOpen()) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
     int px = (kTilePixels * percent + 50) / 100;
@@ -274,7 +275,7 @@ void MainWindow::ApplyZoomPercent(int percent) {
         return;
     }
     if (px == pxPerTile_) return;
-    if (!RebuildView(px)) MessageBeep(MB_ICONWARNING);
+    if (!RebuildView(px)) BeepWarning();
     SyncMenuChecks();
 }
 
@@ -420,7 +421,7 @@ bool MainWindow::MaybeSave() {
 
 void MainWindow::ResizeMapDialog() {
     if (!map_.IsOpen()) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
     ShowRecoveredDialog(IDD_DLG_175, hwnd_);
@@ -451,7 +452,7 @@ int MainWindow::UnitIndexAtTile(int tx, int ty) const {
 
 void MainWindow::EditUnitProps() {
     if (!map_.IsOpen() || cursorTx_ < 0) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
     const int index = UnitIndexAtTile(cursorTx_, cursorTy_);
@@ -486,7 +487,7 @@ void MainWindow::EditUnitProps() {
 
 void MainWindow::EditLocation(int index) {
     if (!map_.IsOpen()) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
     auto& items = map_.mutableLocations().MutableItems();
@@ -558,7 +559,7 @@ int MainWindow::SpriteIndexAtTile(int tx, int ty) const {
 
 void MainWindow::OpenSpUnitEditor(int selected) {
     if (!map_.IsOpen()) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
     if (map_.sprites().Count() == 0) {
@@ -609,7 +610,7 @@ int MainWindow::LocationIndexAtTile(int tx, int ty) const {
 
 void MainWindow::EditMapText(int stringIndex, bool richText) {
     if (!map_.IsOpen()) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
     const std::wstring seed = Utf8ToWide(map_.strings().At(static_cast<std::size_t>(stringIndex)));
@@ -759,7 +760,7 @@ void MainWindow::CreateStartMenuShortcut() {
 void MainWindow::ShowBrushPalette() {
     if (!map_.IsOpen() || !map_.hasTileset()) {
         Log(L"[brush] 需要先打开地图并载入地形集");
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
     brushPalette_.Show(hInstance_, hwnd_, &map_.tileset(), brushTile_);
@@ -792,7 +793,7 @@ void MainWindow::OpenUnitPlacement() {
 
 void MainWindow::OpenPlayerRoster() {
     if (!map_.IsOpen()) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
 
@@ -817,7 +818,7 @@ void MainWindow::OpenPlayerRoster() {
 
 void MainWindow::OpenRestrictions() {
     if (!map_.IsOpen()) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
 
@@ -949,7 +950,7 @@ void MainWindow::DrawSelection(HDC dc, const RECT&) const {
 
 void MainWindow::CopySelection(bool cut) {
     if (!map_.IsOpen() || !hasSelection_) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
 
@@ -1016,7 +1017,7 @@ void MainWindow::CopySelection(bool cut) {
 
 void MainWindow::PasteClipboard() {
     if (!map_.IsOpen() || clipboard_.Empty()) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
 
@@ -1032,7 +1033,7 @@ void MainWindow::PasteClipboard() {
         tx = (map_.width() - clipboard_.width) / 2;
         ty = (map_.height() - clipboard_.height) / 2;
     }
-    if (!PasteClipboardAt(tx, ty)) MessageBeep(MB_ICONWARNING);
+    if (!PasteClipboardAt(tx, ty)) BeepWarning();
 }
 
 bool MainWindow::PasteClipboardAt(int tx, int ty) {
@@ -1155,7 +1156,7 @@ void MainWindow::RefreshBrushPalette() {
 
 void MainWindow::OpenCustomBrush() {
     if (!map_.IsOpen()) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return;
     }
 
@@ -1350,6 +1351,7 @@ void MainWindow::SyncMenuChecks() {
         {kDebugEnable, debugMode_}, {kDebugOverlaps, showOverlapMarkers_},
         {kDebugCpu, showCpuTiming_}, {kDebugImageSize, showDebugImageSize_},
         {kDebugCompare, showCompareData_}, {kDebugUnitConflict, showUnitConflict_},
+        {kEnableSound, soundEnabled_},
     };
     for (const Toggle& t : toggles) {
         if (HMENU menu = FindMenuContaining(bar, t.id)) {
@@ -1635,7 +1637,7 @@ void MainWindow::OnLButtonDown(int mx, int my) {
             break;
         case Tool::kUnit:
             if (!PlaceUnitAtTile(tx, ty)) {
-                MessageBeep(MB_ICONWARNING);   // 坐标越界或不可行走
+                BeepWarning();   // 坐标越界或不可行走
             }
             break;
         case Tool::kSelect:
@@ -2045,6 +2047,10 @@ void MainWindow::Present(HDC dc, const RECT& client) {
     DrawHud(dc);
 }
 
+void MainWindow::BeepWarning() const {
+    if (soundEnabled_) ::MessageBeep(MB_ICONWARNING);
+}
+
 void MainWindow::BeginEdit() {
     if (editOpen_) return;
     editOpen_ = true;
@@ -2282,7 +2288,7 @@ bool MainWindow::ApplyRadarFogCommand(int id) {
     }
 
     if (!map_.IsOpen()) {
-        MessageBeep(MB_ICONWARNING);
+        BeepWarning();
         return true;
     }
 
@@ -2433,7 +2439,7 @@ void MainWindow::OnCommand(int id) {
             break;
         case kScenarioSounds: {
             if (!map_.IsOpen()) {
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
                 break;
             }
             BeginEdit();
@@ -2447,7 +2453,7 @@ void MainWindow::OnCommand(int id) {
         }
         case kScenarioBriefing: {
             if (!map_.IsOpen()) {
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
                 break;
             }
             BeginEdit();
@@ -2499,12 +2505,19 @@ void MainWindow::OnCommand(int id) {
         case kAdvancedShortcut:
             CreateStartMenuShortcut();
             break;
+        case kEnableSound:
+            soundEnabled_ = !soundEnabled_;
+            AppSettings::Instance().SetSoundEnabled(soundEnabled_);
+            AppSettings::Instance().Save();
+            SyncMenuChecks();
+            if (soundEnabled_) ::MessageBeep(MB_ICONASTERISK);
+            break;
         case kWindowTerrain:
             InvalidateRect(hwnd_, nullptr, FALSE);   // 地形视图即主视图，重绘即可
             break;
         case kWindowDoodads:
             Log(L"[ui] 装饰物窗口暂未实现");
-            MessageBeep(MB_ICONWARNING);
+            BeepWarning();
             break;
         case kEditCut:
             CopySelection(true);
@@ -2520,22 +2533,22 @@ void MainWindow::OnCommand(int id) {
             break;
         case kEditOverlapUnits: {
             if (!map_.IsOpen() || !hasSelection_) {
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
                 break;
             }
             const bool cursorInside = cursorTx_ >= selX0_ && cursorTx_ <= selX1_ &&
                                       cursorTy_ >= selY0_ && cursorTy_ <= selY1_;
             const int tx = cursorInside ? cursorTx_ : SelectionCenterX();
             const int ty = cursorInside ? cursorTy_ : SelectionCenterY();
-            if (OverlapSelectedUnitsAt(tx, ty) == 0) MessageBeep(MB_ICONWARNING);
+            if (OverlapSelectedUnitsAt(tx, ty) == 0) BeepWarning();
             break;
         }
         case kDeleteInvalidUnits:
-            if (DeleteInvalidUnits() == 0) MessageBeep(MB_ICONWARNING);
+            if (DeleteInvalidUnits() == 0) BeepWarning();
             break;
         case kFixDoodadErrors: {
             if (!map_.IsOpen()) {
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
                 break;
             }
             BeginEdit();
@@ -2547,13 +2560,13 @@ void MainWindow::OnCommand(int id) {
                 ::InvalidateRect(hwnd_, nullptr, FALSE);
             } else {
                 editOpen_ = false;
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
             }
             break;
         }
         case kEditConvertTerrain: {
             if (!map_.IsOpen()) {
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
                 break;
             }
             int x0 = 0, y0 = 0, x1 = map_.width() - 1, y1 = map_.height() - 1;
@@ -2566,7 +2579,7 @@ void MainWindow::OnCommand(int id) {
                 x0 = x1 = cursorTx_;
                 y0 = y1 = cursorTy_;
             } else {
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
                 break;
             }
             BeginEdit();
@@ -2576,7 +2589,7 @@ void MainWindow::OnCommand(int id) {
                 CommitEdit(L"转换地形");
             } else {
                 editOpen_ = false;
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
             }
             UpdateTitle();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
@@ -2584,7 +2597,7 @@ void MainWindow::OnCommand(int id) {
         }
         case kRandomizeMinerals: {
             if (!map_.IsOpen()) {
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
                 break;
             }
             BeginEdit();
@@ -2618,7 +2631,7 @@ void MainWindow::OnCommand(int id) {
         case kFogDefaultUnexplored:
         case kFogDefaultExplored: {
             if (!map_.IsOpen()) {
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
                 break;
             }
             BeginEdit();
@@ -2737,7 +2750,7 @@ void MainWindow::OnCommand(int id) {
             break;
         case kLocRename: {
             if (!map_.IsOpen()) {
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
                 break;
             }
             POINT pt;
@@ -2756,7 +2769,7 @@ void MainWindow::OnCommand(int id) {
         }
         case kTriggerEditor:
             if (!map_.IsOpen()) {
-                MessageBeep(MB_ICONWARNING);
+                BeepWarning();
                 break;
             }
             BeginEdit();
@@ -2930,6 +2943,7 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
                 view.showDeathFx = showDeathFx_;
                 view.showFog = showFog_;
                 view.showLocations = showLocations_;
+                AppSettings::Instance().SetSoundEnabled(soundEnabled_);
                 AppSettings::Instance().Save();
             }
             ReleaseBackBuffer();

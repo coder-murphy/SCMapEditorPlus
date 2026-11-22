@@ -68,6 +68,8 @@ public:
 
     const ViewState& view() const { return view_; }
     ViewState& mutableView() { return view_; }
+    bool soundEnabled() const { return soundEnabled_; }
+    void SetSoundEnabled(bool enabled) { soundEnabled_ = enabled; }
     // 无头回归时关闭退出保存，避免污染用户设置
     void SetPersistViewOnExit(bool persist) { persistViewOnExit_ = persist; }
     bool persistViewOnExit() const { return persistViewOnExit_; }
@@ -90,6 +92,7 @@ private:
     bool autoBackupEnabled_ = false;
     int autoBackupMinutes_ = 5;
     ViewState view_;
+    bool soundEnabled_ = true;
     bool persistViewOnExit_ = true;
 };
 

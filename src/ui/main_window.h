@@ -138,6 +138,7 @@ private:
     void OnRButtonDown(int mx, int my);
     void OnKeyDown(int vk);
     void BeginEdit();
+    void BeepWarning() const;        // 受“启用声音”控制
     void CommitEdit(const wchar_t* label);
     void StampBrushAt(int tx, int ty);
     void BeginSelection(int tx, int ty);
@@ -173,6 +174,7 @@ private:
     int scrollY_ = 0;
     ULONGLONG lastBackupTick_ = 0;   // 自动备份节流
     bool debugMode_ = false;         // 0x80DE
+    bool soundEnabled_ = true;       // 0x8072
     int debugDataMode_ = 0;          // 0 = 普通, 1 = 精确, 2 = 最终
     bool showOverlapMarkers_ = false; // 0x80E1
     bool showCompareData_ = false;    // 0x80E0
