@@ -92,6 +92,17 @@ enum CommandId : int {
     kGridHuge = 0x80AA,
     kGridCustom = 0x80CF,
     kGridOff = 0x80D6,
+    // 选项 → 地图显示比率（25%..400%，32 px/瓦片为 100%）
+    kZoom25 = 0x80DA,
+    kZoom33 = 0x80DB,
+    kZoom50 = 0x80D9,
+    kZoom66 = 0x80DD,
+    kZoom100 = 0x80D8,
+    kZoom150 = 0x8116,
+    kZoom200 = 0x8117,
+    kZoom300 = 0x8118,
+    kZoom400 = 0x8119,
+
     // 选项 → 方格 → 颜色
     kGridColorBlack = 0x8036,
     kGridColorGray = 0x80B1,

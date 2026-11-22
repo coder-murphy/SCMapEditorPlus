@@ -38,14 +38,15 @@ std::wstring FileNameOf(const std::wstring& path) {
 }
 
 int NextZoom(int current, int direction) {
-    static const int kSteps[] = {2, 4, 8, 16, 32};
+    static const int kSteps[] = {2, 4, 8, 11, 16, 21, 32, 48, 64, 96, 128};
+    constexpr int kCount = static_cast<int>(sizeof(kSteps) / sizeof(kSteps[0]));
     int idx = 0;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < kCount; i++) {
         if (kSteps[i] == current) { idx = i; break; }
     }
     idx += direction;
     if (idx < 0) idx = 0;
-    if (idx > 4) idx = 4;
+    if (idx >= kCount) idx = kCount - 1;
     return kSteps[idx];
 }
 
@@ -111,7 +112,8 @@ void CheckOnly(HMENU bar, const int* ids, int count, int checkedId) {
 // 最近地图弹窗使用的一次性命令 ID（不进入菜单资源）
 constexpr int kRecentMenuBase = 0x9000;
 
-const int kLayerIds[] = {0x803A, 0x803B, 0x803E, 0x803C, 0x803D, 0x803F};const int kGridIds[] = {0x80AF, 0x800E, 0x800D, 0x80A5, 0x80AA, 0x80CF, 0x80D6};
+const int kLayerIds[] = {0x803A, 0x803B, 0x803E, 0x803C, 0x803D, 0x803F};
+const int kGridIds[] = {0x80AF, 0x800E, 0x800D, 0x80A5, 0x80AA, 0x80CF, 0x80D6};
 const int kGridColorIds[] = {0x8036, 0x80B1, 0x8037, 0x8038, 0x8039, 0x80B2, 0x80D0};
 
 int GridPresetOf(bool enabled, int cellX, int cellY) {
@@ -207,6 +209,25 @@ void MainWindow::ReleaseBackBuffer() {
     dibBits_ = nullptr;
     image_.pixels.clear();
     image_.width = image_.height = 0;
+}
+
+void MainWindow::ApplyZoomPercent(int percent) {
+    if (!map_.IsOpen()) {
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+    int px = (kTilePixels * percent + 50) / 100;
+    if (px < 1) px = 1;
+    // 全图渲染为单个 DIB：限制约 256 MB，避免超大位图分配失败
+    const double pixels = static_cast<double>(map_.width()) * map_.height() * px * px;
+    if (pixels > 64.0 * 1024.0 * 1024.0) {
+        ::MessageBoxW(hwnd_, L"当前地图在该缩放下超出位图内存上限，已保持原比例。",
+                      kWindowTitle, MB_ICONWARNING);
+        return;
+    }
+    if (px == pxPerTile_) return;
+    if (!RebuildView(px)) MessageBeep(MB_ICONWARNING);
+    SyncMenuChecks();
 }
 
 bool MainWindow::RebuildView(int pxPerTile) {
@@ -1127,6 +1148,18 @@ void MainWindow::SyncMenuChecks() {
     CheckOnly(bar, kLayerIds, 6, kLayerIds[static_cast<int>(layer_)]);
     CheckOnly(bar, kGridIds, 7, GridPresetOf(gridEnabled_, gridCellX_, gridCellY_));
     CheckOnly(bar, kGridColorIds, 7, gridColorCommand_);
+
+    static const int kZoomIds[] = {kZoom25, kZoom33, kZoom50, kZoom66, kZoom100,
+                                   kZoom150, kZoom200, kZoom300, kZoom400};
+    static const int kZoomPercents[] = {25, 33, 50, 66, 100, 150, 200, 300, 400};
+    int checkedZoom = 0;
+    for (int i = 0; i < 9; i++) {
+        if ((kTilePixels * kZoomPercents[i] + 50) / 100 == pxPerTile_) {
+            checkedZoom = kZoomIds[i];
+            break;
+        }
+    }
+    CheckOnly(bar, kZoomIds, 9, checkedZoom);
 
     struct Toggle { int id; bool on; };
     const Toggle toggles[] = {
@@ -2164,6 +2197,15 @@ void MainWindow::OnCommand(int id) {
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         }
+        case kZoom25: ApplyZoomPercent(25); break;
+        case kZoom33: ApplyZoomPercent(33); break;
+        case kZoom50: ApplyZoomPercent(50); break;
+        case kZoom66: ApplyZoomPercent(66); break;
+        case kZoom100: ApplyZoomPercent(100); break;
+        case kZoom150: ApplyZoomPercent(150); break;
+        case kZoom200: ApplyZoomPercent(200); break;
+        case kZoom300: ApplyZoomPercent(300); break;
+        case kZoom400: ApplyZoomPercent(400); break;
         case kLayerTerrain:
             SetLayer(EditLayer::kTerrain);
             break;

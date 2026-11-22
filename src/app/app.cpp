@@ -104,7 +104,8 @@ bool HasRecentTestArg() {
 }
 
 // --ts=<目录>：地形集四件套所在目录
-std::wstring ParseTsArg() {    int argc = 0;
+std::wstring ParseTsArg() {
+    int argc = 0;
     LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
     std::wstring dir;
     if (argv) {
@@ -972,7 +973,7 @@ bool ItemChecked(HWND hwnd, int id) {
     return state != 0xFFFFFFFFu && (state & MF_CHECKED) != 0;
 }
 
-int RunMenuCommandTest(HWND hwnd) {
+int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     auto cmd = [hwnd](int id) {
         ::SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(id, 0), 0);
     };
@@ -1006,18 +1007,30 @@ int RunMenuCommandTest(HWND hwnd) {
     cmd(0x8113);   // 显示战争迷雾
     const bool fogOn = ItemChecked(hwnd, 0x8113);
 
+    // 地图显示比率（需要已打开地图；--menu-cmd-test 可配合 --open）
+    bool zoomOk = true;
+    if (win.map().IsOpen()) {
+        cmd(0x80DD);   // 66% → 21 px/瓦片
+        zoomOk = ItemChecked(hwnd, 0x80DD) && !ItemChecked(hwnd, 0x80D8) &&
+                 win.pxPerTile() == 21;
+        cmd(0x80D8);   // 100% → 32 px/瓦片
+        zoomOk = zoomOk && ItemChecked(hwnd, 0x80D8) && win.pxPerTile() == 32;
+        cmd(0x80DA);   // 25% → 8 px/瓦片
+        zoomOk = zoomOk && ItemChecked(hwnd, 0x80DA) && win.pxPerTile() == 8;
+    }
+
     wchar_t msg[512];
     ::wsprintfW(msg,
         L"layerInit=%d\nlayerUnits=%d\nlayerLoc=%d\nlayerBack=%d\n"
         L"gridLarge=%d\ngridOff=%d\ngridBack=%d\ngridRed=%d\n"
-        L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\n",
+        L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\nzoom=%d\n",
         layerInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0, layerBack ? 1 : 0,
         gridLarge ? 1 : 0, gridOff ? 1 : 0, gridBack ? 1 : 0, gridRed ? 1 : 0,
-        unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0);
+        unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0, zoomOk ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = layerInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
-                    gridBack && gridRed && unitsOff && unitsOn && fogOn;
+                    gridBack && gridRed && unitsOff && unitsOn && fogOn && zoomOk;
     return ok ? 0 : 2;
 }
 
@@ -2798,7 +2811,9 @@ int App::Run(HINSTANCE hInstance) {
             ::LocalFree(argv);
         }
         if (want) {
-            const int rc = RunMenuCommandTest(mainWindow_.hwnd());
+            const std::wstring mapPath = ParseOpenArg();
+            if (!mapPath.empty()) mainWindow_.OpenMap(mapPath);
+            const int rc = RunMenuCommandTest(mainWindow_.hwnd(), mainWindow_);
             ::DestroyWindow(mainWindow_.hwnd());
             return rc;
         }

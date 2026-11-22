@@ -46,6 +46,8 @@ public:
     MapDocument& mutableMap() { return map_; }
 
     bool RebuildView(int pxPerTile);
+    void ApplyZoomPercent(int percent);   // 地图显示比率菜单（25%..400%）
+    int pxPerTile() const { return pxPerTile_; }
 
     // 主菜单加速键（Ctrl+N/O/S/Z/Y 等），由消息循环调用
     bool TranslateAccel(MSG& msg) const;
