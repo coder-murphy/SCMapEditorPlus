@@ -147,6 +147,7 @@ private:
     void DrawUnits(HDC dc, const RECT& client) const;
     void DrawHud(HDC dc) const;
     void DrawMinimap(HDC dc, const RECT& client) const;
+    void DrawOverlapMarkers(HDC dc, const RECT& client) const;
 
     HINSTANCE hInstance_ = nullptr;
     HWND hwnd_ = nullptr;
@@ -164,6 +165,12 @@ private:
     int scrollX_ = 0;
     int scrollY_ = 0;
     ULONGLONG lastBackupTick_ = 0;   // 自动备份节流
+    bool debugMode_ = false;         // 0x80DE
+    int debugDataMode_ = 0;          // 0 = 普通, 1 = 精确, 2 = 最终
+    bool showOverlapMarkers_ = false; // 0x80E1
+    bool showCpuTiming_ = false;     // 0x80F2
+    bool showDebugImageSize_ = false; // 0x810A
+    ULONGLONG lastRenderMs_ = 0;     // 上次整图重建耗时
 
     Tool tool_ = Tool::kTerrain;
     EditLayer layer_ = EditLayer::kTerrain;

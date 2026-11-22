@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
+#include <unordered_map>
 #include <utility>
 #include <windows.h>
 #include <windowsx.h>
@@ -197,7 +198,10 @@ bool MainWindow::Create(HINSTANCE hInstance) {
         }
         // 原程序把显示选项里的 4 项灰掉了；本工程可用，解除灰显
         const int kEnableIds[] = {kDispAllColors, kDispUnits, kDispDoodads, kDispSpUnits,
-                                  kWindowSpUnits, kEditConvertTerrain};
+                                  kWindowSpUnits, kEditConvertTerrain,
+                                  kDebugEnable, kDebugDataNormal, kDebugDataExact,
+                                  kDebugDataFinal, kDebugOverlaps, kDebugCpu,
+                                  kDebugClearScreen, kDebugImageSize};
         for (int id : kEnableIds) {
             if (HMENU menu = FindMenuContaining(bar, id)) {
                 ::EnableMenuItem(menu, id, MF_BYCOMMAND | MF_ENABLED);
@@ -279,6 +283,7 @@ bool MainWindow::RebuildView(int pxPerTile) {
     const double pixels =
         static_cast<double>(map_.width()) * map_.height() * pxPerTile * pxPerTile;
     if (pixels > 64.0 * 1024.0 * 1024.0) return false;
+    const ULONGLONG renderStart = ::GetTickCount64();
     if (!renderer_.Render(map_.tiles(), map_.width(), map_.height(), pxPerTile, image_)) return false;
 
     BITMAPINFO bi = {};
@@ -298,6 +303,7 @@ bool MainWindow::RebuildView(int pxPerTile) {
 
     dibBits_ = bits;
     std::memcpy(dibBits_, image_.pixels.data(), image_.pixels.size());
+    lastRenderMs_ = ::GetTickCount64() - renderStart;
 
     scrollX_ = scrollY_ = 0;
     UpdateScrollBars();
@@ -1251,6 +1257,10 @@ void MainWindow::SyncMenuChecks() {
     }
     CheckOnly(bar, kZoomIds, 9, checkedZoom);
 
+    const int kDebugDataIds[] = {kDebugDataNormal, kDebugDataExact, kDebugDataFinal};
+    CheckOnly(bar, kDebugDataIds, 3,
+              debugMode_ ? kDebugDataIds[debugDataMode_ % 3] : 0);
+
     struct Toggle { int id; bool on; };
     const Toggle toggles[] = {
         {kDispAllColors, showAllColors_}, {kDispUnits, showUnits_},
@@ -1259,6 +1269,8 @@ void MainWindow::SyncMenuChecks() {
         {kDispHideMinimap, hideMinimap_}, {kDispColorCycle, allowColorCycle_},
         {kDispDeathFx, showDeathFx_}, {kDispFog, showFog_}, {kLayerFogToggle, showFog_},
         {kDispLocations, showLocations_},
+        {kDebugEnable, debugMode_}, {kDebugOverlaps, showOverlapMarkers_},
+        {kDebugCpu, showCpuTiming_}, {kDebugImageSize, showDebugImageSize_},
     };
     for (const Toggle& t : toggles) {
         if (HMENU menu = FindMenuContaining(bar, t.id)) {
@@ -1673,6 +1685,30 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
     }
 }
 
+void MainWindow::DrawOverlapMarkers(HDC dc, const RECT& client) const {
+    if (!showOverlapMarkers_ || !map_.IsOpen() || pxPerTile_ <= 0) return;
+    std::unordered_map<unsigned, int> counts;
+    for (const UnitRecord& u : map_.units()) {
+        const int tx = static_cast<int>(u.x) / kTilePixels;
+        const int ty = static_cast<int>(u.y) / kTilePixels;
+        if (tx < 0 || ty < 0 || tx >= map_.width() || ty >= map_.height()) continue;
+        counts[static_cast<unsigned>(ty) * static_cast<unsigned>(map_.width()) +
+               static_cast<unsigned>(tx)]++;
+    }
+    const HBRUSH brush = ::CreateSolidBrush(RGB(255, 0, 0));
+    for (const auto& entry : counts) {
+        if (entry.second < 2) continue;
+        const int tx = static_cast<int>(entry.first % static_cast<unsigned>(map_.width()));
+        const int ty = static_cast<int>(entry.first / static_cast<unsigned>(map_.width()));
+        const int sx = tx * pxPerTile_ - scrollX_;
+        const int sy = ty * pxPerTile_ - scrollY_;
+        RECT r = {sx, sy, sx + pxPerTile_, sy + pxPerTile_};
+        if (r.right < 0 || r.bottom < 0 || r.left > client.right || r.top > client.bottom) continue;
+        ::FrameRect(dc, &r, brush);
+    }
+    ::DeleteObject(brush);
+}
+
 void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
     if (hideMinimap_ || !map_.IsOpen() || pxPerTile_ <= 0) return;
     const int viewW = client.right - client.left;
@@ -1739,7 +1775,7 @@ void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
 }
 
 void MainWindow::DrawHud(HDC dc) const {
-    wchar_t text[512];
+    wchar_t text[1024];
     const wchar_t* toolName = L"地形刷";
     if (tool_ == Tool::kUnit) toolName = L"单位";
     else if (tool_ == Tool::kPicker) toolName = L"吸管";
@@ -1767,11 +1803,45 @@ void MainWindow::DrawHud(HDC dc) const {
                 static_cast<unsigned>(history_.UndoCount()),
                 static_cast<unsigned>(history_.RedoCount()));
 
+    int extraLines = 0;
+    if (debugMode_) {
+        wchar_t dbg[320] = L"";
+        const int tx = cursorTx_;
+        const int ty = cursorTy_;
+        const unsigned tile = (map_.IsOpen() && tx >= 0) ? map_.TileAt(tx, ty) : 0;
+        const int unitsAt = (map_.IsOpen() && tx >= 0) ? map_.UnitCountAtTile(tx, ty) : 0;
+        if (debugDataMode_ == 0) {
+            ::wsprintfW(dbg, L"[调试] 光标格 %d,%d   单位 %d   渲染 %I64ums", tx, ty, unitsAt,
+                        lastRenderMs_);
+        } else if (debugDataMode_ == 1) {
+            ::wsprintfW(dbg, L"[调试] 格 %d,%d   像素 %d,%d   MTXM 0x%04X   单位 %d   渲染 %I64ums",
+                        tx, ty, tx * kTilePixels, ty * kTilePixels, tile, unitsAt, lastRenderMs_);
+        } else {
+            ::wsprintfW(dbg,
+                        L"[调试] 格 %d,%d  像素 %d,%d  MTXM 0x%04X  单位 %d  图像 %dx%d  "
+                        L"选区 %s  渲染 %I64ums",
+                        tx, ty, tx * kTilePixels, ty * kTilePixels, tile, unitsAt,
+                        image_.width, image_.height, hasSelection_ ? L"有" : L"无",
+                        lastRenderMs_);
+        }
+        ::lstrcatW(text, L"\n");
+        ::lstrcatW(text, dbg);
+        extraLines++;
+    }
+    if (showDebugImageSize_) {
+        wchar_t sizeText[128];
+        ::wsprintfW(sizeText, L"[图像] %dx%d 像素   缩放 %d px/瓦片", image_.width, image_.height,
+                    pxPerTile_);
+        ::lstrcatW(text, L"\n");
+        ::lstrcatW(text, sizeText);
+        extraLines++;
+    }
+
     const HGDIOBJ oldFont = ::SelectObject(dc, ::GetStockObject(DEFAULT_GUI_FONT));
     const int oldMode = ::SetBkMode(dc, OPAQUE);
     const COLORREF oldColor = ::SetTextColor(dc, RGB(255, 255, 255));
     const COLORREF oldBk = ::SetBkColor(dc, RGB(32, 32, 32));
-    RECT box = {6, 6, 6 + 980, 6 + 48};
+    RECT box = {6, 6, 6 + 980, 6 + 48 + extraLines * 18};
     ::DrawTextW(dc, text, -1, &box, DT_LEFT | DT_TOP | DT_NOPREFIX);
     ::SetBkColor(dc, oldBk);
     ::SetTextColor(dc, oldColor);
@@ -1801,6 +1871,7 @@ void MainWindow::Present(HDC dc, const RECT& client) {
     if (showFog_) DrawFog(dc, client);
     DrawGrid(dc, client);
     if (showUnits_) DrawUnits(dc, client);
+    if (showOverlapMarkers_) DrawOverlapMarkers(dc, client);
     if (showLocations_) DrawLocations(dc, client);
     DrawSelection(dc, client);
 
@@ -2442,6 +2513,36 @@ void MainWindow::OnCommand(int id) {
             break;
         case kGridColorOther:
             SetGridColor(gridColor_, id);
+            break;
+        case kDebugEnable:
+            debugMode_ = !debugMode_;
+            SyncMenuChecks();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kDebugDataNormal:
+        case kDebugDataExact:
+        case kDebugDataFinal:
+            debugDataMode_ = id == kDebugDataNormal ? 0 : (id == kDebugDataExact ? 1 : 2);
+            SyncMenuChecks();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kDebugOverlaps:
+            showOverlapMarkers_ = !showOverlapMarkers_;
+            SyncMenuChecks();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kDebugCpu:
+            showCpuTiming_ = !showCpuTiming_;
+            SyncMenuChecks();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kDebugImageSize:
+            showDebugImageSize_ = !showDebugImageSize_;
+            SyncMenuChecks();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kDebugClearScreen:
+            ::InvalidateRect(hwnd_, nullptr, TRUE);
             break;
         case kDispAllColors:
         case kDispUnits:

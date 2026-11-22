@@ -128,6 +128,16 @@ enum CommandId : int {
 
     kTriggerEditor = 0x810F,    // 触发 → 编辑触发
 
+    // 调试菜单
+    kDebugEnable = 0x80DE,      // 允许调试
+    kDebugDataNormal = 0x80FC,  // 显示数据(普通模式)
+    kDebugDataExact = 0x80FD,   // 显示数据(精确模式)
+    kDebugDataFinal = 0x80FE,   // 显示数据(最终模式)
+    kDebugOverlaps = 0x80E1,    // 显示重叠标记
+    kDebugCpu = 0x80F2,         // 显示CPU测试数据
+    kDebugClearScreen = 0x80E2, // 清除屏幕
+    kDebugImageSize = 0x810A,   // 显示图像大小
+
     kHelpAbout = 0x0068,        // 帮助 → 关于...
 
     // 本工程自有的调试入口（原程序无此菜单项，运行时追加）
