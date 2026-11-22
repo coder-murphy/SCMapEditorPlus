@@ -75,6 +75,30 @@ int DoodadTable::RemoveInTileRect(int tx0, int ty0, int tx1, int ty1) {
     return removed;
 }
 
+int DoodadTable::FixErrors(int widthTiles, int heightTiles) {
+    if (widthTiles <= 0 || heightTiles <= 0) return 0;
+    const int maxX = widthTiles * kTilePixels;
+    const int maxY = heightTiles * kTilePixels;
+    const std::size_t before = items_.size();
+    int normalized = 0;
+    items_.erase(std::remove_if(items_.begin(), items_.end(),
+                                [=](const Doodad& d) {
+                                    return static_cast<int>(d.x) >= maxX ||
+                                           static_cast<int>(d.y) >= maxY;
+                                }),
+                 items_.end());
+    for (Doodad& d : items_) {
+        const u8 flag = d.enabled ? 1 : 0;
+        if (flag != d.enabled) {
+            d.enabled = flag;
+            normalized++;
+        }
+    }
+    const int fixed = static_cast<int>(before - items_.size()) + normalized;
+    if (fixed > 0) modified_ = true;
+    return fixed;
+}
+
 bool SpriteTable::Parse(const Buffer& thg2) {
     Reset();
     if (thg2.empty()) return true;

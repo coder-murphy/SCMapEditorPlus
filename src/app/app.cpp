@@ -2072,6 +2072,28 @@ int RunMapToolsTest(const std::wstring& mapPath, const std::wstring& outPath) {
     const Buffer dimOrig = sectionOf(doc, "DIM ");
     const Buffer mtxmOrig = sectionOf(doc, "MTXM");
 
+    // 纠正装饰物错误：删除越界记录，并把 enabled 规范为 0/1
+    DoodadTable probe;
+    Buffer probeBytes(3 * 8, 0);
+    auto put16 = [](Buffer& b, std::size_t at, u16 v) {
+        b[at] = static_cast<u8>(v & 0xFF);
+        b[at + 1] = static_cast<u8>(v >> 8);
+    };
+    put16(probeBytes, 0, 1);                                        // 合法记录
+    put16(probeBytes, 8, 1);                                        // 越界 x
+    put16(probeBytes, 8 + 2, static_cast<u16>(doc.width() * kTilePixels));
+    put16(probeBytes, 16, 1);                                       // enabled=2 需规范化
+    probeBytes[16 + 7] = 2;
+    probe.Parse(probeBytes);
+    const int fixCount = probe.FixErrors(doc.width(), doc.height());
+    bool fixOk = fixCount == 2 && probe.Count() == 2 && probe.Items()[1].enabled == 1;
+    for (const Doodad& d : probe.Items()) {
+        if (static_cast<int>(d.x) >= doc.width() * kTilePixels ||
+            static_cast<int>(d.y) >= doc.height() * kTilePixels) {
+            fixOk = false;
+        }
+    }
+
     // 转换地形：删除整图 DD2 记录（MTXM/THG2 保留）
     const int doodadsBefore = static_cast<int>(doc.doodads().Count());
     const Buffer doodadsBytesBefore = doc.doodads().Serialize();
@@ -2195,14 +2217,14 @@ int RunMapToolsTest(const std::wstring& mapPath, const std::wstring& outPath) {
 
     wchar_t msg[512];
     ::wsprintfW(msg,
-                L"open=OK\nconvert=%d\nundo=%d\nredo=%d\nminerals=%d\nimage=%d\n"
+                L"open=OK\nfix=%d\nconvert=%d\nundo=%d\nredo=%d\nminerals=%d\nimage=%d\n"
                 L"saved=%d\nreopened=%d\nfields=%d\npreserved=%d\n",
-                convertOk ? 1 : 0, convertUndo ? 1 : 0, convertRedo ? 1 : 0,
+                fixOk ? 1 : 0, convertOk ? 1 : 0, convertUndo ? 1 : 0, convertRedo ? 1 : 0,
                 mineralsOk ? 1 : 0, imageOk ? 1 : 0,
                 saved ? 1 : 0, reopened ? 1 : 0, fieldsOk ? 1 : 0, preserved ? 1 : 0);
     WriteDiag(msg);
 
-    const bool ok = convertOk && convertUndo && convertRedo && mineralsOk && imageOk &&
+    const bool ok = fixOk && convertOk && convertUndo && convertRedo && mineralsOk && imageOk &&
                     saved && reopened && fieldsOk && preserved;
     return ok ? 0 : 2;
 }

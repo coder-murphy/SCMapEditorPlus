@@ -24,6 +24,7 @@ enum CommandId : int {
     kEditSelectTool = 0x8FFB,   // 本工程新增：框选工具
     kEditOverlapUnits = 0x811A,
     kDeleteInvalidUnits = 0x8105,
+    kFixDoodadErrors = 0x8103,      // 选项 → 地图加载设置 → 纠正装饰物错误
     kEditConvertTerrain = 0x8101,   // Edit → 转换地形（选中的装饰物转为纯地形）
     kRandomizeMinerals = 0x810D,    // 剧本设置 → 矿物外形随机变化
 

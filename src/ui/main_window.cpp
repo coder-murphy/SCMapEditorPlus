@@ -2063,6 +2063,24 @@ void MainWindow::OnCommand(int id) {
         case kDeleteInvalidUnits:
             if (DeleteInvalidUnits() == 0) MessageBeep(MB_ICONWARNING);
             break;
+        case kFixDoodadErrors: {
+            if (!map_.IsOpen()) {
+                MessageBeep(MB_ICONWARNING);
+                break;
+            }
+            BeginEdit();
+            const int fixed = map_.mutableDoodads().FixErrors(map_.width(), map_.height());
+            if (fixed > 0) {
+                map_.MarkDirty();
+                CommitEdit(L"纠正装饰物错误");
+                UpdateTitle();
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+            } else {
+                editOpen_ = false;
+                MessageBeep(MB_ICONWARNING);
+            }
+            break;
+        }
         case kEditConvertTerrain: {
             if (!map_.IsOpen()) {
                 MessageBeep(MB_ICONWARNING);

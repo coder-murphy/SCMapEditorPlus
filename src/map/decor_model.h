@@ -32,6 +32,9 @@ public:
     }
     // 删除落在瓦片矩形内的装饰物（转换地形用），返回删除数量
     int RemoveInTileRect(int tx0, int ty0, int tx1, int ty1);
+    // 纠正装饰物错误：删除越界记录、把 enabled 规范为 0/1（0 启用 / 1 禁用）。
+    // 返回修复的记录数（删除 + 规范化），有改动时置 modified。
+    int FixErrors(int widthTiles, int heightTiles);
 
 private:
     std::vector<Doodad> items_;
