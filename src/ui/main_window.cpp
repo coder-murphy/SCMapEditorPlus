@@ -186,6 +186,7 @@ bool MainWindow::Create(HINSTANCE hInstance) {
     UpdateTitle();
     ::ShowWindow(hwnd_, SW_SHOW);
     ::UpdateWindow(hwnd_);
+    ::SetTimer(hwnd_, 1, 60000, nullptr);   // 每分钟检查一次自动备份
     return true;
 }
 
@@ -348,6 +349,7 @@ bool MainWindow::SaveMap(bool saveAs) {
     }
     mapPath_ = path;
     fileName_ = FileNameOf(path);
+    lastBackupTick_ = ::GetTickCount64();
     UpdateTitle();
     return true;
 }
@@ -2492,6 +2494,24 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             ::GetClientRect(hwnd_, &rc);
             Present(dc, rc);
             ::EndPaint(hwnd_, &ps);
+            return 0;
+        }
+        case WM_TIMER: {
+            if (wParam != 1) return 0;
+            const AppSettings& settings = AppSettings::Instance();
+            if (!settings.autoBackupEnabled() || !map_.IsOpen() || !map_.IsDirty() ||
+                mapPath_.empty()) {
+                return 0;
+            }
+            if (::GetFileAttributesW(mapPath_.c_str()) == INVALID_FILE_ATTRIBUTES) return 0;
+            const ULONGLONG now = ::GetTickCount64();
+            const ULONGLONG interval =
+                static_cast<ULONGLONG>(settings.autoBackupMinutes()) * 60000ull;
+            if (lastBackupTick_ != 0 && now - lastBackupTick_ < interval) return 0;
+            if (MakeBackup(mapPath_, settings.backupCount())) {
+                lastBackupTick_ = now;
+                Log(L"[backup] auto %s", mapPath_.c_str());
+            }
             return 0;
         }
         case WM_ERASEBKGND:

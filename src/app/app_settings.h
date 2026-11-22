@@ -38,6 +38,10 @@ public:
     void SetBackupEnabled(bool enabled) { backupEnabled_ = enabled; }
     int backupCount() const { return backupCount_; }
     void SetBackupCount(int count);
+    bool autoBackupEnabled() const { return autoBackupEnabled_; }
+    void SetAutoBackupEnabled(bool enabled) { autoBackupEnabled_ = enabled; }
+    int autoBackupMinutes() const { return autoBackupMinutes_; }
+    void SetAutoBackupMinutes(int minutes);
 
     static constexpr std::size_t kMaxRecent = 8;
 
@@ -54,6 +58,8 @@ private:
     std::vector<std::wstring> mpqFiles_;
     bool backupEnabled_ = true;
     int backupCount_ = 5;
+    bool autoBackupEnabled_ = false;
+    int autoBackupMinutes_ = 5;
 };
 
 }  // namespace scmd

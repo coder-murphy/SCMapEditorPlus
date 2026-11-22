@@ -97,6 +97,12 @@ void AppSettings::SetBackupCount(int count) {
     backupCount_ = count;
 }
 
+void AppSettings::SetAutoBackupMinutes(int minutes) {
+    if (minutes < 1) minutes = 1;
+    if (minutes > 120) minutes = 120;
+    autoBackupMinutes_ = minutes;
+}
+
 void AppSettings::AddRecentMap(const std::wstring& path) {
     if (path.empty()) return;
     for (auto it = recent_.begin(); it != recent_.end(); ++it) {
@@ -118,6 +124,8 @@ bool AppSettings::Load() {
     mpqFiles_.clear();
     backupEnabled_ = true;
     backupCount_ = 5;
+    autoBackupEnabled_ = false;
+    autoBackupMinutes_ = 5;
     const std::wstring path = filePath();
     if (path.empty()) return false;
     std::string text;
@@ -162,6 +170,10 @@ bool AppSettings::Load() {
             backupEnabled_ = std::atoi(line.c_str() + eq + 1) != 0;
         } else if (key == "backupCount") {
             SetBackupCount(std::atoi(line.c_str() + eq + 1));
+        } else if (key == "autoBackup") {
+            autoBackupEnabled_ = std::atoi(line.c_str() + eq + 1) != 0;
+        } else if (key == "autoBackupMinutes") {
+            SetAutoBackupMinutes(std::atoi(line.c_str() + eq + 1));
         }
     }
     for (const std::wstring& p : slots) {
@@ -193,6 +205,8 @@ bool AppSettings::Save() {
     out += "gameDir=" + WideToUtf8(gameDir_) + "\n";
     out += "backup=" + std::to_string(backupEnabled_ ? 1 : 0) + "\n";
     out += "backupCount=" + std::to_string(backupCount_) + "\n";
+    out += "autoBackup=" + std::to_string(autoBackupEnabled_ ? 1 : 0) + "\n";
+    out += "autoBackupMinutes=" + std::to_string(autoBackupMinutes_) + "\n";
     out += "undoLimit=" + std::to_string(undoLimit_) + "\n";
     return WriteWholeFile(filePath(), out);
 }

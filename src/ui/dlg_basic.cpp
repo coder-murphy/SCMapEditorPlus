@@ -71,6 +71,9 @@ INT_PTR CALLBACK ProcSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
             ::SetDlgItemInt(dlg, IDC_D155_1079, static_cast<UINT>(s.backupCount()), FALSE);
             ::CheckDlgButton(dlg, IDC_D155_1082,
                              s.backupEnabled() ? BST_CHECKED : BST_UNCHECKED);
+            ::CheckDlgButton(dlg, IDC_D155_1080,
+                             s.autoBackupEnabled() ? BST_CHECKED : BST_UNCHECKED);
+            ::SetDlgItemInt(dlg, IDC_D155_1081, static_cast<UINT>(s.autoBackupMinutes()), FALSE);
             FillMpqList(dlg, s.mpqFiles());
             Log(L"[settings] dialog opened");
             return TRUE;
@@ -89,6 +92,9 @@ INT_PTR CALLBACK ProcSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     s.SetGameDir(dir);
                     s.SetBackupEnabled(::IsDlgButtonChecked(dlg, IDC_D155_1082) == BST_CHECKED);
                     s.SetBackupCount(ReadClampedInt(dlg, IDC_D155_1079, s.backupCount(), 1, 99));
+                    s.SetAutoBackupEnabled(::IsDlgButtonChecked(dlg, IDC_D155_1080) == BST_CHECKED);
+                    s.SetAutoBackupMinutes(
+                        ReadClampedInt(dlg, IDC_D155_1081, s.autoBackupMinutes(), 1, 120));
                     std::vector<std::wstring> files;
                     CollectMpqList(dlg, files);
                     s.SetMpqFiles(std::move(files));
@@ -105,6 +111,8 @@ INT_PTR CALLBACK ProcSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     ::SetDlgItemInt(dlg, IDC_D155_1013, 50, FALSE);   // 撤销次数
                     ::SetDlgItemInt(dlg, IDC_D155_1079, 5, FALSE);    // 最大备份数量
                     ::CheckDlgButton(dlg, IDC_D155_1082, BST_CHECKED);
+                    ::CheckDlgButton(dlg, IDC_D155_1080, BST_UNCHECKED);
+                    ::SetDlgItemInt(dlg, IDC_D155_1081, 5, FALSE);    // 自动备份间隔
                     Log(L"[settings] reset to defaults");
                     return TRUE;
                 case IDC_D155_1004: {  // 添加 MPQ

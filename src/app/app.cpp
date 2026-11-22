@@ -2375,6 +2375,10 @@ int RunRecentTest() {
     settings.SetDefaultGas(3);
     settings.SetGameDir(L"C:\\StarCraft");
     settings.SetMpqFiles({L"C:\\a.mpq", L"D:\\b.mpq"});
+    settings.SetBackupEnabled(false);
+    settings.SetBackupCount(3);
+    settings.SetAutoBackupEnabled(true);
+    settings.SetAutoBackupMinutes(7);
     const bool saved = settings.Save();
     settings.ClearRecentMaps();
     settings.SetUndoLimit(50);
@@ -2387,7 +2391,10 @@ int RunRecentTest() {
     const bool settingsOk = settings.defaultMineral() == 12 && settings.defaultGas() == 3 &&
                             settings.gameDir() == L"C:\\StarCraft" &&
                             settings.mpqFiles().size() == 2 &&
-                            settings.mpqFiles()[0] == L"C:\\a.mpq";
+                            settings.mpqFiles()[0] == L"C:\\a.mpq" &&
+                            !settings.backupEnabled() && settings.backupCount() == 3 &&
+                            settings.autoBackupEnabled() &&
+                            settings.autoBackupMinutes() == 7;
 
     wchar_t msg[384];
     ::wsprintfW(msg,

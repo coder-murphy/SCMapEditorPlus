@@ -162,6 +162,7 @@ private:
     int pxPerTile_ = 8;
     int scrollX_ = 0;
     int scrollY_ = 0;
+    ULONGLONG lastBackupTick_ = 0;   // 自动备份节流
 
     Tool tool_ = Tool::kTerrain;
     EditLayer layer_ = EditLayer::kTerrain;
