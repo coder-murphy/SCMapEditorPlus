@@ -68,6 +68,43 @@ COLORREF UnitColorFor(u16 type, bool allColors) {
     return RGB(64 + (h & 0x7Fu), 64 + ((h >> 8) & 0x7Fu), 64 + ((h >> 16) & 0x7Fu));
 }
 
+// 0x80D1：允许颜色循环时按时间旋转色相，让单位标记缓慢变色
+COLORREF RotateHue(COLORREF color, int degrees) {
+    const int r = GetRValue(color);
+    const int g = GetGValue(color);
+    const int b = GetBValue(color);
+    const int mx = std::max(r, std::max(g, b));
+    const int mn = std::min(r, std::min(g, b));
+    const int d = mx - mn;
+    if (d == 0) return color;
+    int h = 0;
+    if (mx == r) h = 60 * (g - b) / d;
+    else if (mx == g) h = 120 + 60 * (b - r) / d;
+    else h = 240 + 60 * (r - g) / d;
+    h = (h + degrees) % 360;
+    if (h < 0) h += 360;
+    const int s = (d * 255) / mx;
+    const int v = mx;
+    const int sector = h / 60;
+    const int f = h % 60;
+    const int p = v * (255 - s) / 255;
+    const int q = v * (255 - (s * f) / 60) / 255;
+    const int t = v * (255 - (s * (60 - f)) / 60) / 255;
+    switch (sector) {
+        case 0: return RGB(v, t, p);
+        case 1: return RGB(q, v, p);
+        case 2: return RGB(p, v, t);
+        case 3: return RGB(p, q, v);
+        case 4: return RGB(t, p, v);
+        default: return RGB(v, p, q);
+    }
+}
+
+COLORREF CycleColor(COLORREF color, bool enabled) {
+    if (!enabled) return color;
+    return RotateHue(color, static_cast<int>((::GetTickCount64() / 40ull) % 360ull));
+}
+
 // 递归找到直接包含命令 ID 的子菜单（用于按命令 ID 勾选/启用）
 HMENU FindMenuContaining(HMENU menu, int id) {
     if (!menu) return nullptr;
@@ -218,6 +255,7 @@ bool MainWindow::Create(HINSTANCE hInstance) {
     ::ShowWindow(hwnd_, SW_SHOW);
     ::UpdateWindow(hwnd_);
     ::SetTimer(hwnd_, 1, 60000, nullptr);   // 每分钟检查一次自动备份
+    ::SetTimer(hwnd_, 2, 120, nullptr);     // 颜色循环 / 死亡效果动画
     return true;
 }
 
@@ -1705,7 +1743,7 @@ void MainWindow::OnRButtonDown(int mx, int my) {
         return;
     }
     BeginEdit();
-    if (map_.RemoveUnitsAtTile(tx, ty) > 0) {
+    if (RemoveUnitsAtTileWithFx(tx, ty) > 0) {
         CommitEdit(L"删除单位");
         ::InvalidateRect(hwnd_, nullptr, FALSE);
     } else {
@@ -1732,7 +1770,7 @@ void MainWindow::OnKeyDown(int vk) {
         case VK_DELETE:
             if (cursorTx_ >= 0) {
                 BeginEdit();
-                if (map_.RemoveUnitsAtTile(cursorTx_, cursorTy_) > 0) {
+                if (RemoveUnitsAtTileWithFx(cursorTx_, cursorTy_) > 0) {
                     CommitEdit(L"删除单位");
                     ::InvalidateRect(hwnd_, nullptr, FALSE);
                 } else {
@@ -1757,7 +1795,8 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
         if (sx > client.right || sy > client.bottom) continue;
 
         const int size = std::max(3, pxPerTile_ / 2);
-        const HBRUSH brush = ::CreateSolidBrush(UnitColorFor(u.type, showAllColors_));
+        const HBRUSH brush =
+            ::CreateSolidBrush(CycleColor(UnitColorFor(u.type, showAllColors_), allowColorCycle_));
         RECT r;
         r.left = sx + (pxPerTile_ - size) / 2;
         r.top = sy + (pxPerTile_ - size) / 2;
@@ -1766,6 +1805,41 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
         ::FillRect(dc, &r, brush);
         ::DeleteObject(brush);
     }
+}
+
+void MainWindow::DrawDeathMarks(HDC dc, const RECT& client) const {
+    if (!showDeathFx_ || deathMarks_.empty() || pxPerTile_ <= 1) return;
+    const ULONGLONG now = ::GetTickCount64();
+    const HPEN pen = ::CreatePen(PS_SOLID, std::max(1, pxPerTile_ / 8), RGB(255, 60, 60));
+    const HGDIOBJ old = ::SelectObject(dc, pen);
+    const int pad = std::max(1, pxPerTile_ / 4);
+    for (const DeathMark& m : deathMarks_) {
+        if (now - m.tick > 500) continue;
+        const int sx = m.tx * pxPerTile_ - scrollX_;
+        const int sy = m.ty * pxPerTile_ - scrollY_;
+        if (sx < -pxPerTile_ || sy < -pxPerTile_ || sx > client.right || sy > client.bottom) continue;
+        ::MoveToEx(dc, sx + pad, sy + pad, nullptr);
+        ::LineTo(dc, sx + pxPerTile_ - pad, sy + pxPerTile_ - pad);
+        ::MoveToEx(dc, sx + pxPerTile_ - pad, sy + pad, nullptr);
+        ::LineTo(dc, sx + pad, sy + pxPerTile_ - pad);
+    }
+    ::SelectObject(dc, old);
+    ::DeleteObject(pen);
+}
+
+int MainWindow::RemoveUnitsAtTileWithFx(int tx, int ty) {
+    std::vector<std::pair<int, int>> removed;
+    for (const auto& u : map_.units()) {
+        const int ux = static_cast<int>(u.x) / kTilePixels;
+        const int uy = static_cast<int>(u.y) / kTilePixels;
+        if (ux == tx && uy == ty) removed.emplace_back(ux, uy);
+    }
+    const int count = map_.RemoveUnitsAtTile(tx, ty);
+    if (count > 0 && showDeathFx_) {
+        const ULONGLONG now = ::GetTickCount64();
+        for (const auto& p : removed) deathMarks_.push_back({p.first, p.second, now});
+    }
+    return count;
 }
 
 void MainWindow::DrawOverlapMarkers(HDC dc, const RECT& client) const {
@@ -1885,7 +1959,7 @@ void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
         const int x = mx + static_cast<int>(u.x) * mw / mapPxW;
         const int y = my + static_cast<int>(u.y) * mh / mapPxH;
         RECT r = {x, y, x + 2, y + 2};
-        HBRUSH b = ::CreateSolidBrush(UnitColorFor(u.type, showAllColors_));
+        HBRUSH b = ::CreateSolidBrush(CycleColor(UnitColorFor(u.type, showAllColors_), allowColorCycle_));
         ::FillRect(dc, &r, b);
         ::DeleteObject(b);
     }
@@ -2030,6 +2104,7 @@ void MainWindow::Present(HDC dc, const RECT& client) {
     if (showFog_) DrawFog(dc, client);
     DrawGrid(dc, client);
     if (showUnits_) DrawUnits(dc, client);
+    if (showDeathFx_) DrawDeathMarks(dc, client);
     if (showOverlapMarkers_) DrawOverlapMarkers(dc, client);
     if (showUnitConflict_) DrawUnitConflictSizes(dc, client);
     if (showLocations_) DrawLocations(dc, client);
@@ -2393,7 +2468,7 @@ void MainWindow::OnCommand(int id) {
         case kEditDelete:
             if (cursorTx_ >= 0) {
                 BeginEdit();
-                if (map_.RemoveUnitsAtTile(cursorTx_, cursorTy_) > 0) {
+                if (RemoveUnitsAtTileWithFx(cursorTx_, cursorTy_) > 0) {
                     CommitEdit(L"删除单位");
                     ::InvalidateRect(hwnd_, nullptr, FALSE);
                 } else {
@@ -2824,6 +2899,19 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
         case WM_TIMER: {
+            if (wParam == 2) {
+                const ULONGLONG now = ::GetTickCount64();
+                const std::size_t before = deathMarks_.size();
+                deathMarks_.erase(
+                    std::remove_if(deathMarks_.begin(), deathMarks_.end(),
+                                   [now](const DeathMark& m) { return now - m.tick > 500; }),
+                    deathMarks_.end());
+                const bool animating = allowColorCycle_ && showUnits_ && map_.IsOpen();
+                if (animating || !deathMarks_.empty() || deathMarks_.size() != before) {
+                    ::InvalidateRect(hwnd_, nullptr, FALSE);
+                }
+                return 0;
+            }
             if (wParam != 1) return 0;
             const AppSettings& settings = AppSettings::Instance();
             if (!settings.autoBackupEnabled() || !map_.IsOpen() || !map_.IsDirty() ||

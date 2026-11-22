@@ -1174,6 +1174,16 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     const bool allColorsOn = ItemChecked(hwnd, 0x8054);
     cmd(0x8054);
 
+    // 显示选项 → 颜色循环 / 死亡效果
+    cmd(0x80D1);
+    const bool colorCycleOn = ItemChecked(hwnd, 0x80D1);
+    cmd(0x80D1);
+    const bool colorCycleOff = !ItemChecked(hwnd, 0x80D1);
+    cmd(0x80F6);
+    const bool deathFxOn = ItemChecked(hwnd, 0x80F6);
+    cmd(0x80F6);
+    const bool effectsOk = colorCycleOn && colorCycleOff && deathFxOn;
+
     // 调试菜单（本轮启用）
     cmd(0x80DE);   // 允许调试
     const bool debugOn = ItemChecked(hwnd, 0x80DE);
@@ -1223,12 +1233,13 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         L"layerInit=%d\nlayerUnits=%d\nlayerLoc=%d\nlayerBack=%d\n"
         L"gridLarge=%d\ngridOff=%d\ngridBack=%d\ngridRed=%d\n"
         L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\nzoom=%d\nminimapOff=%d\nminimapOn=%d\n"
-        L"fogAlias=%d\nallColors=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n"
+        L"fogAlias=%d\nallColors=%d\neffects=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n"
         L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\n",
         layerInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0, layerBack ? 1 : 0,
         gridLarge ? 1 : 0, gridOff ? 1 : 0, gridBack ? 1 : 0, gridRed ? 1 : 0,
         unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0, zoomOk ? 1 : 0,
         minimapOff ? 1 : 0, minimapOn ? 1 : 0, fogAlias ? 1 : 0, allColorsOn ? 1 : 0,
+        effectsOk ? 1 : 0,
         debugOn ? 1 : 0, (debugData1 && debugData2) ? 1 : 0, overlapOn ? 1 : 0,
         imageSizeOn ? 1 : 0, compareOn ? 1 : 0, conflictOn ? 1 : 0, minimapNav ? 1 : 0,
         (soundOff && soundOn) ? 1 : 0);
@@ -1236,7 +1247,7 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
 
     const bool ok = layerInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
                     gridBack && gridRed && unitsOff && unitsOn && fogOn && zoomOk &&
-                    minimapOff && minimapOn && fogAlias && allColorsOn && debugOn &&
+                    minimapOff && minimapOn && fogAlias && allColorsOn && effectsOk && debugOn &&
                     debugData1 && debugData2 && overlapOn && imageSizeOn && compareOn &&
                     conflictOn && minimapNav && soundOff && soundOn;
     return ok ? 0 : 2;

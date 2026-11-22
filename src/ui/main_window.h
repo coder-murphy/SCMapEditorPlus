@@ -151,6 +151,8 @@ private:
     // 撤销/重做后只重绘发生变化的瓦片区域（大面积改动回退为整图重建）
     void RefreshAfterHistory(const Buffer& oldTiles);
     void DrawUnits(HDC dc, const RECT& client) const;
+    void DrawDeathMarks(HDC dc, const RECT& client) const;
+    int RemoveUnitsAtTileWithFx(int tx, int ty);
     void DrawHud(HDC dc) const;
     void DrawMinimap(HDC dc, const RECT& client) const;
     RECT MinimapRect(const RECT& client) const;
@@ -203,6 +205,12 @@ private:
     bool showDeathFx_ = false;
     bool showZergGround_ = true;
     bool showSpecialStates_ = true;
+    struct DeathMark {
+        int tx = 0;
+        int ty = 0;
+        ULONGLONG tick = 0;
+    };
+    std::vector<DeathMark> deathMarks_;   // 0x80F6：删除单位后的短暂 X 标记
     u16 brushTile_ = 0x0040;   // 默认：platform 甲板
     TerrainBrush brushPattern_;      // 当前刷子图案（1x1 即单格刷）
     std::vector<TerrainBrush> customBrushes_;   // 182 列表（进程内）
