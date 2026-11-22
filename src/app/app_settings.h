@@ -40,6 +40,7 @@ public:
 
     const std::vector<std::wstring>& recentMaps() const { return recent_; }
     void AddRecentMap(const std::wstring& path);  // 去重、置顶、最多 kMaxRecent 条
+    void RemoveRecentMap(const std::wstring& path);
     void ClearRecentMaps() { recent_.clear(); }
 
     int undoLimit() const { return undoLimit_; }

@@ -287,7 +287,17 @@ bool MainWindow::RebuildView(int pxPerTile) {
         static_cast<double>(map_.width()) * map_.height() * pxPerTile * pxPerTile;
     if (pixels > 64.0 * 1024.0 * 1024.0) return false;
     const ULONGLONG renderStart = ::GetTickCount64();
-    if (!renderer_.Render(map_.tiles(), map_.width(), map_.height(), pxPerTile, image_)) return false;
+    bool rendered = false;
+    try {
+        rendered = renderer_.Render(map_.tiles(), map_.width(), map_.height(), pxPerTile, image_);
+    } catch (...) {
+        rendered = false;
+    }
+    if (!rendered) {
+        image_.pixels.clear();
+        image_.width = image_.height = 0;
+        return false;
+    }
 
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -2347,7 +2357,10 @@ void MainWindow::OnCommand(int id) {
             }
             const std::wstring path = recent[static_cast<std::size_t>(chosen - kRecentMenuBase)];
             if (::GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
-                ::MessageBoxW(hwnd_, L"该地图文件已不存在。", kWindowTitle, MB_ICONWARNING);
+                ::MessageBoxW(hwnd_, L"该地图文件已不存在，已从最近列表移除。", kWindowTitle,
+                              MB_ICONWARNING);
+                AppSettings::Instance().RemoveRecentMap(path);
+                AppSettings::Instance().Save();
                 break;
             }
             if (MaybeSave()) OpenMap(path);

@@ -120,6 +120,15 @@ void AppSettings::AddRecentMap(const std::wstring& path) {
     if (recent_.size() > kMaxRecent) recent_.resize(kMaxRecent);
 }
 
+void AppSettings::RemoveRecentMap(const std::wstring& path) {
+    for (auto it = recent_.begin(); it != recent_.end(); ++it) {
+        if (::_wcsicmp(it->c_str(), path.c_str()) == 0) {
+            recent_.erase(it);
+            return;
+        }
+    }
+}
+
 bool AppSettings::Load() {
     recent_.clear();
     undoLimit_ = 50;
@@ -253,7 +262,15 @@ bool AppSettings::Save() {
     out += "view.fog=" + std::to_string(view_.showFog ? 1 : 0) + "\n";
     out += "view.locations=" + std::to_string(view_.showLocations ? 1 : 0) + "\n";
     out += "undoLimit=" + std::to_string(undoLimit_) + "\n";
-    return WriteWholeFile(filePath(), out);
+    // 先写临时文件再替换，避免中途失败留下半个 settings.ini
+    const std::wstring path = filePath();
+    const std::wstring tmp = path + L".tmp";
+    if (!WriteWholeFile(tmp, out)) return false;
+    if (!::MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+        ::DeleteFileW(tmp.c_str());
+        return false;
+    }
+    return true;
 }
 
 }  // namespace scmd
