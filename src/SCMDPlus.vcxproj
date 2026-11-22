@@ -61,6 +61,7 @@
   <ItemGroup>
     <ClCompile Include="app\main.cpp" />
     <ClCompile Include="app\app.cpp" />
+    <ClCompile Include="app\app_settings.cpp" />
     <ClCompile Include="ui\main_window.cpp" />
     <ClCompile Include="ui\brush_palette.cpp" />
     <ClCompile Include="ui\dlg_basic.cpp" />
@@ -100,6 +101,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="app\app.h" />
+    <ClInclude Include="app\app_settings.h" />
     <ClInclude Include="ui\main_window.h" />
     <ClInclude Include="ui\brush_palette.h" />
     <ClInclude Include="ui\dialogs.h" />

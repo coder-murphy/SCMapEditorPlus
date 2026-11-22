@@ -11,6 +11,7 @@
 
 #include "common/log.h"
 #include "common/string_util.h"
+#include "app/app_settings.h"
 #include "platform/file_dialog.h"
 #include "map/map_switches.h"
 #include "res/resource.h"
@@ -107,8 +108,10 @@ void CheckOnly(HMENU bar, const int* ids, int count, int checkedId) {
     }
 }
 
-const int kLayerIds[] = {0x803A, 0x803B, 0x803E, 0x803C, 0x803D, 0x803F};
-const int kGridIds[] = {0x80AF, 0x800E, 0x800D, 0x80A5, 0x80AA, 0x80CF, 0x80D6};
+// 最近地图弹窗使用的一次性命令 ID（不进入菜单资源）
+constexpr int kRecentMenuBase = 0x9000;
+
+const int kLayerIds[] = {0x803A, 0x803B, 0x803E, 0x803C, 0x803D, 0x803F};const int kGridIds[] = {0x80AF, 0x800E, 0x800D, 0x80A5, 0x80AA, 0x80CF, 0x80D6};
 const int kGridColorIds[] = {0x8036, 0x80B1, 0x8037, 0x8038, 0x8039, 0x80B2, 0x80D0};
 
 int GridPresetOf(bool enabled, int cellX, int cellY) {
@@ -129,6 +132,7 @@ bool MainWindow::Create(HINSTANCE hInstance) {
     hInstance_ = hInstance;
     brushPattern_.SetSingle(brushTile_, L"单格");
     renderer_.SetTileset(&map_.tileset());
+    history_.SetLimit(static_cast<std::size_t>(AppSettings::Instance().undoLimit()));
 
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
@@ -260,6 +264,8 @@ bool MainWindow::OpenMap(const std::wstring& path) {
     history_.Clear();
     editOpen_ = false;
     ClearSelection();
+    AppSettings::Instance().AddRecentMap(path);
+    AppSettings::Instance().Save();
     UpdateTitle();
     RebuildView(pxPerTile_);
     RefreshBrushPalette();
@@ -1900,6 +1906,37 @@ void MainWindow::OnCommand(int id) {
             if (!MaybeSave()) break;
             std::wstring path;
             if (OpenFileDialog(hwnd_, kMapFilter, path)) OpenMap(path);
+            break;
+        }
+        case kFileRecentMaps: {
+            const std::vector<std::wstring>& recent = AppSettings::Instance().recentMaps();
+            if (recent.empty()) {
+                ::MessageBoxW(hwnd_, L"还没有最近打开的地图。", kWindowTitle, MB_ICONINFORMATION);
+                break;
+            }
+            HMENU popup = ::CreatePopupMenu();
+            for (std::size_t i = 0; i < recent.size(); i++) {
+                wchar_t label[512];
+                ::wsprintfW(label, L"%u. %ls", static_cast<unsigned>(i) + 1,
+                            FileNameOf(recent[i]).c_str());
+                ::AppendMenuW(popup, MF_STRING, kRecentMenuBase + static_cast<int>(i), label);
+            }
+            POINT pt;
+            ::GetCursorPos(&pt);
+            const int chosen = ::TrackPopupMenu(
+                popup, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_TOPALIGN,
+                pt.x, pt.y, 0, hwnd_, nullptr);
+            ::DestroyMenu(popup);
+            if (chosen < kRecentMenuBase ||
+                chosen >= kRecentMenuBase + static_cast<int>(recent.size())) {
+                break;
+            }
+            const std::wstring path = recent[static_cast<std::size_t>(chosen - kRecentMenuBase)];
+            if (::GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                ::MessageBoxW(hwnd_, L"该地图文件已不存在。", kWindowTitle, MB_ICONWARNING);
+                break;
+            }
+            if (MaybeSave()) OpenMap(path);
             break;
         }
         case kFileClose:

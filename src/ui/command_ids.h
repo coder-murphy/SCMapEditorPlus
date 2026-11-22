@@ -6,6 +6,7 @@ namespace scmd {
 enum CommandId : int {
     kFileNew = 0x8005,
     kFileOpen = 0x801B,
+    kFileRecentMaps = 0x810C,       // 文件 → 最近编辑的地图（MRU 弹窗）
     kFileClose = 0x8007,
     kFileSave = 0x8087,
     kFileSaveAs = 0x8088,

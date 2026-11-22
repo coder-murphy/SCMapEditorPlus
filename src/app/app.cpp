@@ -10,6 +10,7 @@
 #include <unordered_set>
 
 #include "res/resource.h"
+#include "app/app_settings.h"
 #include "ui/brush_palette.h"
 #include "ui/dialog_registry.h"
 #include "ui/dialogs.h"
@@ -74,9 +75,36 @@ std::wstring ParseOpenArg() {
     return path;
 }
 
-// --ts=<目录>：地形集四件套所在目录
-std::wstring ParseTsArg() {
+// --settings-dir=<目录>：覆盖设置文件目录（默认 %APPDATA%\SCMDPlus，测试用）
+std::wstring ParseSettingsDirArg() {
     int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring dir;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--settings-dir=", 15) == 0) dir = argv[i] + 15;
+        }
+        ::LocalFree(argv);
+    }
+    return dir;
+}
+
+// --recent-test：最近地图 / 设置持久化回归（配合 --settings-dir）
+bool HasRecentTestArg() {
+    int argc = 0;
+    bool want = false;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcscmp(argv[i], L"--recent-test") == 0) want = true;
+        }
+        ::LocalFree(argv);
+    }
+    return want;
+}
+
+// --ts=<目录>：地形集四件套所在目录
+std::wstring ParseTsArg() {    int argc = 0;
     LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
     std::wstring dir;
     if (argv) {
@@ -2229,6 +2257,55 @@ int RunMapToolsTest(const std::wstring& mapPath, const std::wstring& outPath) {
     return ok ? 0 : 2;
 }
 
+// --recent-test：最近地图 MRU 与设置文件读写回归
+int RunRecentTest() {
+    AppSettings& settings = AppSettings::Instance();
+    if (settings.filePath().empty()) {
+        WriteDiag(L"recent=FAIL no-settings-dir\n");
+        return 2;
+    }
+
+    settings.ClearRecentMaps();
+    settings.SetUndoLimit(50);
+    const bool saveClear = settings.Save();
+    const bool loadClear = settings.Load();
+    const bool cleared = saveClear && loadClear && settings.recentMaps().empty();
+
+    for (int i = 0; i < 10; i++) {
+        settings.AddRecentMap(L"C:\\maps\\map" + std::to_wstring(i) + L".scx");
+    }
+    const bool capOk = settings.recentMaps().size() == AppSettings::kMaxRecent &&
+                       settings.recentMaps().front() == L"C:\\maps\\map9.scx";
+
+    settings.AddRecentMap(L"C:\\maps\\map5.scx");   // 去重并置顶
+    int occurrences = 0;
+    for (const std::wstring& path : settings.recentMaps()) {
+        if (::_wcsicmp(path.c_str(), L"C:\\maps\\map5.scx") == 0) occurrences++;
+    }
+    const bool dedupeOk = settings.recentMaps().size() == AppSettings::kMaxRecent &&
+                          settings.recentMaps().front() == L"C:\\maps\\map5.scx" &&
+                          occurrences == 1;
+
+    settings.SetUndoLimit(75);
+    const bool saved = settings.Save();
+    settings.ClearRecentMaps();
+    settings.SetUndoLimit(50);
+    const bool reloaded = settings.Load();
+    const bool persisted = reloaded && settings.recentMaps().size() == AppSettings::kMaxRecent &&
+                           settings.recentMaps().front() == L"C:\\maps\\map5.scx";
+    const bool undoOk = settings.undoLimit() == 75;
+
+    wchar_t msg[384];
+    ::wsprintfW(msg,
+                L"recent=1\nsaveClear=%d\nloadClear=%d\ncleared=%d\ncap=%d\n"
+                L"dedupe=%d\nsaved=%d\nreloaded=%d\npersisted=%d\nundo=%d\n",
+                saveClear ? 1 : 0, loadClear ? 1 : 0,
+                cleared ? 1 : 0, capOk ? 1 : 0, dedupeOk ? 1 : 0, saved ? 1 : 0,
+                reloaded ? 1 : 0, persisted ? 1 : 0, undoOk ? 1 : 0);
+    WriteDiag(msg);
+    return (cleared && capOk && dedupeOk && saved && reloaded && persisted && undoOk) ? 0 : 2;
+}
+
 // --tileset-render-test=<输出目录>：8 套地形集逐套创建合成地图，渲染结果与
 // 独立解码的参考图逐像素比对；每套导出一张 BMP，哈希必须互不相同。
 int RunTilesetRenderTest(const std::wstring& tsDir, const std::wstring& outDir) {
@@ -2628,6 +2705,15 @@ int App::Run(HINSTANCE hInstance) {
     if (const std::wstring tsOut = ParseExtractTsArg(); !tsOut.empty()) {
         return RunExtractTilesets(ParseGameDirArg(), tsOut);
     }
+
+    // 本地设置：--settings-dir 可覆盖（测试），默认 %APPDATA%\SCMDPlus
+    if (const std::wstring settingsDir = ParseSettingsDirArg(); !settingsDir.empty()) {
+        AppSettings::Instance().SetDirectory(settingsDir);
+    }
+    AppSettings::Instance().Load();
+
+    // 最近地图 / 设置持久化回归（无窗口）
+    if (HasRecentTestArg()) return RunRecentTest();
 
     ::InitCommonControls();
     // 187 号对话框含 RichEdit20A 控件，必须先让 riched20 注册窗口类
