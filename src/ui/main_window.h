@@ -187,7 +187,8 @@ private:
     bool showCompareData_ = false;    // 0x80E0
     bool showUnitConflict_ = false;   // 0x811D
     bool showCpuTiming_ = false;     // 0x80F2
-    bool showDebugImageSize_ = false; // 0x810A
+    bool showDebugImageSize_ = false;
+    bool showImageSizeAlways_ = false;   // 0x810B：无需开启调试也显示图像尺寸 // 0x810A
     ULONGLONG lastRenderMs_ = 0;     // 上次整图重建耗时
 
     Tool tool_ = Tool::kTerrain;

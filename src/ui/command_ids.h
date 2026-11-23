@@ -142,6 +142,10 @@ enum CommandId : int {
     kDebugCpu = 0x80F2,         // 显示CPU测试数据
     kDebugClearScreen = 0x80E2, // 清除屏幕
     kDebugImageSize = 0x810A,   // 显示图像大小
+    kDebugImageSizeAlways = 0x810B, // 显示图像大小(禁用模式：不依赖允许调试)
+    kDebugClearDoodads = 0x80E3,    // 清除装饰物缓存
+    kDebugClearUnits = 0x80E4,      // 清除单位缓存
+    kDebugClearDuplicates = 0x80E5, // 清除重复缓存
 
     // 选项 → 输出
     kOutputShow = 0x80F3,       // 显示输出面板

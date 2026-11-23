@@ -260,6 +260,8 @@ bool MainWindow::Create(HINSTANCE hInstance) {
                                   kDebugEnable, kDebugDataNormal, kDebugDataExact,
                                   kDebugDataFinal, kDebugOverlaps, kDebugCpu,
                                   kDebugClearScreen, kDebugImageSize,
+                                  kDebugImageSizeAlways,
+                                  kDebugClearDoodads, kDebugClearUnits, kDebugClearDuplicates,
                                   kDebugCompare, kDebugUnitConflict};
         for (int id : kEnableIds) {
             if (HMENU menu = FindMenuContaining(bar, id)) {
@@ -1496,6 +1498,7 @@ void MainWindow::SyncMenuChecks() {
         {kDispLocations, showLocations_},
         {kDebugEnable, debugMode_}, {kDebugOverlaps, showOverlapMarkers_},
         {kDebugCpu, showCpuTiming_}, {kDebugImageSize, showDebugImageSize_},
+        {kDebugImageSizeAlways, showImageSizeAlways_},
         {kDebugCompare, showCompareData_}, {kDebugUnitConflict, showUnitConflict_},
         {kEnableSound, soundEnabled_},
     };
@@ -2249,7 +2252,7 @@ void MainWindow::DrawHud(HDC dc) const {
         ::lstrcatW(text, cmp);
         extraLines++;
     }
-    if (showDebugImageSize_) {
+    if (showDebugImageSize_ || showImageSizeAlways_) {
         wchar_t sizeText[128];
         ::wsprintfW(sizeText, L"[图像] %dx%d 像素   缩放 %d px/瓦片", image_.width, image_.height,
                     pxPerTile_);
@@ -3036,6 +3039,23 @@ void MainWindow::OnCommand(int id) {
         case kDebugClearScreen:
             ::InvalidateRect(hwnd_, nullptr, TRUE);
             break;
+        case kDebugImageSizeAlways:
+            showImageSizeAlways_ = !showImageSizeAlways_;
+            SyncMenuChecks();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kDebugClearDoodads:
+        case kDebugClearUnits:
+        case kDebugClearDuplicates: {
+            // 本工程不做增量缓存；清缓存等价于丢弃整图位图并重建
+            const wchar_t* what = id == kDebugClearDoodads ? L"装饰物"
+                                 : id == kDebugClearUnits ? L"单位" : L"重复";
+            ReleaseBackBuffer();
+            RebuildView(pxPerTile_);
+            Output(3, std::wstring(L"已清除") + what + L"缓存并重建视图");
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        }
         case kAutoEdgeCliffs:
             AutoPlaceCliffs();
             break;
