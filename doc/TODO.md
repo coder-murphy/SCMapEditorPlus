@@ -3,8 +3,11 @@
 > 更新：2026-11-22。优先级：P0 编辑核心 → P1 数据完整性 → P2 工具 → P3 验证/逆向。
 > 勾选状态以代码与回归结果为准；完成后请同步对应的 `doc/` 业务文档。
 >
-> **暂停点（2026-11-23 21:40）**：本轮完成 UNIT 0..227 碰撞盒补齐、MPQ 文件管理（167）；
-> 四配置构建通过，全量回归通过。下一步见文末「建议顺序」。
+> **暂停点（2026-11-24）**：已完成 UNIT 0..227 碰撞盒、MPQ 文件管理（167）、
+> 装饰物窗口（0x8004）、Locations 三种描绘模式与 SP 对齐方格、192 动画预览与条件输入、
+> 169/175 尺寸对话框对齐（尺寸预设 / 地形集切换）、全对话框按钮语义审计与
+> `--dialog-audit-test` 自动化回归（含基准快照 diff）；四配置构建通过，全量回归通过。
+> 下一步见文末「建议顺序」。
 
 ## 已完成（近期）
 
@@ -24,6 +27,14 @@
   - 已接 0x8032/0x80E9/0x80EA 与重叠/自动连接/矿基距离/剪贴板装饰物的菜单状态；
     “任意放置”已影响可行走校验。
   - 回归：`--unit-param-test`。
+- [x] **180 单位属性状态位回填 / 写回**
+  - 修正 UNIT 字段语义：+12 是“特殊属性有效掩码”，+26 才是激活状态位，
+    +24 是机库/载弹数量（原先误当作队列数）。
+  - 180 打开时按 +26 回填 5 个复选框：无敌=bit4、幻影=bit3、钻地=bit1、隐形=bit0、升起=bit2；
+    确定后写回 +26，并把勾选位并进 +12（否则游戏会忽略未标记为有效的状态）。
+  - “子弹”字段写回 +24；打开时从 +24 回填。
+  - 回归：`--dialog-audit-test` 新增 `unitProps180`
+    （种子 0x11 → 显示无敌+隐形；改为 0x0F + 子弹 9）。
 - [x] **放置规则细化**
   - [x] 附属单位自动连接（0x80B8）：Comsat/Silo→Command Center、Machine Shop→Factory、
     Control Tower→Starport、Physics Lab/Covert Ops→Science Facility；
@@ -83,6 +94,15 @@
   - 装饰物层绘制品红色空心标记；迷雾层用 AlphaBlend 半透明覆盖，左键单击/拖动切换。
   - 选项 → 战争迷雾 → 默认为未探索/已探索（0x80D3/0x80D4）整图填充。
   - DD2/MASK 只重写被修改的段，并纳入撤销栈；回归：`--decor-test`。
+- [x] **装饰物窗口（0x8004）与允许任意放置（0x8010）**
+  - 窗口 → 装饰物窗口打开独立工具窗口：类型 0..65535、玩家 1..8、禁用标志；
+    列表汇总当前地图已使用的 DD2 类型（类型 × 条数），单击填入类型。
+  - 装饰物层左键在瓦片中心放置、右键删除该格全部记录；整次操作进入撤销栈。
+  - 默认只允许放在可行走地形；选项 → 装饰物 → 允许任意放置（0x8010）开启后跳过校验，
+    菜单勾选与窗口复选框双向同步。
+  - 回归：`--doodad-test`（放置/字段写回/禁用/阻挡拒绝/任意放置/删除/撤销重做/保存重开）；
+    `--menu-cmd-test` 新增 `doodadAny`。
+  - 代码：`src/ui/doodad_palette.*`、`src/ui/main_window.cpp`、`src/map/map_document.*`。
 - [x] **SP 单位（THG2）数据层与绘制**
   - `SpriteTable` 10 B/条（类型/坐标/玩家/未用/标志），长度异常整段原样保留。
   - SP单位层与显示选项打开时绘制青色标记：bit12 为空心圆，否则空心方框。
@@ -92,15 +112,28 @@
   - 可编辑玩家、Bit0..11、Flipped（bit13）、禁用（bit15）、普通SP/单位SP（bit12）与未用字节。
   - 关闭即应用，整次编辑进入撤销栈（THG2 快照）；资源中置灰的 1039/1040 已启用。
   - 回归：`--sprite-test` 覆盖字段修改、撤销重做与保存重开。
+- [x] **Locations 描绘模式与 SP 对齐方格（0x8013/0x80EB/0x80EC/0x80B7）**
+  - MRGN 按实图校正为 20 字节：u32 像素坐标（right/bottom 开区间）+ u16 stringId + u16 flags；
+    171 编辑、地点绘制与命中全部改为像素，旧“8 字节保留区”误读已移除。
+  - 地点层空白处拖拽创建新地点：整齐的描绘（32 px）、按照方格描绘（方格设置与偏移）、
+    任意描绘（像素精度）；拖拽时显示虚线预览，松开后追加 MRGN 并进入撤销栈。
+  - SP 单位层左键放置 / 右键删除（类型/玩家/标志沿用最近一次 164 编辑）；
+    选项 → SP单位 → 对齐方格（0x80B7）开启后吸附到瓦片中心。
+  - 回归：`--loc-draw-test`（MRGN 格式、三种模式、SP 自由/对齐、撤销重做、保存重开）；
+    `--location-test` 适配新布局；`--menu-cmd-test` 新增 `locMode/spAlign`。
+  - 代码：`src/triggers/trigger_model.*`、`src/ui/main_window.cpp`、`src/ui/dlg_triggers.cpp`。
+- [x] **显示战争迷雾在探索地区（0x80F4）**
+  - 与显示选项 0x8113、编辑层子菜单 0x80CE 合并为同一个 `showFog_` 开关，
+    三个菜单项的勾选状态同步；回归 `--menu-cmd-test` 新增 `fogExplored`。
 - [x] **小雷达/迷雾开关**
   - 剧本设置 → 全地图放置/删除小雷达：UNIT 101 `Map Revealer`，16 格网格，
     支持 Player 1..8 与所有玩家；重复位置跳过，接近 1650 单位上限时停止。
   - 禁止/允许迷雾：按玩家清除/设置 MASK 对应位；所有玩家整字节填 0x00/0xFF。
   - 两个命令都进入撤销栈；回归：`--radar-test`。
 - [x] **Location 171 → MRGN**
-  - 171 面板按 MRGN 记录初始化：四边坐标、高程标志（flags 低 6 位）、名称与 STR 下标。
+  - 171 面板按 MRGN 记录初始化：四边像素坐标（right/bottom 开区间）、高程标志（flags 低 6 位）、名称与 STR 下标。
   - 调用点：地点层双击矩形，或“选项 → Locations → 修改名字”（0x8108，取光标所在地点）。
-  - 写回 MRGN 并保留 8 字节保留区；名称写入 STR（空名复用/追加下标），整次编辑进入撤销栈。
+  - 写回 MRGN（20 字节：u32×4 + stringId + flags）；名称写入 STR（空名复用/追加下标），整次编辑进入撤销栈。
   - 回归：`--location-test`。
 - [x] **声音、任务简报、开关命名**
   - 编辑声音（0x8047）→ 198：WAV 512 槽，路径写入 STR，支持设置/清除。
@@ -119,6 +152,14 @@
   - 175 勾选“平滑边缘”时，新增的行/列按最近的原始瓦片延伸；未勾选仍填 0。
   - MTXM 平移、DIM 更新、越界单位丢弃与迷雾搬移保持不变。
   - 回归：`--resize-test` 新增 `smooth`。
+- [x] **新建 / 重设尺寸对话框对齐（169 / 175）**
+  - 169：左列表为边长预设（64/96/128/192/256），选中同步宽/高；右列表为 8 种地形集；
+    “创建地图”读取 ERA，`CreateNew` 写 `ERA ` 并加载对应地形集。
+  - 175：打开前按当前地图宽/高/ERA 预填（`SeedResizeParams`）；左列表为当前地形集，
+    右列表选择目标地形集；应用时先 `Resize`，必要时 `SetEra` 重载地形集。
+  - `MapDocument` 增加 `SetEra` 与 `tilesetDir_`（Open/CreateNew 记录，Close 清空）。
+  - 回归：`--resize-test` 新增 `eraSwitched/eraTileset/reopenEra`；
+    端到端验证 128×128 ERA 4 → 96×96 ERA 7（窗口标题与地形集同步）。
 - [x] **地图片级工具**
   - 转换地形（0x8101）：删除框选范围内（无选区则光标所在格）的 DD2 装饰物记录，
     MTXM/THG2 与其余段保持不变；进入撤销栈。
@@ -153,6 +194,159 @@
   - `settings.ini` 兼容带 UTF-8 BOM 的写法（避免首个键被 BOM 污染而丢失）。
   - 回归：`--recent-test` 新增 `settings` 与 `remove`（失效最近项移除）；
     `--view-test` 校验启动时缩放/编辑层/方格/显示选项的恢复。
+- [x] **对话框按钮语义审计（P3）**
+  - 155：默认水晶/默认气矿/撤销次数改绑标签对应的 1010/1011/1012（原实现错位到
+    SP单位/Location编号）；新增“应用设定”（写入 settings.ini 但不关闭）；
+    自定义刷子文件列表（浏览/添加/删除/上移/下移）持久化为 `brush0..`，
+    启动时加载进 182 的自定义刷子列表；未建模的 7 个控件置灰。
+  - 166：第二组“静态方格”（1049..1053）置灰（本工程仅一套网格）。
+  - 172：units.dat 属性编辑控件置灰，保留只读查看。
+  - 188：“所有单位”勾选后数量固定 255 并禁用输入。
+  - 189：“一直显示”控制行号列显隐；行号随正文实时更新。
+  - 174：下载按钮保留“未配置更新源”提示，属有意空实现。
+  - 回归：`--recent-test` 增加 brushFiles 持久化；
+    GUI 探针覆盖 155/166/172/188/189 与 182 启动加载（`brush0=probe [1x1]`）。
+- [x] **对话框 UI 自动化回归（`--dialog-audit-test`）**
+  - 逐个创建 28 个独立对话框并校验初始化出子控件（184/185/186 为 181 的内嵌子面板）。
+  - 断言：155 控件映射/置灰/“应用设定”不关闭；166/172 置灰；188“所有单位”；
+    189 行号与显隐；169 尺寸预设 + 地形集；175 预填 + 重设结果；182 添加刷子并应用。
+  - “应用设定”写入临时设置目录 `%TEMP%\scmdplus_dialog_audit`，不污染用户配置。
+  - 输出控件快照 `%TEMP%\scmdplus_dialog_snapshot.txt`：每个对话框的控件 ID/类/
+    可用状态/自身可见性/文本/列表项（列表与下拉最多 20 项），共 414 个控件。
+  - 报告写入 `%TEMP%\scmdplus_mpq.txt`（`createAll/snapshot/snapshotControls/.../audit=1`）。
+  - 基准对比：`--dialog-snapshot-baseline=<path>` 保存 UTF-16LE 基准；
+    `--dialog-snapshot-diff=<path>` 对比基准，差异写入
+    `%TEMP%\scmdplus_dialog_snapshot.diff.txt`（LCS 行级 `-/+`），
+    报告 `snapshotMatch/snapshotDiffLines`，不一致时退出码 2。
+  - 快照前把内存设置重置为固定默认，并把 exe 目录前缀归一化为 `<exe>`；
+    同一基准在四配置下均 `snapshotMatch=1`。
+  - 基准入库：`doc/05-ui/dialog-snapshot-baseline.txt`（UTF-8 BOM / LF，
+    617 行 / 21 KB）；`tools/dialog-ui-check.ps1` 提供 check/update 两种模式，
+    `.github/workflows/dialog-ui.yml` 在 windows-latest 构建 Debug Win32 后自动校验，
+    失败时上传快照 diff 作为 artifact。
+  - 四配置运行均 `audit=1`（快照约 39 KB / 414 控件）。
+- [x] **快照基准按环境分组**
+  - 基准命名：`doc/05-ui/dialog-snapshot-baseline.<环境标签>.txt`，存在时优先于通用基准。
+  - 环境标签默认 `win<主版本>.<构建号>`（如 win10.19045），可用 `-EnvTag` 覆盖；
+    字体只影响像素、不影响快照文本，故不纳入标签。
+  - `tools/dialog-ui-check.ps1 -Mode update -PerEnvironment` 生成/更新本环境基准；
+    check 模式自动选择，未找到环境基准时回退通用基准。
+  - 实测：testenv 变体生成 → 选中命中 → 改一行失败（exit=1，diff 2 行）→
+    删除变体后回退通用基准通过。
+- [x] **扩展按钮路径覆盖（167/173/179/198/199）**
+  - 构造临时 32×32 MapDocument，模拟 167 添加/改名/删除附加文件、
+    179 设置/还原开关名、198 设置/清除声音路径、199 更新简报文本；
+    173 生成临时备份后校验分组列表与备份列表，结束时清理备份与文档。
+  - 回归：`--dialog-audit-test` 新增 `mpq167/switch179/sound198/brief199/backup173`；
+    四配置均通过。
+- [x] **交互操作后的控件状态快照（167/179/198/199）**
+  - 每次交互前后用 `SnapshotOf` 生成控件状态，写入
+    `%TEMP%\scmdplus_dialog_interaction.txt`（before/after/LCS diff）；
+    要求 8 对快照都有差异：167 添加/改名/删除、179 设置/还原、198 设置/清除、199 更新。
+  - 报告新增 `interactionPairs=8 interactionSnapshot=1`。
+  - 顺带修复 167 文件名框初始文本为 "0" 的问题（现清空，避免误建同名条目），
+    并同步更新仓库控件基准。
+  - 四配置均通过。
+- [x] **交互快照纳入基准对比**
+  - 交互快照复用控件快照机制：`--dialog-interaction-baseline=<path>` 保存、
+    `--dialog-interaction-diff=<path>` 对比；差异写入
+    `%TEMP%\scmdplus_dialog_interaction.diff.txt`，不一致时审计失败（exit 2）。
+  - 仓库基准：`doc/05-ui/dialog-interaction-baseline.txt`（UTF-8 BOM / LF，约 11 KB）；
+    `tools/dialog-ui-check.ps1` 一次检查两份基准，并同样支持环境变体；
+    CI 失败时上传两份 diff。
+  - 四配置均 `snapshotMatch=1 interactionMatch=1`；
+    篡改交互基准一行可得到 `interactionDiffLines=16`、exit 2。
+- [x] **181/193/194/196/197 交互路径与基准**
+  - 181：新建/复制/修改/删除触发（断言 BlockCount 与列表项）；
+    193/194：改字段并确定，通过新增 `LastTriggerCondition/Action` 访问器断言结果；
+    196：切换玩家/控制者/队伍；197：切换升级项/玩家/使用全局默认。
+  - 交互基准从 8 对扩到 20 对（约 53 KB / 1864 行），四配置 `interactionMatch=1`。
+  - 修复：181 触发列表与 185/186 条件/行动列表原为 owner-draw 且无 `LBS_HASSTRINGS`，
+    运行时 `LB_ADDSTRING` 文本不生效（列表显示乱码）；改为标准 ListBox 样式。
+    181 列表项改用 `std::wstring` 拼接，避免 `wsprintfW` 的 `%s` 宽窄歧义。
+  - 回归：`trigger181/cond193/act194/player196/restriction197`；
+    交互快照连续两次运行逐字节一致。
+- [x] **181 玩家触发树筛选**
+  - 左侧树节点改为「全 / 1..8」；选中玩家后列表只显示 `effectivePlayers` 含该玩家的触发。
+  - 列表行与触发下标分离：ListBox itemdata 保存真实触发下标，
+    新建/复制/删除/上移/下移仍作用于真实触发。
+  - 切换筛选时保持当前触发（不可见则选第一条）；新建触发自动带上当前筛选玩家。
+  - 回归：`--dialog-audit-test` 的 `trigger181` 增加 P2=0 / P1=1 / 全=1。
+- [x] **193/194 类型下拉联动**
+  - 条件（193）与行动（194）对话框的「类型」下拉与「类型号」编辑框双向同步：
+    选下拉回填类型号（条件 1..23、行动 1..57），改类型号切换下拉；
+    下拉末项「自定义」保留手填值，类型号 0 或越界时回落到「自定义」。
+  - 确定时以下拉为准（非自定义），避免手填与下拉不一致。
+  - 回归：`cond193`（选索引 3→类型 4、填 22→索引 21、填 99→自定义 23、确定后 type=22）；
+    `act194`（选索引 2→类型 3、填 57→索引 56、填 99→自定义 57、确定后 type=1）。
+    四配置 `cond193=1 act194=1`，双基准 `snapshotMatch=1 interactionMatch=1`。
+- [x] **189 编辑字符串预览框**
+  - 右侧只读框（1079）随正文实时刷新：0x02 显示为换行（游戏内换行）、
+    0x07+色号显示为 `[颜色N]`、其余控制字符显示为 `<0xNN>`；行号列同步把 0x02 计为一行。
+  - 回归：`string189` 增加“a 0x02 b 0x07 0x04 c 0x01” → 预览 `a<换行>b[颜色4]c<0x01>`、行号 1/2；
+    创建时预览随初值填充，控件快照基准中 189 的 `#1079` 由默认 "0" 变为空。
+  - 四配置 `string189=1`，双基准 `snapshotMatch=1 interactionMatch=1`。
+- [x] **155 基本设置剩余 7 项接线**
+  - 原先置灰的 7 个原版选项全部接线并持久化到 settings.ini（语义为本工程解释）：
+    启动最大值（主窗口 `SW_MAXIMIZE` 启动）、地图载入最大值（开图自动适配缩放，
+    关闭则沿用保存缩放）、最多单位（默认 3400，放置超限拒绝）、SP单位（默认 1700）、
+    Location编号（默认 500，描绘新地点超限拒绝）、触发使用基本名称（181 列表只显示
+    「触发 N」）、单一文件（本工程保存本就是单文件，仅持久化）；上限值 0 = 不限制。
+  - 「重置默认」同步重置这 7 项。
+  - 回归：`settings155` 改为断言 7 控件可用、默认值、应用写回与重置恢复；
+    控件快照基准中 155 的 7 行由 disabled/0 更新为 enabled/默认值。
+  - 四配置 `settings155=1`，双基准 `snapshotMatch=1 interactionMatch=1`。
+- [x] **166 第二套静态方格**
+  - 「方格设置」的两组控件全部接线：主方格（1044..1048，虚线）与静态方格
+    （1049..1053「启动方格」，实线）各自独立的 X/Y 尺寸与偏移，叠加绘制。
+  - 静态网格开关与尺寸随 settings.ini（`view.staticGrid*`）持久化并随会话恢复；
+    偏移与主网格一致不持久化。
+  - 回归：`grid166` 改为断言 10 个控件全部可用、种子回填、确定后 `LastGridSettings`
+    写回 staticEnabled/staticCellX/staticCellY/staticOffsetX；
+    控件快照基准中 166 的 5 行由 disabled/0 更新为 enabled/32。
+  - 四配置 `grid166=1`，双基准 `snapshotMatch=1 interactionMatch=1`。
+- [x] **触发编辑器真实模态路径回归（崩溃排查）**
+  - 用户报告 IDE 构建的旧产物（`Debug\SCMDPlus.exe`，166 改动前 + 增量链接）打开触发编辑器
+    崩溃（0xc0000409 快速失败 → 0xc0000005）。审计 `open()` 用 `CreateDialogParamW` +
+    近乎空文档，覆盖不到真实路径（`DialogBoxParamW` 模态 + 真实地图数据）。
+  - 新增无头回归 `--trigger-modal-test`：满载数据文档（3 触发 × 16 条件 + 64 行动、
+    地点、字符串）+ 后台线程驱动交互（新建/选择/184/185/186 面板切换/删除/关闭），
+    走 `ShowRecoveredDialog(181)` 真实模态路径；结果写 `%TEMP%\scmdplus_modal181.txt`。
+  - 排查工具：`tools/sym_resolve.cpp`（DbgHelp 把模块内偏移解析成符号，用于事件日志崩溃定位）。
+  - 当前正式构建 Debug/Release Win32 均 `modal181=1`，审计全绿；旧产物崩溃未在现行代码复现，
+    判定为过期增量构建问题——请使用 `bin\Win32\Release\SCMDPlus.exe` 运行，避免 IDE 的
+    `Debug\` 旧输出目录。
+- [x] **触发编辑器长地点名栈溢出崩溃（已修复）**
+  - 用户提供崩溃地图 `(2)Challenger.scm`：64 个地点，某个地点名长达 **2048 字符**。
+    181 初始化时 185/186 面板刷新条件/行动列表，`ConditionText` 等用固定栈缓冲
+    （`wchar_t buf[256]`）+ 无边界 `wsprintfW` 拼接地点名 → 栈缓冲溢出 →
+    /GS 0xc0000409 → 0xc0000005 崩溃。审计的合成文档地点名极短，从未触发。
+  - 排查过程：harness 支持真实地图（`--trigger-modal-test=<地图>`）→ 阶段打点
+    （追加写 `%TEMP%\scmdplus_modal181_stage.txt`）定位到 184/185/186 面板创建 →
+    VEH 记录异常 RIP → 数据概况打点发现 `maxLocName=2048`。
+  - 修复：`LocationName` 显示统一截断（>24 字符取前 21 + `…`，与 `StringPreview` 风格一致）。
+  - 回归：崩溃地图 Debug/Release Win32 `--trigger-modal-test` 全链路（新建/选择/
+    面板切换/删除/关闭）通过；四配置审计全绿，双基准一致。
+  - 工具沉淀：`tools/sym_resolve.cpp`（PDB 符号解析）；复现地图存 `tools/repro/`。
+- [x] **主窗口布局重排：日志移到底部，右栏放微缩地图 + 场景树**
+  - 客户区分三块：上部左=地图视口；上部右=侧栏（上「微缩地图」、下「场景树」）；
+    下部=日志面板。原先日志与微缩地图叠加在地图上、互相遮挡的问题消除。
+  - 地图绘制、坐标换算、滚动条与滚轮缩放都限制在视口内：
+    `MapViewRect` / `SideRect` / `MinimapRect` / `SceneTreeRect` / `LogRect` 统一布局；
+    `TileCoordsFromClient` / `PixelCoordsFromClient` 在视口外返回无效；
+    右栏/日志区滚轮不再缩放地图；`GotoStartPosition` 与小地图点击按视口尺寸居中。
+  - 场景树（TreeView 子窗口）显示 地图 → 单位 / SP单位 / 装饰物 / 地点 / 触发 / 玩家
+    （明细最多 200 条）；双击单位/SP单位/装饰物定位到该格，双击地点打开 171，
+    双击触发打开 181；打开/新建/关闭/保存/提交编辑后自动刷新。
+  - 无头回归：`--menu-cmd-test` 改为使用临时 settings 目录并重置默认视图
+    （新增 `MainWindow::ReloadViewState`），避免用户 settings.ini 导致断言漂移。
+  - 四配置构建通过，审计 `snapshotMatch=1 interactionMatch=1`，`--menu-cmd-test` exit=0。
+- [x] **CI 四配置矩阵**
+  - `.github/workflows/dialog-ui.yml` 改为矩阵：Debug/Release × Win32/x64 四个并行 job，
+    各自构建后运行 `tools/dialog-ui-check.ps1`（共用仓库内两份基准）。
+  - 失败时按 `dialog-snapshot-diff-<platform>-<config>` 分别上传两份 diff artifact。
+  - 本地已用同一脚本验证四配置 `snapshotMatch=1 interactionMatch=1`；
+    GitHub 托管 runner 尚未实际执行。
 - [x] **MPQ 文件管理（167）**
   - 文件 →「MPQ 文件管理...」（运行时追加 0x8FFC）打开 167；列出当前地图除 scenario.chk
     以外的附加文件（名称与大小）。
@@ -183,7 +377,15 @@
     并按模拟到的帧号解码统计不透明像素。
   - Play 调用 `IscriptFile::Simulate` 线性模拟 1000 步（playfram/wait/goto/end），
     显示 ops/frames/waits/loops 与终止状态。
-  - 回归：`--iscript-test` 增加 `sim/simOps/simFrames/simWaits/simEnded`。
+  - 右侧静态区（1132）作为 GRP 动画预览画布：子类化绘制 + 90 ms 定时器循环解码帧，
+    灰度调色板、透明像素填深色背景、等比缩放；Play 跳到模拟末帧；
+    摘要/模拟信息移到 1095 多行编辑框。
+  - 条件输入：Angle / Enemy position 滑杆（0..255）、Enemy in Range / Unit is Cloaked /
+    Goliath Range 复选框；Play 用 `IscriptSimContext` 驱动
+    trgtrangecondjmp / trgtarccondjmp / pwrupcondjmp / curdirectcondjmp 条件跳转，
+    并把命中的 playfram 序列填入 Active Images 列表（单击跳帧）。
+  - 回归：`--iscript-test` 增加 `sim/simOps/simFrames/simWaits/simEnded`，并新增合成
+    iscript 的 `condSkip/condTake`；`--dialog=192` 验证对话框可开/可关。
 - [x] 小地图渲染（右下角，显示地形缩略图、单位点与当前视口）
   - 显示选项 → 隐藏小雷达（0x80B4）控制显隐；编辑层子菜单“显示战争迷雾”（0x80CE）
     与 0x8113 合并为同一开关。
@@ -247,6 +449,8 @@
 
 ## 建议顺序
 
-TODO 中列出的功能项均已处理。可选增强：
-1. GRP 动画预览（192 用定时器播放解码帧）
-2. 更多原版对话框行为对齐
+TODO 中列出的功能项均已处理。可继续对比原版补齐的缺口：
+1. 172 units.dat 字段编辑
+2. 163 兼容性提示、174 在线升级（当前无更新源）
+3. 帮助菜单外链（主页/在线帮助/论坛/错误与建议/捐款）
+4. 多窗口 MDI 行为差异

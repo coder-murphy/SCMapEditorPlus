@@ -12,11 +12,18 @@
 #include <unordered_set>
 
 #include "res/resource.h"
+#include "res/control_ids.h"
+
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
 #include "app/app_settings.h"
 #include "app/backups.h"
 #include "ui/brush_palette.h"
 #include "ui/dialog_registry.h"
 #include "ui/dialogs.h"
+#include "ui/dlg_common.h"
+#include "ui/dlg_procs.h"
+#include "common/string_util.h"
 
 #include "archive/mpq_archive.h"
 #include "archive/mpq_codec.h"
@@ -54,9 +61,23 @@ int ParseDialogArg() {
     return id;
 }
 
-// 调试开关：SCMDPlus.exe --mpq=<地图路径> 只做容器读取自检
-std::wstring ParseMpqArg() {
+// 通用参数取值：--key=value
+std::wstring ParseValueArg(const wchar_t* prefix) {
     int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring value;
+    const std::size_t len = std::wcslen(prefix);
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], prefix, len) == 0) value = argv[i] + len;
+        }
+        ::LocalFree(argv);
+    }
+    return value;
+}
+
+// 调试开关：SCMDPlus.exe --mpq=<地图路径> 只做容器读取自检
+std::wstring ParseMpqArg() {    int argc = 0;
     LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
     std::wstring path;
     if (argv) {
@@ -477,6 +498,34 @@ std::wstring ParseMapToolsTestArg() {
     return path;
 }
 
+// --loc-draw-test=<输出scx>：地点描绘模式与 SP 对齐方格回归
+std::wstring ParseLocationDrawTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--loc-draw-test=", 16) == 0) path = argv[i] + 16;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --doodad-test=<输出scx>：装饰物窗口放置/删除/任意放置回归
+std::wstring ParseDoodadTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--doodad-test=", 14) == 0) path = argv[i] + 14;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
 // --tileset-render-test=<输出目录>：8 套地形集逐套渲染回归
 std::wstring ParseTilesetRenderTestArg() {
     int argc = 0;
@@ -788,6 +837,117 @@ int RunClipTest(MainWindow& win, const std::wstring& outPath) {
     const bool ok = pasted && tileOk && unitOk && cutTileOk && cutUnitOk && pasted2 &&
                     tile2Ok && unit2Ok && doodadPasteNo && doodadPaste && doodadCut &&
                     overlapOk && invalidOk && saved && reopenOk;
+    return ok ? 0 : 2;
+}
+
+// --doodad-test=<输出scx>：装饰物窗口放置/删除/任意放置回归
+int RunDoodadTest(MainWindow& win, const std::wstring& outPath) {
+    MapDocument& doc = win.mutableMap();
+    if (!doc.CreateNew(32, 32, 0, win.tilesetDir())) {
+        WriteDiag(L"create=FAIL\n");
+        return 2;
+    }
+
+    int wx = 2, wy = 2;
+    if (doc.hasTileset()) {
+        // 新建地图默认瓦片组不保证可行走：显式铺两格可行走地形
+        for (int g = 0; g < doc.tileset().GroupCount(); g++) {
+            if (doc.tileset().IsWalkable(static_cast<u16>(g))) {
+                const u16 value = static_cast<u16>(g << 4);
+                doc.PaintTile(2, 2, value);
+                doc.PaintTile(4, 4, value);
+                break;
+            }
+        }
+    }
+    if (!FindWalkable(doc, 2, 2, wx, wy)) {
+        WriteDiag(L"no-walkable\n");
+        return 2;
+    }
+
+    // 默认放置：类型/玩家/启用标志与像素坐标
+    win.SetDoodadPlacement(5, 3, false);
+    win.SetDoodadAnywhere(false);
+    const bool placed = win.PlaceDoodadAtTile(wx, wy);
+    bool recordOk = false;
+    for (const Doodad& d : doc.doodads().Items()) {
+        if (d.type == 5 && d.owner == 3 && d.enabled == 0 &&
+            d.x == wx * kTilePixels + kTilePixels / 2 &&
+            d.y == wy * kTilePixels + kTilePixels / 2) {
+            recordOk = true;
+        }
+    }
+
+    // 禁用标志写入 enabled = 1
+    win.SetDoodadPlacement(7, 1, true);
+    const bool placedDisabled = win.PlaceDoodadAtTile(4, 4);
+    bool disabledOk = false;
+    for (const Doodad& d : doc.doodads().Items()) {
+        if (d.type == 7 && d.owner == 1 && d.enabled == 1) disabledOk = true;
+    }
+
+    // 默认拒绝不可通行地形；0x8010 允许任意放置后接受
+    win.SetDoodadPlacement(9, 0, false);
+    bool blockedRejected = true;
+    bool anywhereAllowed = true;
+    if (doc.hasTileset()) {
+        u16 blockedValue = 0;
+        bool haveBlock = false;
+        for (int g = 0; g < doc.tileset().GroupCount(); g++) {
+            if (!doc.tileset().IsWalkable(static_cast<u16>(g))) {
+                blockedValue = static_cast<u16>(g << 4);
+                haveBlock = true;
+                break;
+            }
+        }
+        if (haveBlock) {
+            doc.PaintTile(8, 8, blockedValue);
+            blockedRejected = !win.PlaceDoodadAtTile(8, 8);
+            win.SetDoodadAnywhere(true);
+            anywhereAllowed = win.PlaceDoodadAtTile(8, 8);
+            win.SetDoodadAnywhere(false);
+        }
+    }
+
+    // 删除 + 撤销/重做
+    const int removed = win.RemoveDoodadsAtTile(wx, wy);
+    const bool removeOk = removed == 1;
+    const std::size_t afterRemove = doc.doodads().Count();
+    const bool undone = win.Undo() && doc.doodads().Count() == afterRemove + 1;
+    const bool redone = win.Redo() && doc.doodads().Count() == afterRemove;
+
+    const bool saved = doc.Save(outPath);
+
+    // 装饰物窗口能在真实主窗口上创建
+    win.OnCommand(0x8004);
+    HWND palette = ::FindWindowW(L"SCMDPlusDoodadPalette", nullptr);
+    const bool paletteOpen = palette != nullptr && win.doodadPaletteOpen();
+    if (palette) ::DestroyWindow(palette);
+
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    bool reopenOk = reopened && check.doodads().Count() == doc.doodads().Count();
+    if (reopenOk) {
+        bool found = false;
+        for (const Doodad& d : check.doodads().Items()) {
+            if (d.type == 7 && d.owner == 1 && d.enabled == 1) found = true;
+        }
+        reopenOk = found;
+    }
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+        L"placed=%d\nrecord=%d\ndisabled=%d/%d\nblockedRejected=%d\nanywhere=%d\n"
+        L"removed=%d\nundo=%d\nredo=%d\nsaved=%d\npalette=%d\nreopened=%d\nreopenOk=%d\n",
+        placed ? 1 : 0, recordOk ? 1 : 0, placedDisabled ? 1 : 0, disabledOk ? 1 : 0,
+        blockedRejected ? 1 : 0, anywhereAllowed ? 1 : 0, removed, undone ? 1 : 0,
+        redone ? 1 : 0, saved ? 1 : 0, paletteOpen ? 1 : 0, reopened ? 1 : 0,
+        reopenOk ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = placed && recordOk && placedDisabled && disabledOk && blockedRejected &&
+                    anywhereAllowed && removeOk && undone && redone && saved && paletteOpen &&
+                    reopened && reopenOk;
     return ok ? 0 : 2;
 }
 
@@ -1481,15 +1641,62 @@ int RunIscriptTest(const std::wstring& iscriptPath, const std::wstring& grpPath)
                 grp.height() > 0;
     }
 
+    // 合成 iscript：trgtrangecondjmp 条件跳转（192 条件开关回归）
+    bool condSkip = false;
+    bool condTake = false;
+    {
+        Buffer data(29, 0);
+        auto put16 = [&data](std::size_t at, u16 v) {
+            data[at] = static_cast<u8>(v & 0xFF);
+            data[at + 1] = static_cast<u8>(v >> 8);
+        };
+        auto put32 = [&data](std::size_t at, u32 v) {
+            data[at] = static_cast<u8>(v & 0xFF);
+            data[at + 1] = static_cast<u8>((v >> 8) & 0xFF);
+            data[at + 2] = static_cast<u8>((v >> 16) & 0xFF);
+            data[at + 3] = static_cast<u8>((v >> 24) & 0xFF);
+        };
+        put16(0, 1000);   // id
+        put16(2, 8);      // header offset
+        put16(4, 0);      // 索引结束
+        put16(6, 0);
+        std::memcpy(&data[8], "SCPE", 4);
+        put32(12, 0);     // type 0 → 2 个动画槽
+        put16(16, 20);    // anim0
+        put16(18, 0);     // anim1
+        data[20] = 0x3A;  // trgtrangecondjmp +8
+        put16(21, 8);
+        put16(23, 100);   // 射程参数（忽略）
+        data[25] = 0x00;  // playfram 5
+        put16(26, 5);
+        data[28] = 0x16;  // end
+
+        IscriptFile synth;
+        const bool parsed = synth.Parse(data);
+        const IscriptHeader* header = parsed ? synth.Find(1000) : nullptr;
+        IscriptSimContext skipCtx;
+        IscriptSimResult skip;
+        const bool skipOk = header && synth.Simulate(*header, 0, 100, skip, &skipCtx);
+        condSkip = skipOk && skip.frames == 1 && skip.condJumps == 0 && skip.lastFrame == 5;
+
+        IscriptSimContext takeCtx;
+        takeCtx.enemyInRange = true;
+        IscriptSimResult take;
+        const bool takeOk = header && synth.Simulate(*header, 0, 100, take, &takeCtx);
+        condTake = takeOk && take.frames == 0 && take.condJumps == 1 && take.ended;
+    }
+
     wchar_t msg[512];
     ::wsprintfW(msg,
                 L"load=1\nentries=%u\nsize=%u\nanims=%d\ninstructions=%d\n"
                 L"empty=%d\nunknown=%d\nmax=%d\nsample=%d\n"
-                L"sim=%d\nsimOps=%d\nsimFrames=%d\nsimWaits=%d\nsimEnded=%d\n",
+                L"sim=%d\nsimOps=%d\nsimFrames=%d\nsimWaits=%d\nsimEnded=%d\n"
+                L"condSkip=%d\ncondTake=%d\n",
                 static_cast<unsigned>(file.entries().size()),
                 static_cast<unsigned>(file.size()), anims, instructions, emptyAnims,
                 unknownOps, maxInstructions, sampleOk ? 1 : 0,
-                simOk ? 1 : 0, sim.ops, sim.frames, sim.waits, sim.ended ? 1 : 0);
+                simOk ? 1 : 0, sim.ops, sim.frames, sim.waits, sim.ended ? 1 : 0,
+                condSkip ? 1 : 0, condTake ? 1 : 0);
     std::wstring text = msg;
     if (!unknownList.empty()) {
         text += L"unknownOps=";
@@ -1508,7 +1715,7 @@ int RunIscriptTest(const std::wstring& iscriptPath, const std::wstring& grpPath)
     WriteDiag(text);
 
     const bool ok = file.entries().size() >= 300 && emptyAnims == 0 && unknownOps == 0 &&
-                    sampleOk && simOk && grpOk;
+                    sampleOk && simOk && grpOk && condSkip && condTake;
     return ok ? 0 : 2;
 }
 
@@ -1689,6 +1896,12 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     const bool minimapOn = !ItemChecked(hwnd, 0x80B4);
     cmd(0x80CE);
     const bool fogAlias = !ItemChecked(hwnd, 0x80CE) && !ItemChecked(hwnd, 0x8113);
+    cmd(0x80F4);   // 战争迷雾 → 显示战争迷雾在探索地区（同义开关）
+    const bool fogExploredOn = ItemChecked(hwnd, 0x80F4) && ItemChecked(hwnd, 0x8113) &&
+                               ItemChecked(hwnd, 0x80CE);
+    cmd(0x80F4);
+    const bool fogExplored = fogExploredOn && !ItemChecked(hwnd, 0x80F4) &&
+                             !ItemChecked(hwnd, 0x8113) && !ItemChecked(hwnd, 0x80CE);
 
     cmd(0x8054);   // 显示选项 → 所有颜色
     const bool allColorsOn = ItemChecked(hwnd, 0x8054);
@@ -1745,6 +1958,20 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     const bool soundOff = !ItemChecked(hwnd, 0x8072);
     cmd(0x8072);
     const bool soundOn = ItemChecked(hwnd, 0x8072);
+    cmd(0x8010);   // 选项 → 装饰物 → 允许任意放置
+    const bool doodadAnywhereOn = ItemChecked(hwnd, 0x8010);
+    cmd(0x8010);
+    const bool doodadAnywhereOff = !ItemChecked(hwnd, 0x8010);
+    cmd(0x80EB);   // Locations → 按照方格描绘
+    const bool locGrid = ItemChecked(hwnd, 0x80EB) && !ItemChecked(hwnd, 0x8013);
+    cmd(0x80EC);   // Locations → 任意描绘
+    const bool locAny = ItemChecked(hwnd, 0x80EC) && !ItemChecked(hwnd, 0x80EB);
+    cmd(0x8013);   // 还原整齐的描绘
+    const bool locNeat = ItemChecked(hwnd, 0x8013) && !ItemChecked(hwnd, 0x80EC);
+    cmd(0x80B7);   // SP单位 → 对齐方格
+    const bool spAlignOn = ItemChecked(hwnd, 0x80B7);
+    cmd(0x80B7);
+    const bool spAlignOff = !ItemChecked(hwnd, 0x80B7);
     cmd(0x80A8);   // 自动检查更新
     const bool autoUpdateOn = ItemChecked(hwnd, 0x80A8);
     cmd(0x80A8);
@@ -1794,25 +2021,32 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         L"layerInit=%d\nlayerUnits=%d\nlayerLoc=%d\nlayerBack=%d\n"
         L"gridLarge=%d\ngridOff=%d\ngridBack=%d\ngridRed=%d\n"
         L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\nzoom=%d\nminimapOff=%d\nminimapOn=%d\n"
-        L"fogAlias=%d\nallColors=%d\neffects=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n"
-        L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\nautoUpdate=%d\noutput=%d\ncache=%d\nwindow=%d\n",
+        L"fogAlias=%d\nfogExplored=%d\nallColors=%d\neffects=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n"
+        L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\ndoodadAny=%d\nlocMode=%d\n"
+        L"spAlign=%d\nautoUpdate=%d\noutput=%d\ncache=%d\nwindow=%d\n",
         layerInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0, layerBack ? 1 : 0,
         gridLarge ? 1 : 0, gridOff ? 1 : 0, gridBack ? 1 : 0, gridRed ? 1 : 0,
         unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0, zoomOk ? 1 : 0,
-        minimapOff ? 1 : 0, minimapOn ? 1 : 0, fogAlias ? 1 : 0, allColorsOn ? 1 : 0,
+        minimapOff ? 1 : 0, minimapOn ? 1 : 0, fogAlias ? 1 : 0, fogExplored ? 1 : 0,
+        allColorsOn ? 1 : 0,
         effectsOk ? 1 : 0,
         debugOn ? 1 : 0, (debugData1 && debugData2) ? 1 : 0, overlapOn ? 1 : 0,
         imageSizeOn ? 1 : 0, compareOn ? 1 : 0, conflictOn ? 1 : 0, minimapNav ? 1 : 0,
-        (soundOff && soundOn) ? 1 : 0, (autoUpdateOn && autoUpdateOff) ? 1 : 0,
+        (soundOff && soundOn) ? 1 : 0, (doodadAnywhereOn && doodadAnywhereOff) ? 1 : 0,
+        (locGrid && locAny && locNeat) ? 1 : 0, (spAlignOn && spAlignOff) ? 1 : 0,
+        (autoUpdateOn && autoUpdateOff) ? 1 : 0,
         outputOk ? 1 : 0, cacheOk ? 1 : 0, windowOk ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = layerInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
                     gridBack && gridRed && unitsOff && unitsOn && fogOn && zoomOk &&
-                    minimapOff && minimapOn && fogAlias && allColorsOn && effectsOk && debugOn &&
+                    minimapOff && minimapOn && fogAlias && fogExplored && allColorsOn &&
+                    effectsOk && debugOn &&
                     debugData1 && debugData2 && overlapOn && imageSizeOn && compareOn &&
-                    conflictOn && minimapNav && soundOff && soundOn && autoUpdateOn &&
-                    autoUpdateOff && outputOk && cacheOk && windowOk;
+                    conflictOn && minimapNav && soundOff && soundOn && doodadAnywhereOn &&
+                    doodadAnywhereOff && locGrid && locAny && locNeat && spAlignOn &&
+                    spAlignOff && autoUpdateOn && autoUpdateOff && outputOk && cacheOk &&
+                    windowOk;
     return ok ? 0 : 2;
 }
 
@@ -1861,11 +2095,17 @@ int RunResizeTest(const std::wstring& mapPath, const std::wstring& outPath) {
     }();
     const bool dirty = doc.IsDirty();
 
+    // 地形集切换：ERA 写入 CHK，地形集按新 ERA 重载
+    const u16 targetEra = static_cast<u16>((doc.era() + 1) % 8);
+    const bool eraSwitched = doc.SetEra(targetEra) && doc.era() == targetEra;
+    const bool eraTileset = ParseTsArg().empty() || doc.hasTileset();
+
     const bool saved = doc.Save(outPath);
     MapDocument check;
     const bool reopened = check.Open(outPath, std::wstring());
     const bool reopenDim = reopened && check.width() == newW && check.height() == newH;
     const bool reopenTile = reopened && fx >= 0 && check.TileAt(fx + 1, fy + 1) == expected;
+    const bool reopenEra = reopened && check.era() == targetEra;
 
     // 平滑扩边：新增列/行沿用最近的原始瓦片
     MapDocument smoothDoc;
@@ -1882,16 +2122,18 @@ int RunResizeTest(const std::wstring& mapPath, const std::wstring& outPath) {
     ::wsprintfW(msg,
         L"old=%dx%d\nnew=%dx%d\nresized=%d\ndimOk=%d\ntileMove=%d\nborderZero=%d\n"
         L"unitsInBounds=%d\nunits=%u->%u\ndirty=%d\nsaved=%d\nreopened=%d\nreopenDim=%d\n"
-        L"reopenTile=%d\nsmooth=%d\n",
+        L"reopenTile=%d\nsmooth=%d\nera=%u->%u\neraSwitched=%d\neraTileset=%d\nreopenEra=%d\n",
         oldW, oldH, newW, newH, resized ? 1 : 0, dimOk ? 1 : 0, tileMoveOk ? 1 : 0,
         borderOk ? 1 : 0, unitsInBounds ? 1 : 0, static_cast<unsigned>(oldUnits),
         static_cast<unsigned>(doc.unitCount()), dirty ? 1 : 0,
         saved ? 1 : 0, reopened ? 1 : 0, reopenDim ? 1 : 0, reopenTile ? 1 : 0,
-        smoothOk ? 1 : 0);
+        smoothOk ? 1 : 0, static_cast<unsigned>(targetEra), static_cast<unsigned>(check.era()),
+        eraSwitched ? 1 : 0, eraTileset ? 1 : 0, reopenEra ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = resized && dimOk && tileMoveOk && borderOk && unitsInBounds && dirty &&
-                    saved && reopened && reopenDim && reopenTile && smoothOk;
+                    saved && reopened && reopenDim && reopenTile && smoothOk && eraSwitched &&
+                    eraTileset && reopenEra;
     return ok ? 0 : 2;
 }
 
@@ -2305,7 +2547,6 @@ int RunLocationTest(const std::wstring& mapPath, const std::wstring& outPath) {
                           c0.top == 3 && c0.right == 9 && c0.bottom == 11 &&
                           (c0.flags & 0x3Fu) == 0x04u && c0.stringId == sid &&
                           check.strings().At(static_cast<std::size_t>(sid)) == "SCMD-LOC-TEST";
-    const bool reservedOk = reopened && std::memcmp(c0.reserved, original.reserved, 8) == 0;
 
     bool othersOk = reopened && check.locations().Count() == locCount;
     if (othersOk) {
@@ -2327,14 +2568,128 @@ int RunLocationTest(const std::wstring& mapPath, const std::wstring& outPath) {
     wchar_t msg[512];
     ::wsprintfW(msg,
                 L"open=OK\nparsed=%d\nundo=%d\nredo=%d\nsaved=%d\nreopened=%d\n"
-                L"fields=%d\nreserved=%d\nothers=%d\npreserved=%d\n",
+                L"fields=%d\nothers=%d\npreserved=%d\n",
                 parsed ? 1 : 0, undoOk ? 1 : 0, redoOk ? 1 : 0, saved ? 1 : 0,
-                reopened ? 1 : 0, fieldsOk ? 1 : 0, reservedOk ? 1 : 0, othersOk ? 1 : 0,
+                reopened ? 1 : 0, fieldsOk ? 1 : 0, othersOk ? 1 : 0,
                 preserved ? 1 : 0);
     WriteDiag(msg);
 
-    const bool ok = parsed && undoOk && redoOk && saved && reopened && fieldsOk && reservedOk &&
+    const bool ok = parsed && undoOk && redoOk && saved && reopened && fieldsOk &&
                     othersOk && preserved;
+    return ok ? 0 : 2;
+}
+
+// --loc-draw-test=<输出scx>：地点描绘模式与 SP 对齐方格回归
+int RunLocationDrawTest(MainWindow& win, const std::wstring& outPath) {
+    MapDocument& doc = win.mutableMap();
+    if (!doc.CreateNew(32, 32, 0, std::wstring())) {
+        WriteDiag(L"create=FAIL\n");
+        return 2;
+    }
+
+    // MRGN 真实布局：u32 像素坐标 + u16 string + u16 flags（20 字节）
+    bool formatOk = false;
+    {
+        Buffer raw(20, 0);
+        auto put32 = [&raw](std::size_t at, u32 v) {
+            raw[at] = static_cast<u8>(v & 0xFF);
+            raw[at + 1] = static_cast<u8>((v >> 8) & 0xFF);
+            raw[at + 2] = static_cast<u8>((v >> 16) & 0xFF);
+            raw[at + 3] = static_cast<u8>((v >> 24) & 0xFF);
+        };
+        put32(0, 3744);
+        put32(4, 160);
+        put32(8, 3872);
+        put32(12, 256);
+        raw[16] = 9;
+        raw[17] = 0;
+        raw[18] = 4;
+        raw[19] = 0;
+        LocationTable table;
+        formatOk = table.Parse(raw) && table.Count() == 1 &&
+                   table.Items()[0].left == 3744 && table.Items()[0].top == 160 &&
+                   table.Items()[0].right == 3872 && table.Items()[0].bottom == 256 &&
+                   table.Items()[0].stringId == 9 && table.Items()[0].flags == 4 &&
+                   table.Serialize() == raw;
+    }
+
+    // 整齐的描绘：对齐 32 px 瓦片 → (0,0)-(128,96)
+    win.SetLocationDrawMode(0);
+    const int neat = win.AddLocationFromDrag(10, 10, 100, 70);
+    bool neatOk = neat == 0 && doc.locations().Count() == 1;
+    if (neatOk) {
+        const Location& l = doc.locations().Items()[0];
+        neatOk = l.left == 0 && l.top == 0 && l.right == 128 && l.bottom == 96;
+    }
+
+    // 按照方格描绘：较大方格 64 px → (0,0)-(128,128)
+    win.OnCommand(0x80A5);
+    win.SetLocationDrawMode(1);
+    const int grid = win.AddLocationFromDrag(10, 10, 100, 70);
+    bool gridOk = grid == 1;
+    if (gridOk) {
+        const Location& l = doc.locations().Items()[1];
+        gridOk = l.left == 0 && l.top == 0 && l.right == 128 && l.bottom == 128;
+    }
+    win.OnCommand(0x800D);   // 还原普通方格
+
+    // 任意描绘：像素精度 → (10,10)-(101,71)
+    win.SetLocationDrawMode(2);
+    const int anyIndex = win.AddLocationFromDrag(10, 10, 100, 70);
+    bool anyOk = anyIndex == 2;
+    if (anyOk) {
+        const Location& l = doc.locations().Items()[2];
+        anyOk = l.left == 10 && l.top == 10 && l.right == 101 && l.bottom == 71;
+    }
+    win.SetLocationDrawMode(0);
+
+    const std::size_t beforeUndo = doc.locations().Count();
+    const bool undone = win.Undo() && doc.locations().Count() == beforeUndo - 1;
+    const bool redone = win.Redo() && doc.locations().Count() == beforeUndo;
+
+    // SP 单位：自由像素 / 对齐方格（瓦片中心）
+    win.SetSpPlacement(150, 2, 0x1000);
+    win.SetSpAlignGrid(false);
+    const bool spFree = win.PlaceSpriteAtPixels(100, 70);
+    win.SetSpAlignGrid(true);
+    const bool spAligned = win.PlaceSpriteAtPixels(100, 70);
+    bool spFieldsOk = doc.sprites().Count() == 2;
+    if (spFieldsOk) {
+        const SpriteRecord& a = doc.sprites().Items()[0];
+        const SpriteRecord& b = doc.sprites().Items()[1];
+        spFieldsOk = a.type == 150 && a.owner == 2 && a.flags == 0x1000 && a.x == 100 &&
+                     a.y == 70 && b.x == 112 && b.y == 80;
+    }
+    const int removed = win.RemoveSpriteAtTile(3, 2);   // (112,80) 所在格
+    const bool spRemove = removed == 1 && doc.sprites().Count() == 1;
+    const bool spUndo = win.Undo() && doc.sprites().Count() == 2;
+    const bool spRedo = win.Redo() && doc.sprites().Count() == 1;
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    bool reopenOk = reopened && check.locations().Count() == 3 && check.sprites().Count() == 1;
+    if (reopenOk) {
+        const Location& l = check.locations().Items()[2];
+        reopenOk = l.left == 10 && l.right == 101 && l.bottom == 71 &&
+                   check.sprites().Items()[0].type == 150 &&
+                   check.sprites().Items()[0].x == 100;
+    }
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+        L"format=%d\nneat=%d\ngrid=%d\nany=%d\nundo=%d\nredo=%d\n"
+        L"spFree=%d\nspAligned=%d\nspFields=%d\nspRemove=%d\nspUndo=%d\nspRedo=%d\n"
+        L"saved=%d\nreopened=%d\nreopenOk=%d\n",
+        formatOk ? 1 : 0, neatOk ? 1 : 0, gridOk ? 1 : 0, anyOk ? 1 : 0, undone ? 1 : 0,
+        redone ? 1 : 0, spFree ? 1 : 0, spAligned ? 1 : 0, spFieldsOk ? 1 : 0,
+        spRemove ? 1 : 0, spUndo ? 1 : 0, spRedo ? 1 : 0, saved ? 1 : 0, reopened ? 1 : 0,
+        reopenOk ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = formatOk && neatOk && gridOk && anyOk && undone && redone && spFree &&
+                    spAligned && spFieldsOk && spRemove && spUndo && spRedo && saved &&
+                    reopened && reopenOk;
     return ok ? 0 : 2;
 }
 
@@ -3099,6 +3454,7 @@ int RunRecentTest() {
     settings.SetDefaultGas(3);
     settings.SetGameDir(L"C:\\StarCraft");
     settings.SetMpqFiles({L"C:\\a.mpq", L"D:\\b.mpq"});
+    settings.SetBrushFiles({L"C:\\brushes\\a.scb", L"D:\\brushes\\b.scb"});
     settings.SetBackupEnabled(false);
     settings.SetBackupCount(3);
     settings.SetAutoBackupEnabled(true);
@@ -3130,6 +3486,8 @@ int RunRecentTest() {
                             settings.gameDir() == L"C:\\StarCraft" &&
                             settings.mpqFiles().size() == 2 &&
                             settings.mpqFiles()[0] == L"C:\\a.mpq" &&
+                            settings.brushFiles().size() == 2 &&
+                            settings.brushFiles()[0] == L"C:\\brushes\\a.scb" &&
                             !settings.backupEnabled() && settings.backupCount() == 3 &&
                             settings.autoBackupEnabled() &&
                             settings.autoBackupMinutes() == 7 &&
@@ -3553,16 +3911,1180 @@ int RunMenuTest(HWND hwnd) {
     return ok ? 0 : 2;
 }
 
-void WriteDiag(const std::wstring& text) {
+// 把 UTF-16 文本写到 %TEMP%\<name>
+bool WriteTempTextFile(const wchar_t* name, const std::wstring& text) {
     wchar_t path[MAX_PATH] = L"";
     ::GetTempPathW(MAX_PATH, path);
-    ::lstrcatW(path, L"scmdplus_mpq.txt");
+    ::lstrcatW(path, name);
     const HANDLE f = ::CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const bool ok = text.empty() ||
+                    (::WriteFile(f, text.c_str(),
+                                 static_cast<DWORD>(text.size() * sizeof(wchar_t)), &written,
+                                 nullptr) &&
+                     written == text.size() * sizeof(wchar_t));
+    ::CloseHandle(f);
+    return ok;
+}
+
+// 追加一行 UTF-16 文本到 %TEMP%\<name>（崩溃定位打点用，避免覆盖式打点互相冲掉）
+void AppendTempTextLine(const wchar_t* name, const wchar_t* line) {
+    wchar_t path[MAX_PATH] = L"";
+    ::GetTempPathW(MAX_PATH, path);
+    ::lstrcatW(path, name);
+    const HANDLE f = ::CreateFileW(path, FILE_APPEND_DATA,
+                                   FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                                   OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) return;
     DWORD written = 0;
-    ::WriteFile(f, text.c_str(), static_cast<DWORD>(text.size() * sizeof(wchar_t)), &written, nullptr);
+    ::WriteFile(f, line, static_cast<DWORD>(::lstrlenW(line) * sizeof(wchar_t)),
+                &written, nullptr);
+    ::WriteFile(f, L"\r\n", 4, &written, nullptr);
     ::CloseHandle(f);
+}
+
+std::wstring DialogChildClass(HWND h) {
+    wchar_t buf[64] = L"";
+    ::GetClassNameW(h, buf, 63);
+    return buf;
+}
+
+std::wstring DialogChildText(HWND h) {
+    wchar_t buf[1024] = L"";
+    ::GetWindowTextW(h, buf, 1023);
+    return buf;
+}
+
+std::wstring EscapeSnapshotText(const std::wstring& in) {
+    std::wstring out;
+    const std::size_t limit = 120;
+    for (std::size_t i = 0; i < in.size() && out.size() < limit; i++) {
+        const wchar_t ch = in[i];
+        if (ch == L'\r') out += L"\\r";
+        else if (ch == L'\n') out += L"\\n";
+        else if (ch == L'\t') out += L"\\t";
+        else if (ch == L'"') out += L"\\\"";
+        else out.push_back(ch);
+    }
+    if (in.size() > limit) out += L"...";
+    return out;
+}
+
+// 基准快照跨配置/机器可比：把 exe 目录前缀替换为 <exe>
+void NormalizeSnapshotText(std::wstring& text, const std::wstring& exeDir) {
+    if (exeDir.empty()) return;
+    std::size_t pos = 0;
+    while ((pos = text.find(exeDir, pos)) != std::wstring::npos) {
+        text.replace(pos, exeDir.size(), L"<exe>");
+        pos += 5;
+    }
+}
+
+struct SnapshotContext {
+    std::wstring text;
+    std::wstring exeDir;
+    int controls = 0;
+};
+
+// 输出控件的 ID / 类 / 可用状态 / 文本 / 列表项（最多 20 项）
+BOOL CALLBACK SnapshotDialogChild(HWND child, LPARAM lp) {
+    SnapshotContext* ctx = reinterpret_cast<SnapshotContext*>(lp);
+    ctx->controls++;
+    const std::wstring cls = DialogChildClass(child);
+    ctx->text += L"  #" + std::to_wstring(::GetDlgCtrlID(child)) + L" " + cls;
+    ctx->text += ::IsWindowEnabled(child) ? L" enabled" : L" disabled";
+    // 无头模式下父窗口未显示，IsWindowVisible 恒为 false；改看控件自身 WS_VISIBLE
+    if ((::GetWindowLongPtrW(child, GWL_STYLE) & WS_VISIBLE) == 0) ctx->text += L" hidden";
+
+    if (cls == L"Button") {
+        const LRESULT check = ::SendMessageW(child, BM_GETCHECK, 0, 0);
+        ctx->text += L" check=";
+        ctx->text += check == BST_CHECKED ? L"1" : L"0";
+    } else if (cls == L"ListBox" || cls == L"ComboBox") {
+        const bool list = cls == L"ListBox";
+        const int count = static_cast<int>(::SendMessageW(
+            child, list ? LB_GETCOUNT : CB_GETCOUNT, 0, 0));
+        const int sel = static_cast<int>(::SendMessageW(
+            child, list ? LB_GETCURSEL : CB_GETCURSEL, 0, 0));
+        ctx->text += L" count=" + std::to_wstring(count) + L" sel=" + std::to_wstring(sel) + L"\n";
+        const int shown = count > 20 ? 20 : count;
+        for (int i = 0; i < shown; i++) {
+            wchar_t item[512] = L"";
+            ::SendMessageW(child, list ? LB_GETTEXT : CB_GETLBTEXT, static_cast<WPARAM>(i),
+                           reinterpret_cast<LPARAM>(item));
+            std::wstring itemText = item;
+            NormalizeSnapshotText(itemText, ctx->exeDir);
+            ctx->text += L"    [" + std::to_wstring(i) + L"] \"" + EscapeSnapshotText(itemText) +
+                         L"\"\n";
+        }
+        if (count > shown) ctx->text += L"    ...\n";
+        return TRUE;
+    } else {
+        std::wstring text = DialogChildText(child);
+        NormalizeSnapshotText(text, ctx->exeDir);
+        if (!text.empty()) ctx->text += L" text=\"" + EscapeSnapshotText(text) + L"\"";
+    }
+    ctx->text += L"\n";
+    return TRUE;
+}
+
+// 取当前对话框的控件状态文本
+std::wstring SnapshotOf(HWND dlg, const std::wstring& exeDir) {
+    SnapshotContext ctx;
+    ctx.exeDir = exeDir;
+    if (dlg) ::EnumChildWindows(dlg, SnapshotDialogChild, reinterpret_cast<LPARAM>(&ctx));
+    return ctx.text;
+}
+
+// 读取 UTF-16LE（可带/不带 BOM）或 UTF-8 BOM 文本
+bool ReadTextFileAt(const std::wstring& path, std::wstring& out) {
+    const HANDLE f = ::CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER size = {};
+    if (!::GetFileSizeEx(f, &size) || size.QuadPart <= 0 || size.QuadPart > (16 << 20)) {
+        ::CloseHandle(f);
+        return false;
+    }
+    std::string bytes(static_cast<std::size_t>(size.QuadPart), '\0');
+    DWORD read = 0;
+    const bool readOk = ::ReadFile(f, bytes.data(), static_cast<DWORD>(bytes.size()), &read,
+                                   nullptr) &&
+                        read == bytes.size();
+    ::CloseHandle(f);
+    if (!readOk) return false;
+
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(bytes.data());
+    std::wstring text;
+    if (bytes.size() >= 3 && p[0] == 0xEF && p[1] == 0xBB && p[2] == 0xBF) {
+        const int n = ::MultiByteToWideChar(CP_UTF8, 0, bytes.data() + 3,
+                                            static_cast<int>(bytes.size()) - 3, nullptr, 0);
+        if (n <= 0) return false;
+        text.resize(static_cast<std::size_t>(n));
+        ::MultiByteToWideChar(CP_UTF8, 0, bytes.data() + 3,
+                              static_cast<int>(bytes.size()) - 3, &text[0], n);
+    } else {
+        std::size_t offset = 0;
+        if (bytes.size() >= 2 && p[0] == 0xFF && p[1] == 0xFE) offset = 2;
+        if ((bytes.size() - offset) % 2 != 0) return false;
+        text.resize((bytes.size() - offset) / 2);
+        if (!text.empty()) std::memcpy(&text[0], bytes.data() + offset, bytes.size() - offset);
+    }
+    // 统一 LF：避免 git core.autocrlf 检出 CRLF 后与运行期快照不一致
+    out.clear();
+    out.reserve(text.size());
+    for (wchar_t ch : text) {
+        if (ch != L'\r') out.push_back(ch);
+    }
+    return true;
+}
+
+// 写 UTF-8（带 BOM），便于 git diff 与编辑器查看
+bool WriteTextFileAt(const std::wstring& path, const std::wstring& text) {
+    const int bytes = ::WideCharToMultiByte(CP_UTF8, 0, text.c_str(),
+                                            static_cast<int>(text.size()), nullptr, 0, nullptr,
+                                            nullptr);
+    if (bytes <= 0 && !text.empty()) return false;
+    std::string utf8(static_cast<std::size_t>(bytes), '\0');
+    if (bytes > 0) {
+        ::WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), &utf8[0],
+                              bytes, nullptr, nullptr);
+    }
+    std::string data;
+    data.reserve(utf8.size() + 3);
+    data.push_back(static_cast<char>(0xEF));
+    data.push_back(static_cast<char>(0xBB));
+    data.push_back(static_cast<char>(0xBF));
+    data += utf8;
+
+    const HANDLE f = ::CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                                   FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const bool ok = data.empty() ||
+                    (::WriteFile(f, data.data(), static_cast<DWORD>(data.size()), &written,
+                                 nullptr) &&
+                     written == data.size());
+    ::CloseHandle(f);
+    return ok;
+}
+
+std::vector<std::wstring> SplitSnapshotLines(const std::wstring& text) {
+    std::vector<std::wstring> lines;
+    std::size_t start = 0;
+    while (start < text.size()) {
+        std::size_t end = text.find(L'\n', start);
+        if (end == std::wstring::npos) end = text.size();
+        std::size_t lineEnd = end;
+        if (lineEnd > start && text[lineEnd - 1] == L'\r') lineEnd--;
+        lines.push_back(text.substr(start, lineEnd - start));
+        start = end + 1;
+    }
+    return lines;
+}
+
+// 行级差异：LCS 对齐，输出 -/+ 行（两列表最多各 400 行）
+std::wstring BuildSnapshotDiff(const std::wstring& baseline, const std::wstring& current,
+                               int& diffLines) {
+    const std::vector<std::wstring> a = SplitSnapshotLines(baseline);
+    const std::vector<std::wstring> b = SplitSnapshotLines(current);
+    const std::size_t n = a.size();
+    const std::size_t m = b.size();
+    // 617 行量级：u16 LCS 表约 0.8 MB
+    std::vector<std::vector<u16>> lcs(n + 1, std::vector<u16>(m + 1, 0));
+    for (std::size_t i = n; i-- > 0;) {
+        for (std::size_t j = m; j-- > 0;) {
+            lcs[i][j] = a[i] == b[j] ? static_cast<u16>(lcs[i + 1][j + 1] + 1)
+                                     : (lcs[i + 1][j] >= lcs[i][j + 1] ? lcs[i + 1][j]
+                                                                        : lcs[i][j + 1]);
+        }
+    }
+
+    std::wstring out;
+    out += L"baselineLines=" + std::to_wstring(n) + L" currentLines=" + std::to_wstring(m) +
+           L"\n";
+    const std::size_t kMaxShown = 400;
+    std::size_t shown = 0;
+    diffLines = 0;
+    std::size_t i = 0;
+    std::size_t j = 0;
+    while (i < n || j < m) {
+        if (i < n && j < m && a[i] == b[j]) {
+            i++;
+            j++;
+            continue;
+        }
+        if (j < m && (i >= n || lcs[i][j + 1] > lcs[i + 1][j])) {
+            if (shown++ < kMaxShown) out += L"+ " + b[j] + L"\n";
+            diffLines++;
+            j++;
+        } else {
+            if (shown++ < kMaxShown) out += L"- " + a[i] + L"\n";
+            diffLines++;
+            i++;
+        }
+    }
+    if (shown > kMaxShown) out += L"...\n";
+    return out;
+}
+
+// --trigger-modal-test：复现真实触发编辑器路径——
+// ShowDialog 用 DialogBoxParamW 模态循环，且使用满载数据的地图文档；
+// 审计的 open() 是 CreateDialogParamW + 近乎空文档，覆盖不到这条路径。
+// 后台线程找到“触发编辑器”窗口后驱动交互（新建/选择/切换面板/删除），最后 WM_CLOSE。
+namespace {
+
+struct ModalDriverCtx {
+    DWORD pid = 0;
+    HWND dlg = nullptr;
+};
+
+BOOL CALLBACK FindTriggerEditorWnd(HWND hwnd, LPARAM lp) {
+    auto* ctx = reinterpret_cast<ModalDriverCtx*>(lp);
+    DWORD pid = 0;
+    ::GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != ctx->pid) return TRUE;
+    wchar_t cls[64] = L"";
+    ::GetClassNameW(hwnd, cls, 63);
+    if (::wcscmp(cls, L"#32770") != 0) return TRUE;
+    wchar_t text[128] = L"";
+    ::GetWindowTextW(hwnd, text, 127);
+    if (::wcscmp(text, L"触发编辑器") != 0) return TRUE;
+    ctx->dlg = hwnd;
+    return FALSE;
+}
+
+DWORD WINAPI TriggerModalDriver(LPVOID param) {
+    AppendTempTextLine(L"scmdplus_modal181_stage.txt", L"driver: started");
+    auto* ctx = static_cast<ModalDriverCtx*>(param);
+    for (int i = 0; i < 60 && !ctx->dlg; i++) {
+        ::Sleep(50);
+        ::EnumWindows(FindTriggerEditorWnd, reinterpret_cast<LPARAM>(ctx));
+    }
+    if (!ctx->dlg) return 1;
+    ::Sleep(300);
+    auto press = [&](int id) {
+        ::SendMessageW(ctx->dlg, WM_COMMAND, MAKEWPARAM(id, BN_CLICKED), 0);
+        ::Sleep(80);
+    };
+    auto mark = [](const wchar_t* stage) {
+        AppendTempTextLine(L"scmdplus_modal181_stage.txt", stage);
+    };
+    // 新建触发 → 选择第 2 条 → 切换 184/185/186/0 面板 → 删除
+    mark(L"driver: new");
+    press(IDC_D181_NEW);
+    HWND list = ::GetDlgItem(ctx->dlg, IDC_D181_TRIGGER_LIST);
+    if (::SendMessageW(list, LB_GETCOUNT, 0, 0) > 1) {
+        mark(L"driver: select");
+        ::SendMessageW(list, LB_SETCURSEL, 1, 0);
+        ::SendMessageW(ctx->dlg, WM_COMMAND,
+                       MAKEWPARAM(IDC_D181_TRIGGER_LIST, LBN_SELCHANGE),
+                       reinterpret_cast<LPARAM>(list));
+        ::Sleep(80);
+    }
+    for (int i = 0; i < 4; i++) {
+        wchar_t st[64];
+        ::wsprintfW(st, L"driver: modify %d", i + 1);
+        mark(st);
+        press(IDC_D181_MODIFY);
+    }
+    mark(L"driver: delete");
+    press(IDC_D181_DELETE);
+    mark(L"driver: close");
+    ::PostMessageW(ctx->dlg, WM_CLOSE, 0, 0);
+    return 0;
+}
+
+}  // namespace
+
+// 崩溃采集（VEH，首轮机会）：仅 --trigger-modal-test 期间安装。
+// 不用 CRT、不分配内存——只 WriteFile 记录异常码与 RIP 到
+// %TEMP%\scmdplus_vex.txt，再用 sym_resolve + PDB 解析调用点。
+static LONG WINAPI ModalTestVectoredHandler(PEXCEPTION_POINTERS ep) {
+    const DWORD code = ep->ExceptionRecord->ExceptionCode;
+    if (code != 0xC0000005 && code != 0xC0000409 && code != 0xC00001A5) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    wchar_t buf[192];
+#ifdef _WIN64
+    const ULONG_PTR rip = ep->ContextRecord->Rip;
+#else
+    const ULONG_PTR rip = ep->ContextRecord->Eip;
+#endif
+    ::wsprintfW(buf, L"vex code=0x%08X addr=0x%p rip=0x%08p base=0x%08p rva=0x%08X\n",
+                static_cast<unsigned>(code),
+                ep->ExceptionRecord->ExceptionAddress,
+                reinterpret_cast<void*>(rip),
+                reinterpret_cast<void*>(::GetModuleHandleW(nullptr)),
+                static_cast<unsigned>(rip - reinterpret_cast<ULONG_PTR>(::GetModuleHandleW(nullptr))));
+    wchar_t path[MAX_PATH];
+    ::GetTempPathW(MAX_PATH, path);
+    ::lstrcatW(path, L"scmdplus_vex.txt");
+    const HANDLE f = ::CreateFileW(path, GENERIC_WRITE, 0, nullptr,
+                                   CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f != INVALID_HANDLE_VALUE) {
+        DWORD written = 0;
+        ::WriteFile(f, buf, static_cast<DWORD>(::lstrlenW(buf) * sizeof(wchar_t)),
+                    &written, nullptr);
+        ::CloseHandle(f);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+int RunTriggerModalTest(HWND owner) {
+    ::AddVectoredExceptionHandler(1, &ModalTestVectoredHandler);
+    // 写 settings.ini 的路径切到临时目录，避免污染用户配置
+    wchar_t tempPath[MAX_PATH] = L"";
+    ::GetTempPathW(MAX_PATH, tempPath);
+    AppSettings& settings = AppSettings::Instance();
+    settings.SetDirectory(std::wstring(tempPath) + L"scmdplus_dialog_audit");
+    settings.Load();
+
+    // 支持 --trigger-modal-test=<地图路径>：用真实地图复现（否则用合成满载数据）
+    WriteTempTextFile(L"scmdplus_modal181_stage.txt", L"");   // 清空旧打点
+    std::wstring report = L"modal181=";
+    const std::wstring mapPath = ParseValueArg(L"--trigger-modal-test=");
+    {
+        wchar_t argLine[96];
+        ::wsprintfW(argLine, L"stage: args mapLen=%u", static_cast<unsigned>(mapPath.size()));
+        AppendTempTextLine(L"scmdplus_modal181_stage.txt", argLine);
+    }
+    MapDocument doc;
+    bool ok = false;
+    if (!mapPath.empty()) {
+        AppendTempTextLine(L"scmdplus_modal181_stage.txt", L"stage: opening");
+        if (!doc.Open(mapPath, std::wstring())) {
+            report += L"open-failed\n";
+            WriteTempTextFile(L"scmdplus_modal181.txt", report);
+            return 2;
+        }
+        wchar_t head[160];
+        ::wsprintfW(head, L"map=%dx%d triggers=%u strings=%u locations=%u\n",
+                    doc.width(), doc.height(),
+                    static_cast<unsigned>(doc.triggers().BlockCount()),
+                    static_cast<unsigned>(doc.strings().Count()),
+                    static_cast<unsigned>(doc.locations().Count()));
+        report = head + report;
+    } else {
+        if (!doc.CreateNew(64, 64, 0, std::wstring(), 0)) return 2;
+        doc.mutableStrings().Set(1, WideToUtf8(L"测试字符串"));
+        for (int i = 0; i < 4; i++) {
+            Location loc;
+            loc.left = i * 64;
+            loc.right = i * 64 + 64;
+            loc.bottom = 64;
+            loc.stringId = 1;
+            doc.mutableLocations().MutableItems().push_back(loc);
+        }
+        for (int t = 0; t < 3; t++) {
+            Trigger trig;
+            for (int i = 0; i < 16; i++) {
+                trig.conditions[i].type = static_cast<u8>(1 + (i % 23));
+                trig.conditions[i].player = i % 9;
+                trig.conditions[i].amount = i * 7;
+                trig.conditions[i].unitType = static_cast<u16>(i);
+                trig.conditions[i].locationId = i % 4;
+                trig.conditions[i].comparison = i % 3;
+                trig.conditions[i].resourceType = i % 8;
+                trig.conditions[i].property = (i % 2) ? 2 : 0;
+            }
+            for (int a = 0; a < 64; a++) {
+                trig.actions[a].type = static_cast<u8>(1 + (a % 57));
+                trig.actions[a].stringId = 1;
+                trig.actions[a].wavId = 2;
+                trig.actions[a].player = a % 9;
+                trig.actions[a].locationId = a % 4;
+                trig.actions[a].setting = static_cast<u16>(a);
+                trig.actions[a].amount = 1;
+            }
+            trig.executionFlags = 0xF;
+            for (int p = 0; p < 27; p++) trig.effectivePlayers[p] = 1;
+            doc.mutableTriggers().MutableItems().push_back(trig);
+        }
+    }
+
+    SetDialogDocument(&doc);
+    {
+        // 数据概况：触发块数 / 条件行动条数上限 / 越界 ID 上限（崩溃定位用）
+        wchar_t head[512];
+        unsigned maxCond = 0, maxAct = 0, maxLocId = 0, maxSid = 0, maxLocName = 0;
+        for (const Trigger& t : doc.triggers().Items()) {
+            maxCond = maxCond > static_cast<unsigned>(t.ConditionCount())
+                          ? maxCond : static_cast<unsigned>(t.ConditionCount());
+            maxAct = maxAct > static_cast<unsigned>(t.ActionCount())
+                          ? maxAct : static_cast<unsigned>(t.ActionCount());
+            for (int i = 0; i < t.ConditionCount(); i++) {
+                maxLocId = std::max(maxLocId, t.conditions[i].locationId);
+            }
+            for (int i = 0; i < t.ActionCount(); i++) {
+                maxLocId = std::max(maxLocId, t.actions[i].locationId);
+                maxSid = std::max(maxSid, t.actions[i].stringId);
+            }
+        }
+        for (const Location& l : doc.locations().Items()) {
+            if (l.stringId >= doc.strings().Count()) continue;
+            const std::wstring w = Utf8ToWide(doc.strings().At(l.stringId));
+            maxLocName = maxLocName > static_cast<unsigned>(w.size())
+                              ? maxLocName : static_cast<unsigned>(w.size());
+        }
+        ::wsprintfW(head,
+                    L"stage: doc-ready blocks=%u maxCond=%u maxAct=%u maxLocId=%u "
+                    L"maxSid=%u locs=%u strings=%u maxLocName=%u",
+                    static_cast<unsigned>(doc.triggers().BlockCount()), maxCond, maxAct,
+                    maxLocId, maxSid, static_cast<unsigned>(doc.locations().Count()),
+                    static_cast<unsigned>(doc.strings().Count()), maxLocName);
+        AppendTempTextLine(L"scmdplus_modal181_stage.txt", head);
+    }    ModalDriverCtx ctx;
+    ctx.pid = ::GetCurrentProcessId();
+    const HANDLE driver = ::CreateThread(nullptr, 0, TriggerModalDriver, &ctx, 0, nullptr);
+    AppendTempTextLine(L"scmdplus_modal181_stage.txt", L"stage: opening-dialog");
+    ok = ShowRecoveredDialog(IDD_DLG_181, owner);   // 真实模态路径
+    AppendTempTextLine(L"scmdplus_modal181_stage.txt", L"stage: dialog-closed");
+    ::WaitForSingleObject(driver, 5000);
+    ::CloseHandle(driver);
+    SetDialogDocument(nullptr);
+    AppendTempTextLine(L"scmdplus_modal181_stage.txt", L"stage: doc-released");
+    doc.Close();
+    AppendTempTextLine(L"scmdplus_modal181_stage.txt", L"stage: complete");
+
+    report += ok ? L"1" : L"0";
+    report += L"\n";
+    WriteTempTextFile(L"scmdplus_modal181.txt", report);
+    return ok ? 0 : 1;
+}
+
+// --dialog-audit-test：全对话框控件状态 + 关键按钮路径回归。
+// 覆盖：所有独立对话框可创建；155 映射/禁用/应用设定；166/172 置灰；
+// 188 所有单位；189 行号与显隐；169/175 预设与结果；182 添加刷子。
+int RunDialogAuditTest(HWND owner) {
+    // “应用设定”会写 settings.ini，切到临时目录避免污染用户配置；
+    // 同时把内存值重置为固定默认，保证快照可跨进程/跨配置对比
+    wchar_t tempPath[MAX_PATH] = L"";
+    ::GetTempPathW(MAX_PATH, tempPath);
+    AppSettings& settings = AppSettings::Instance();
+    settings.SetDirectory(std::wstring(tempPath) + L"scmdplus_dialog_audit");
+    settings.SetDefaultMineral(8);
+    settings.SetDefaultGas(1);
+    settings.SetUndoLimit(50);
+    settings.SetGameDir(L"");
+    settings.SetMpqFiles({});
+    settings.SetBrushFiles({});
+    settings.SetBackupEnabled(true);
+    settings.SetBackupCount(5);
+    settings.SetAutoBackupEnabled(false);
+    settings.SetAutoBackupMinutes(5);
+
+    wchar_t exePath[MAX_PATH] = L"";
+    ::GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+    std::wstring exeDir(exePath);
+    const std::size_t slash = exeDir.find_last_of(L'\\');
+    if (slash != std::wstring::npos) exeDir.resize(slash);
+
+    std::wstring report;
+    bool allOk = true;
+    const HINSTANCE inst = ::GetModuleHandleW(nullptr);
+
+    auto record = [&report, &allOk](const wchar_t* name, bool ok) {
+        if (!ok) allOk = false;
+        report += name;
+        report += ok ? L"=1\n" : L"=0\n";
+    };
+    auto open = [inst, owner](int id) -> HWND {
+        const DialogEntry* entry = FindDialog(id);
+        if (!entry || entry->childPanel) return nullptr;
+        return ::CreateDialogParamW(inst, MAKEINTRESOURCEW(id), owner, entry->proc, 0);
+    };
+    auto intOf = [](HWND dlg, int id) {
+        BOOL ok = FALSE;
+        const UINT v = ::GetDlgItemInt(dlg, id, &ok, FALSE);
+        return ok ? static_cast<int>(v) : -1;
+    };
+    auto textOf = [](HWND dlg, int id) {
+        wchar_t buf[512] = L"";
+        ::GetDlgItemTextW(dlg, id, buf, 511);
+        return std::wstring(buf);
+    };
+    auto enabled = [](HWND dlg, int id) {
+        HWND h = ::GetDlgItem(dlg, id);
+        return h && ::IsWindowEnabled(h);
+    };
+    auto press = [](HWND dlg, int id) {
+        ::SendMessageW(::GetDlgItem(dlg, id), BM_CLICK, 0, 0);
+    };
+    auto command = [](HWND dlg, int id) {
+        ::SendMessageW(dlg, WM_COMMAND, MAKEWPARAM(id, BN_CLICKED),
+                       reinterpret_cast<LPARAM>(::GetDlgItem(dlg, id)));
+    };
+    auto selectList = [](HWND dlg, int id, int index) {
+        HWND list = ::GetDlgItem(dlg, id);
+        ::SendMessageW(list, LB_SETCURSEL, static_cast<WPARAM>(index), 0);
+        ::SendMessageW(dlg, WM_COMMAND, MAKEWPARAM(id, LBN_SELCHANGE),
+                       reinterpret_cast<LPARAM>(list));
+    };
+    auto selectCombo = [](HWND dlg, int id, int index) {
+        HWND combo = ::GetDlgItem(dlg, id);
+        ::SendMessageW(combo, CB_SETCURSEL, static_cast<WPARAM>(index), 0);
+        ::SendMessageW(dlg, WM_COMMAND, MAKEWPARAM(id, CBN_SELCHANGE),
+                       reinterpret_cast<LPARAM>(combo));
+    };
+    auto comboIndex = [](HWND dlg, int id) {
+        return static_cast<int>(::SendDlgItemMessageW(dlg, id, CB_GETCURSEL, 0, 0));
+    };
+    auto listCount = [](HWND dlg, int id) {
+        return static_cast<int>(::SendDlgItemMessageW(dlg, id, LB_GETCOUNT, 0, 0));
+    };
+    auto listSel = [](HWND dlg, int id) {
+        return static_cast<int>(::SendDlgItemMessageW(dlg, id, LB_GETCURSEL, 0, 0));
+    };
+
+    // 1) 全部独立对话框可创建，并输出控件状态快照
+    const int kDialogIds[] = {103, 155, 163, 164, 166, 167, 169, 171, 172, 173, 174,
+                              175, 179, 180, 181, 182, 183, 187, 188, 189, 191, 192,
+                              195, 196, 197, 198, 199, 205};
+    bool createAll = true;
+    std::wstring snapshotText;
+    int snapshotControls = 0;
+    for (int id : kDialogIds) {
+        HWND dlg = open(id);
+        if (!dlg || !::GetWindow(dlg, GW_CHILD)) {
+            createAll = false;
+            continue;
+        }
+        const DialogEntry* entry = FindDialog(id);
+        snapshotText += L"[dialog " + std::to_wstring(id) + L"]";
+        if (entry) snapshotText += std::wstring(L" ") + entry->caption;
+        snapshotText += L"\n";
+        SnapshotContext ctx;
+        ctx.exeDir = exeDir;
+        ::EnumChildWindows(dlg, SnapshotDialogChild, reinterpret_cast<LPARAM>(&ctx));
+        snapshotText += ctx.text;
+        snapshotControls += ctx.controls;
+        ::DestroyWindow(dlg);
+    }
+    record(L"createAll", createAll);
+    record(L"snapshot", WriteTempTextFile(L"scmdplus_dialog_snapshot.txt", snapshotText) &&
+                            snapshotControls > 0);
+    report += L"snapshotControls=" + std::to_wstring(snapshotControls) + L"\n";
+
+    // 可选：保存基准快照 / 与基准对比（--dialog-snapshot-baseline=<path> /
+    // --dialog-snapshot-diff=<path>）
+    const std::wstring baselineSave = ParseValueArg(L"--dialog-snapshot-baseline=");
+    if (!baselineSave.empty()) {
+        record(L"baselineSave", WriteTextFileAt(baselineSave, snapshotText));
+    }
+    const std::wstring baselineDiff = ParseValueArg(L"--dialog-snapshot-diff=");
+    if (!baselineDiff.empty()) {
+        std::wstring baseline;
+        if (!ReadTextFileAt(baselineDiff, baseline)) {
+            report += L"snapshotError=missing-baseline\n";
+            record(L"snapshotMatch", false);
+        } else if (baseline == snapshotText) {
+            report += L"snapshotDiffLines=0\n";
+            record(L"snapshotMatch", true);
+        } else {
+            int diffLines = 0;
+            const std::wstring diff = BuildSnapshotDiff(baseline, snapshotText, diffLines);
+            WriteTempTextFile(L"scmdplus_dialog_snapshot.diff.txt", diff);
+            report += L"snapshotDiffLines=" + std::to_wstring(diffLines) + L"\n";
+            record(L"snapshotMatch", false);
+        }
+    }
+
+    // 2) 155：控件映射、原版剩余选项接线、“应用设定”不关闭
+    {
+        bool ok = true;
+        AppSettings& s = AppSettings::Instance();
+        s.SetDefaultMineral(12);
+        s.SetDefaultGas(3);
+        s.SetUndoLimit(75);
+        HWND dlg = open(155);
+        ok = dlg && intOf(dlg, 1010) == 12 && intOf(dlg, 1011) == 3 && intOf(dlg, 1012) == 75;
+        // 原 7 个“未建模即禁用”的选项现已全部接线并可用
+        const int kWired[] = {1005, 1009, 1013, 1093, 1094, 1129, 1140};
+        for (int id : kWired) ok = ok && enabled(dlg, id);
+        ok = ok && intOf(dlg, 1094) == 3400 && intOf(dlg, 1009) == 1700 &&
+             intOf(dlg, 1013) == 500;
+        ok = ok && ::IsDlgButtonChecked(dlg, 1129) == BST_CHECKED &&
+             ::IsDlgButtonChecked(dlg, 1140) == BST_CHECKED &&
+             ::IsDlgButtonChecked(dlg, 1005) == BST_UNCHECKED &&
+             ::IsDlgButtonChecked(dlg, 1093) == BST_UNCHECKED;
+        if (dlg) {
+            // 改全部新选项后“应用设定”，断言写回且对话框不关闭
+            ::SetDlgItemInt(dlg, 1010, 20, FALSE);
+            ::SetDlgItemInt(dlg, 1094, 100, FALSE);
+            ::SetDlgItemInt(dlg, 1009, 50, FALSE);
+            ::SetDlgItemInt(dlg, 1013, 30, FALSE);
+            ::CheckDlgButton(dlg, 1005, BST_CHECKED);
+            ::CheckDlgButton(dlg, 1093, BST_CHECKED);
+            ::CheckDlgButton(dlg, 1129, BST_UNCHECKED);
+            ::CheckDlgButton(dlg, 1140, BST_UNCHECKED);
+            press(dlg, 1007);   // 应用设定
+            ok = ok && ::IsWindow(dlg) && s.defaultMineral() == 20 &&
+                 s.maxUnits() == 100 && s.maxSpUnits() == 50 && s.maxLocations() == 30 &&
+                 s.startMaximized() && s.triggerBaseNames() && !s.loadFitZoom() &&
+                 !s.singleFile();
+            // 重置默认恢复控件值（不写回）
+            press(dlg, 1014);
+            ok = ok && intOf(dlg, 1094) == 3400 && intOf(dlg, 1009) == 1700 &&
+                 intOf(dlg, 1013) == 500;
+            ::DestroyWindow(dlg);
+            // 恢复设置，避免影响后续断言
+            s.SetStartMaximized(false);
+            s.SetTriggerBaseNames(false);
+            s.SetLoadFitZoom(true);
+            s.SetSingleFile(true);
+            s.SetMaxUnits(3400);
+            s.SetMaxSpUnits(1700);
+            s.SetMaxLocations(500);
+        }
+        record(L"settings155", ok);
+    }
+
+    // 3) 166：两套方格（主 + 静态）全部可用，确定后写回 GridSettings
+    {
+        GridSettings seed;
+        seed.enabled = true;
+        seed.cellX = 16;
+        seed.cellY = 24;
+        SeedGridSettings(seed);
+        HWND dlg = open(166);
+        bool ok = dlg != nullptr;
+        const int kAll[] = {1044, 1045, 1046, 1047, 1048,
+                            1049, 1050, 1051, 1052, 1053};
+        for (int id : kAll) ok = ok && enabled(dlg, id);
+        ok = ok && intOf(dlg, 1044) == 16 && intOf(dlg, 1045) == 24;
+        if (dlg) {
+            ::SetDlgItemInt(dlg, 1049, 8, FALSE);
+            ::SetDlgItemInt(dlg, 1050, 12, FALSE);
+            ::SetDlgItemInt(dlg, 1051, 4, TRUE);
+            ::CheckDlgButton(dlg, 1053, BST_CHECKED);
+            press(dlg, 1);   // 确定
+            ok = ok && LastGridSettingsAccepted() &&
+                 LastGridSettings().cellX == 16 && LastGridSettings().cellY == 24 &&
+                 LastGridSettings().staticEnabled &&
+                 LastGridSettings().staticCellX == 8 &&
+                 LastGridSettings().staticCellY == 12 &&
+                 LastGridSettings().staticOffsetX == 4;
+        }
+        record(L"grid166", ok);
+    }
+
+    // 4) 172：units.dat 属性编辑控件只读
+    {
+        HWND dlg = open(172);
+        bool ok = dlg != nullptr;
+        const int kDisabled[] = {1073, 1074, 1075, 1076, 1077,
+                                 1078, 1079, 1080, 1081, 1082};
+        for (int id : kDisabled) ok = ok && !enabled(dlg, id);
+        if (dlg) ::DestroyWindow(dlg);
+        record(L"unitNames172", ok);
+    }
+
+    // 4b) 180：状态位回填 + 位序映射（无敌=bit4 / 幻影=bit3 / 钻地=bit1 / 隐形=bit0 / 升起=bit2）
+    {
+        UnitProps seed;
+        seed.flags = 0x11;   // 隐形 + 无敌
+        seed.ammo = 5;
+        SeedUnitProps(seed);
+        HWND dlg = open(180);
+        bool ok = dlg != nullptr;
+        if (dlg) {
+            ok = ok && ::IsDlgButtonChecked(dlg, IDC_D180_1073) == BST_CHECKED &&
+                 ::IsDlgButtonChecked(dlg, IDC_D180_1076) == BST_CHECKED &&
+                 ::IsDlgButtonChecked(dlg, IDC_D180_1074) == BST_UNCHECKED &&
+                 ::IsDlgButtonChecked(dlg, IDC_D180_1075) == BST_UNCHECKED &&
+                 ::IsDlgButtonChecked(dlg, IDC_D180_1077) == BST_UNCHECKED &&
+                 intOf(dlg, IDC_D180_1082) == 5;
+            ::CheckDlgButton(dlg, IDC_D180_1073, BST_UNCHECKED);   // 无敌
+            ::CheckDlgButton(dlg, IDC_D180_1074, BST_CHECKED);     // 幻影
+            ::CheckDlgButton(dlg, IDC_D180_1075, BST_CHECKED);     // 钻地
+            ::CheckDlgButton(dlg, IDC_D180_1077, BST_CHECKED);     // 升起
+            ::SetDlgItemInt(dlg, IDC_D180_1082, 9, FALSE);
+            press(dlg, IDC_D180_1);
+            const UnitProps& p = LastUnitProps();
+            ok = ok && p.flags == 0x0F && p.ammo == 9;
+            if (::IsWindow(dlg)) ::DestroyWindow(dlg);
+        }
+        record(L"unitProps180", ok);
+    }
+
+    // 5) 188：“所有单位”勾选后 255 + 禁用输入，取消勾选恢复
+    {
+        HWND dlg = open(188);
+        bool ok = dlg != nullptr;
+        if (dlg) {
+            press(dlg, 1119);
+            ok = ok && !enabled(dlg, 1118) && textOf(dlg, 1118) == L"255";
+            press(dlg, 1119);
+            ok = ok && enabled(dlg, 1118);
+            ::DestroyWindow(dlg);
+        }
+        record(L"allUnits188", ok);
+    }
+
+    // 6) 189：行号随正文更新，预览框转义控制字符，“一直显示”切换行号列
+    {
+        HWND dlg = open(189);
+        bool ok = dlg != nullptr;
+        if (dlg) {
+            ::SetDlgItemTextW(dlg, 1120, L"a\r\nb\r\nc");
+            // 程序化 WM_SETTEXT 不产生 EN_CHANGE，手动补发以覆盖行号刷新逻辑
+            ::SendMessageW(dlg, WM_COMMAND, MAKEWPARAM(IDC_D189_1120, EN_CHANGE),
+                           reinterpret_cast<LPARAM>(::GetDlgItem(dlg, IDC_D189_1120)));
+            ok = ok && textOf(dlg, 1121) == L"1\r\n2\r\n3";
+            ok = ok && textOf(dlg, 1079) == L"a\r\nb\r\nc";
+            // 0x02=游戏内换行、0x07+色号=颜色切换、其余控制字符=<0xNN>
+            ::SetDlgItemTextW(dlg, 1120, L"a\x02" L"b\x07" L"\x04" L"c\x01");
+            ::SendMessageW(dlg, WM_COMMAND, MAKEWPARAM(IDC_D189_1120, EN_CHANGE),
+                           reinterpret_cast<LPARAM>(::GetDlgItem(dlg, IDC_D189_1120)));
+            ok = ok && textOf(dlg, 1121) == L"1\r\n2";
+            ok = ok && textOf(dlg, 1079) == L"a\r\nb[颜色4]c<0x01>";
+            press(dlg, 1122);
+            ok = ok && !::IsWindowVisible(::GetDlgItem(dlg, 1121));
+            ::DestroyWindow(dlg);
+        }
+        record(L"string189", ok);
+    }
+
+    // 7) 169：尺寸预设联动 + 地形集写回 g_mapSize
+    {
+        HWND dlg = open(169);
+        bool ok = dlg != nullptr;
+        if (dlg) {
+            selectList(dlg, 1061, 3);   // 192 x 192
+            ok = ok && intOf(dlg, 1062) == 192 && intOf(dlg, 1063) == 192;
+            selectList(dlg, 1060, 5);   // Desert
+            press(dlg, 1);              // 创建地图
+            const MapSizeParams& p = LastMapSize();
+            ok = ok && p.width == 192 && p.height == 192 && p.era == 5;
+        }
+        record(L"newMap169", ok);
+    }
+
+    // 8) 175：按当前地图预填；改尺寸/目标地形集后写回 ResizeParams
+    {
+        ResizeParams seed;
+        seed.width = 128;
+        seed.height = 128;
+        seed.currentEra = 4;
+        seed.era = -1;
+        SeedResizeParams(seed);
+        HWND dlg = open(175);
+        bool ok = dlg && intOf(dlg, 1062) == 128 && intOf(dlg, 1063) == 128 &&
+                  listSel(dlg, 1060) == 4 && listSel(dlg, 1095) == 4;
+        if (dlg) {
+            ::SetDlgItemInt(dlg, 1062, 96, FALSE);
+            ::SetDlgItemInt(dlg, 1063, 96, FALSE);
+            selectList(dlg, 1095, 7);   // Twilight
+            press(dlg, 1);              // 重设 / 改变 Tileset
+            const ResizeParams& p = LastResizeParams();
+            ok = ok && p.width == 96 && p.height == 96 && p.era == 7;
+        }
+        record(L"resize175", ok);
+    }
+
+    // 9) 182：添加当前刷子并应用
+    {
+        TerrainBrush current;
+        current.SetSingle(0x0040, L"审计刷");
+        SeedCustomBrushes({}, current, -1);
+        HWND dlg = open(182);
+        bool ok = dlg != nullptr;
+        if (dlg) {
+            ::SetDlgItemTextW(dlg, 1079, L"审计刷");
+            press(dlg, 1006);   // 添加刷子
+            ok = ok && listCount(dlg, 1060) == 1;
+            // 182 没有 IDOK 按钮，回车路径直接发 WM_COMMAND
+            ::SendMessageW(dlg, WM_COMMAND, MAKEWPARAM(IDOK, BN_CLICKED), 0);
+            ok = ok && LastCustomBrushAccepted() && LastCustomBrushes().size() == 1 &&
+                 LastCustomBrushes()[0].name == L"审计刷";
+            if (::IsWindow(dlg)) ::DestroyWindow(dlg);
+        }
+        record(L"brush182", ok);
+    }
+
+    // 10) 需要地图文档的交互按钮：167 / 173 / 179 / 198 / 199
+    {
+        MapDocument doc;
+        const bool docOk = doc.CreateNew(32, 32, 0, std::wstring(), 0);
+        SetDialogDocument(&doc);
+        Buffer probe;
+
+        // 交互前后控件状态：写入 scmdplus_dialog_interaction.txt，并要求每对快照都有差异
+        std::wstring interactionText;
+        int interactionPairs = 0;
+        bool interactionOk = true;
+        auto capturePair = [&](const wchar_t* name, const std::wstring& before,
+                               const std::wstring& after) {
+            int diffLines = 0;
+            const std::wstring diff = BuildSnapshotDiff(before, after, diffLines);
+            interactionText += std::wstring(L"[") + name + L" before]\n" + before;
+            interactionText += std::wstring(L"[") + name + L" after]\n" + after;
+            interactionText += std::wstring(L"[") + name + L" diff] diffLines=" +
+                               std::to_wstring(diffLines) + L"\n" + diff;
+            interactionPairs++;
+            if (diffLines <= 0) interactionOk = false;
+        };
+
+        // 167：添加 / 改名 / 删除附加文件
+        bool mpqOk = docOk;
+        if (docOk) {
+            doc.SetExtraFile("custom.bin", Buffer{1, 2, 3});
+            doc.SetExtraFile("other.bin", Buffer{4, 5, 6});
+            HWND dlg = open(167);
+            mpqOk = mpqOk && dlg && listCount(dlg, IDC_D167_1049) == 2;
+            if (dlg) {
+                const std::wstring before = SnapshotOf(dlg, exeDir);
+                ::SetDlgItemTextW(dlg, IDC_D167_1056, L"added.bin");
+                press(dlg, IDC_D167_1053);   // 添加
+                mpqOk = mpqOk && listCount(dlg, IDC_D167_1049) == 3 &&
+                        doc.ReadExtraFile("added.bin", probe);
+                const std::wstring afterAdd = SnapshotOf(dlg, exeDir);
+                selectList(dlg, IDC_D167_1049, 2);
+                ::SetDlgItemTextW(dlg, IDC_D167_1056, L"renamed.bin");
+                press(dlg, IDC_D167_1052);   // 编辑（改名）
+                mpqOk = mpqOk && doc.ReadExtraFile("renamed.bin", probe) &&
+                        !doc.ReadExtraFile("added.bin", probe);
+                const std::wstring afterRename = SnapshotOf(dlg, exeDir);
+                selectList(dlg, IDC_D167_1049, 0);
+                press(dlg, IDC_D167_1092);   // 删除
+                mpqOk = mpqOk && !doc.ReadExtraFile("custom.bin", probe) &&
+                        doc.extraFiles().size() == 2;
+                capturePair(L"167-add", before, afterAdd);
+                capturePair(L"167-rename", afterAdd, afterRename);
+                capturePair(L"167-delete", afterRename, SnapshotOf(dlg, exeDir));
+                ::DestroyWindow(dlg);
+            }
+        }
+        record(L"mpq167", mpqOk);
+
+        // 179：设置 / 还原开关名
+        bool switchOk = docOk;
+        if (docOk) {
+            doc.mutableSwitchNames().Set(0, 0);
+            HWND dlg = open(179);
+            switchOk = switchOk && dlg && listCount(dlg, IDC_D179_1060) == 256;
+            if (dlg) {
+                const std::wstring before = SnapshotOf(dlg, exeDir);
+                ::SetDlgItemTextW(dlg, IDC_D179_1079, L"审计开关");
+                press(dlg, IDC_D179_1110);   // 设置
+                const u32 sid = doc.switchNames().Get(0);
+                switchOk = switchOk && sid != 0 &&
+                           doc.strings().At(sid) == WideToUtf8(L"审计开关");
+                const std::wstring afterSet = SnapshotOf(dlg, exeDir);
+                press(dlg, IDC_D179_1111);   // 还原
+                switchOk = switchOk && doc.switchNames().Get(0) == 0;
+                capturePair(L"179-set", before, afterSet);
+                capturePair(L"179-restore", afterSet, SnapshotOf(dlg, exeDir));
+                ::DestroyWindow(dlg);
+            }
+        }
+        record(L"switch179", switchOk);
+
+        // 198：设置 / 清除声音路径
+        bool soundOk = docOk;
+        if (docOk) {
+            doc.mutableSounds().Set(0, 0);
+            HWND dlg = open(198);
+            soundOk = soundOk && dlg && listCount(dlg, IDC_D198_LIST) == 512;
+            if (dlg) {
+                const std::wstring before = SnapshotOf(dlg, exeDir);
+                ::SetDlgItemTextW(dlg, IDC_D198_PATH, L"sound\\probe.wav");
+                press(dlg, IDC_D198_SET);
+                const u32 sid = doc.sounds().Get(0);
+                soundOk = soundOk && sid != 0 &&
+                          doc.strings().At(sid) == WideToUtf8(L"sound\\probe.wav");
+                const std::wstring afterSet = SnapshotOf(dlg, exeDir);
+                press(dlg, IDC_D198_CLEAR);
+                soundOk = soundOk && doc.sounds().Get(0) == 0;
+                capturePair(L"198-set", before, afterSet);
+                capturePair(L"198-clear", afterSet, SnapshotOf(dlg, exeDir));
+                ::DestroyWindow(dlg);
+            }
+        }
+        record(L"sound198", soundOk);
+
+        // 199：更新简报文本（构造一条类型 3 行动）
+        bool briefOk = docOk;
+        if (docOk) {
+            Trigger brief;
+            brief.actions[0].type = 3;   // 文本
+            brief.actions[0].player = 0;
+            brief.actions[0].stringId = 0;
+            doc.mutableBriefing().MutableItems().clear();
+            doc.mutableBriefing().MutableItems().push_back(brief);
+            HWND dlg = open(199);
+            briefOk = briefOk && dlg && listCount(dlg, IDC_D199_LIST) == 1 &&
+                      enabled(dlg, IDC_D199_UPDATE);
+            if (dlg) {
+                const std::wstring before = SnapshotOf(dlg, exeDir);
+                ::SetDlgItemTextW(dlg, IDC_D199_TEXT, L"简报文本");
+                press(dlg, IDC_D199_UPDATE);
+                auto& items = doc.mutableBriefing().MutableItems();
+                const u32 sid = items.empty() ? 0 : items[0].actions[0].stringId;
+                briefOk = briefOk && sid != 0 &&
+                          doc.strings().At(sid) == WideToUtf8(L"简报文本");
+                capturePair(L"199-update", before, SnapshotOf(dlg, exeDir));
+                ::DestroyWindow(dlg);
+            }
+        }
+        record(L"brief199", briefOk);
+
+        // 181：触发编辑器 新建 / 复制 / 修改 / 删除
+        bool triggerOk = docOk;
+        if (docOk) {
+            doc.mutableTriggers().MutableItems().clear();
+            HWND dlg = open(181);
+            triggerOk = triggerOk && dlg && listCount(dlg, IDC_D181_TRIGGER_LIST) == 0;
+            if (dlg) {
+                const std::wstring before = SnapshotOf(dlg, exeDir);
+                press(dlg, IDC_D181_NEW);
+                triggerOk = triggerOk && doc.triggers().BlockCount() == 1 &&
+                            listCount(dlg, IDC_D181_TRIGGER_LIST) == 1;
+                const std::wstring afterNew = SnapshotOf(dlg, exeDir);
+                press(dlg, IDC_D181_COPY);
+                triggerOk = triggerOk && doc.triggers().BlockCount() == 2 &&
+                            listCount(dlg, IDC_D181_TRIGGER_LIST) == 2;
+                const std::wstring afterCopy = SnapshotOf(dlg, exeDir);
+                press(dlg, IDC_D181_MODIFY);
+                const std::wstring afterModify = SnapshotOf(dlg, exeDir);
+                press(dlg, IDC_D181_DELETE);
+                triggerOk = triggerOk && doc.triggers().BlockCount() == 1;
+                capturePair(L"181-new", before, afterNew);
+                capturePair(L"181-copy", afterNew, afterCopy);
+                capturePair(L"181-modify", afterCopy, afterModify);
+                capturePair(L"181-delete", afterModify, SnapshotOf(dlg, exeDir));
+
+                // 玩家树筛选：P2 下无触发，P1 / 全 仍可见
+                HWND tree = ::GetDlgItem(dlg, IDC_D181_PLAYER_TREE);
+                HTREEITEM allItem = reinterpret_cast<HTREEITEM>(
+                    ::SendMessageW(tree, TVM_GETNEXTITEM, TVGN_ROOT, 0));
+                HTREEITEM p1 = reinterpret_cast<HTREEITEM>(
+                    ::SendMessageW(tree, TVM_GETNEXTITEM, TVGN_NEXT,
+                                   reinterpret_cast<LPARAM>(allItem)));
+                HTREEITEM p2 = reinterpret_cast<HTREEITEM>(
+                    ::SendMessageW(tree, TVM_GETNEXTITEM, TVGN_NEXT,
+                                   reinterpret_cast<LPARAM>(p1)));
+                ::SendMessageW(tree, TVM_SELECTITEM, TVGN_CARET,
+                               reinterpret_cast<LPARAM>(p2));
+                triggerOk = triggerOk && listCount(dlg, IDC_D181_TRIGGER_LIST) == 0;
+                ::SendMessageW(tree, TVM_SELECTITEM, TVGN_CARET,
+                               reinterpret_cast<LPARAM>(p1));
+                triggerOk = triggerOk && listCount(dlg, IDC_D181_TRIGGER_LIST) == 1;
+                ::SendMessageW(tree, TVM_SELECTITEM, TVGN_CARET,
+                               reinterpret_cast<LPARAM>(allItem));
+                triggerOk = triggerOk && listCount(dlg, IDC_D181_TRIGGER_LIST) == 1;
+                ::DestroyWindow(dlg);
+            }
+        }
+        record(L"trigger181", triggerOk);
+
+        // 193 / 194：修改字段并确定
+        bool condOk = true;
+        {
+            HWND dlg = open(193);
+            condOk = dlg != nullptr;
+            if (dlg) {
+                const std::wstring before = SnapshotOf(dlg, exeDir);
+                ::SetDlgItemInt(dlg, IDC_D193_AMOUNT, 7, FALSE);
+                capturePair(L"193-amount", before, SnapshotOf(dlg, exeDir));
+                // 类型下拉 <-> 类型号 双向同步
+                selectCombo(dlg, IDC_D193_TYPE, 3);              // 类型 4
+                condOk = condOk && intOf(dlg, IDC_D193_TYPE_ID) == 4;
+                ::SetDlgItemInt(dlg, IDC_D193_TYPE_ID, 22, FALSE);   // 22 -> 索引 21
+                condOk = condOk && comboIndex(dlg, IDC_D193_TYPE) == 21;
+                ::SetDlgItemInt(dlg, IDC_D193_TYPE_ID, 99, FALSE);   // 越界 -> 自定义(23)
+                condOk = condOk && comboIndex(dlg, IDC_D193_TYPE) == 23;
+                ::SetDlgItemInt(dlg, IDC_D193_TYPE_ID, 22, FALSE);
+                command(dlg, IDC_D193_1);
+                condOk = condOk && LastTriggerConditionAccepted() &&
+                         LastTriggerCondition().amount == 7 &&
+                         LastTriggerCondition().type == 22;
+                if (::IsWindow(dlg)) ::DestroyWindow(dlg);
+            }
+        }
+        record(L"cond193", condOk);
+
+        bool actOk = true;
+        {
+            HWND dlg = open(194);
+            actOk = dlg != nullptr;
+            if (dlg) {
+                const std::wstring before = SnapshotOf(dlg, exeDir);
+                ::SetDlgItemInt(dlg, IDC_D194_AMOUNT, 9, FALSE);
+                capturePair(L"194-amount", before, SnapshotOf(dlg, exeDir));
+                // 类型下拉 <-> 类型号 双向同步
+                selectCombo(dlg, IDC_D194_TYPE, 2);              // 类型 3
+                actOk = actOk && intOf(dlg, IDC_D194_TYPE_ID) == 3;
+                ::SetDlgItemInt(dlg, IDC_D194_TYPE_ID, 57, FALSE);   // 57 -> 索引 56
+                actOk = actOk && comboIndex(dlg, IDC_D194_TYPE) == 56;
+                ::SetDlgItemInt(dlg, IDC_D194_TYPE_ID, 99, FALSE);   // 越界 -> 自定义(57)
+                actOk = actOk && comboIndex(dlg, IDC_D194_TYPE) == 57;
+                ::SetDlgItemInt(dlg, IDC_D194_TYPE_ID, 1, FALSE);
+                command(dlg, IDC_D194_1);
+                actOk = actOk && LastTriggerActionAccepted() &&
+                        LastTriggerAction().amount == 9 &&
+                        LastTriggerAction().type == 1;
+                if (::IsWindow(dlg)) ::DestroyWindow(dlg);
+            }
+        }
+        record(L"act194", actOk);
+
+        // 196：切换玩家 / 控制者 / 队伍
+        bool playerOk = true;
+        {
+            PlayerRoster roster;
+            roster.Reset();
+            SeedPlayerRoster(roster);
+            HWND dlg = open(196);
+            playerOk = dlg != nullptr;
+            if (dlg) {
+                const std::wstring before = SnapshotOf(dlg, exeDir);
+                selectList(dlg, IDC_D196_PLAYER_LIST, 1);
+                const std::wstring afterPlayer = SnapshotOf(dlg, exeDir);
+                selectCombo(dlg, IDC_D196_CONTROLLER, 1);
+                const std::wstring afterController = SnapshotOf(dlg, exeDir);
+                selectList(dlg, IDC_D196_FORCE_LIST, 1);
+                const std::wstring afterForce = SnapshotOf(dlg, exeDir);
+                capturePair(L"196-player", before, afterPlayer);
+                capturePair(L"196-controller", afterPlayer, afterController);
+                capturePair(L"196-force", afterController, afterForce);
+                press(dlg, IDC_D196_2);
+            }
+        }
+        record(L"player196", playerOk);
+
+        // 197：切换升级项 / 玩家 / 使用全局默认
+        bool restrictionOk = true;
+        {
+            UpgradeTechRestrictions restrictions;
+            restrictions.Reset();
+            SeedRestrictions(restrictions);
+            HWND dlg = open(197);
+            restrictionOk = dlg != nullptr;
+            if (dlg) {
+                const std::wstring before = SnapshotOf(dlg, exeDir);
+                selectList(dlg, IDC_D197_UPGRADE_LIST, 1);
+                const std::wstring afterUpgrade = SnapshotOf(dlg, exeDir);
+                selectCombo(dlg, IDC_D197_PLAYER, 1);
+                const std::wstring afterPlayer = SnapshotOf(dlg, exeDir);
+                press(dlg, IDC_D197_UP_DEFAULTS);
+                const std::wstring afterDefaults = SnapshotOf(dlg, exeDir);
+                capturePair(L"197-upgrade", before, afterUpgrade);
+                capturePair(L"197-player", afterUpgrade, afterPlayer);
+                capturePair(L"197-defaults", afterPlayer, afterDefaults);
+                press(dlg, IDC_D197_2);
+            }
+        }
+        record(L"restriction197", restrictionOk);
+
+        // 173：备份列表填充（生成 1 份备份后打开）
+        bool backupOk = docOk;
+        if (docOk) {
+            ClearAllBackups();
+            wchar_t backupTemp[MAX_PATH] = L"";
+            ::GetTempPathW(MAX_PATH, backupTemp);
+            const std::wstring source = std::wstring(backupTemp) + L"scmdplus_audit_backup.scx";
+            WriteTempTextFile(L"scmdplus_audit_backup.scx", L"audit");
+            const bool backedUp = MakeBackup(source, 3);
+            HWND dlg = open(173);
+            backupOk = backupOk && backedUp && dlg && listCount(dlg, IDC_D173_1060) == 1;
+            if (dlg) {
+                selectList(dlg, IDC_D173_1060, 0);
+                backupOk = backupOk && listCount(dlg, IDC_D173_1083) == 1;
+                ::DestroyWindow(dlg);
+            }
+            ClearAllBackups();
+            ::DeleteFileW(source.c_str());
+        }
+        record(L"backup173", backupOk);
+
+        const bool interactionWritten =
+            WriteTempTextFile(L"scmdplus_dialog_interaction.txt", interactionText);
+        report += L"interactionPairs=" + std::to_wstring(interactionPairs) + L"\n";
+        record(L"interactionSnapshot",
+               interactionWritten && interactionPairs >= 20 && interactionOk);
+
+        // 可选：交互快照基准保存 / 对比
+        const std::wstring interactionSave = ParseValueArg(L"--dialog-interaction-baseline=");
+        if (!interactionSave.empty()) {
+            record(L"interactionBaselineSave",
+                   WriteTextFileAt(interactionSave, interactionText));
+        }
+        const std::wstring interactionDiff = ParseValueArg(L"--dialog-interaction-diff=");
+        if (!interactionDiff.empty()) {
+            std::wstring interactionBaseline;
+            if (!ReadTextFileAt(interactionDiff, interactionBaseline)) {
+                report += L"interactionError=missing-baseline\n";
+                record(L"interactionMatch", false);
+            } else if (interactionBaseline == interactionText) {
+                report += L"interactionDiffLines=0\n";
+                record(L"interactionMatch", true);
+            } else {
+                int diffLines = 0;
+                const std::wstring diff =
+                    BuildSnapshotDiff(interactionBaseline, interactionText, diffLines);
+                WriteTempTextFile(L"scmdplus_dialog_interaction.diff.txt", diff);
+                report += L"interactionDiffLines=" + std::to_wstring(diffLines) + L"\n";
+                record(L"interactionMatch", false);
+            }
+        }
+
+        SetDialogDocument(nullptr);
+        doc.Close();
+    }
+
+    const bool ok = allOk;
+    report += L"audit=";
+    report += ok ? L"1\n" : L"0\n";
+    WriteDiag(report);
+    return ok ? 0 : 2;
+}
+
+void WriteDiag(const std::wstring& text) {
+    WriteTempTextFile(L"scmdplus_mpq.txt", text);
 }
 
 // 从 MPQ 取出单个条目：--mpq=<档案> --mpq-extract=<条目> --extract-to=<输出>
@@ -3776,6 +5298,7 @@ int App::Run(HINSTANCE hInstance) {
         }
     }
     mainWindow_.SetTilesetDir(tsDir);
+    mainWindow_.LoadBrushFiles(AppSettings::Instance().brushFiles());
 
     // 单位放置参数回归（无头）
     if (const std::wstring unitOut = ParseUnitParamTestArg(); !unitOut.empty()) {
@@ -3787,6 +5310,20 @@ int App::Run(HINSTANCE hInstance) {
     // 框选/剪贴板回归（无头）
     if (const std::wstring clipOut = ParseClipTestArg(); !clipOut.empty()) {
         const int rc = RunClipTest(mainWindow_, clipOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 装饰物窗口放置/删除回归（无头）
+    if (const std::wstring doodadOut = ParseDoodadTestArg(); !doodadOut.empty()) {
+        const int rc = RunDoodadTest(mainWindow_, doodadOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 地点描绘模式 / SP 对齐方格回归（无头）
+    if (const std::wstring locDrawOut = ParseLocationDrawTestArg(); !locDrawOut.empty()) {
+        const int rc = RunLocationDrawTest(mainWindow_, locDrawOut);
         ::DestroyWindow(mainWindow_.hwnd());
         return rc;
     }
@@ -3828,6 +5365,15 @@ int App::Run(HINSTANCE hInstance) {
             ::LocalFree(argv);
         }
         if (want) {
+            // 该回归依赖确定的初始勾选状态：切到临时目录并重置为默认视图，
+            // 避免用户的 settings.ini（层/显示选项）导致断言随环境漂移
+            wchar_t tempPath[MAX_PATH] = L"";
+            ::GetTempPathW(MAX_PATH, tempPath);
+            AppSettings& settings = AppSettings::Instance();
+            settings.SetDirectory(std::wstring(tempPath) + L"scmdplus_menu_cmd_test");
+            settings.mutableView() = ViewState{};
+            settings.SetPersistViewOnExit(false);
+            mainWindow_.ReloadViewState();
             const std::wstring mapPath = ParseOpenArg();
             if (!mapPath.empty()) mainWindow_.OpenMap(mapPath);
             const int rc = RunMenuCommandTest(mainWindow_.hwnd(), mainWindow_);
@@ -4078,6 +5624,21 @@ int App::Run(HINSTANCE hInstance) {
     // 容器读取自检
     if (const std::wstring mpqPath = ParseMpqArg(); !mpqPath.empty()) {
         const int rc = RunMpqSelfTest(mpqPath);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 全对话框控件状态 / 按钮路径回归（无头）
+    if (HasSwitchArg(L"--dialog-audit-test")) {
+        const int rc = RunDialogAuditTest(mainWindow_.hwnd());
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 触发编辑器真实模态路径（DialogBoxParamW + 满载数据文档）回归（无头）
+    if (HasSwitchArg(L"--trigger-modal-test") ||
+        !ParseValueArg(L"--trigger-modal-test=").empty()) {
+        const int rc = RunTriggerModalTest(mainWindow_.hwnd());
         ::DestroyWindow(mainWindow_.hwnd());
         return rc;
     }

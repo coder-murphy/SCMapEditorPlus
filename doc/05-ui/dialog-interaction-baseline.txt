@@ -1,0 +1,1860 @@
+﻿[167-add before]
+  #1 Button enabled check=0
+  #1049 ListBox enabled count=2 sel=1
+    [0] "custom.bin"
+    [1] "other.bin"
+  #1055 Static enabled text="共 2 个文件"
+  #1050 Button disabled check=0
+  #1051 Button disabled check=0
+  #1052 Button enabled check=0
+  #1053 Button enabled check=0
+  #1056 Edit enabled
+  #1059 Button enabled check=0
+  #1092 Button enabled check=0
+[167-add after]
+  #1 Button enabled check=0
+  #1049 ListBox enabled count=3 sel=0
+    [0] "added.bin"
+    [1] "custom.bin"
+    [2] "other.bin"
+  #1055 Static enabled text="共 3 个文件"
+  #1050 Button disabled check=0
+  #1051 Button disabled check=0
+  #1052 Button enabled check=0
+  #1053 Button enabled check=0
+  #1056 Edit enabled text="added.bin"
+  #1059 Button enabled check=0
+  #1092 Button enabled check=0
+[167-add diff] diffLines=11
+baselineLines=12 currentLines=13
+-   #1049 ListBox enabled count=2 sel=1
+-     [0] "custom.bin"
+-     [1] "other.bin"
+-   #1055 Static enabled text="共 2 个文件"
++   #1049 ListBox enabled count=3 sel=0
++     [0] "added.bin"
++     [1] "custom.bin"
++     [2] "other.bin"
++   #1055 Static enabled text="共 3 个文件"
+-   #1056 Edit enabled
++   #1056 Edit enabled text="added.bin"
+[167-rename before]
+  #1 Button enabled check=0
+  #1049 ListBox enabled count=3 sel=0
+    [0] "added.bin"
+    [1] "custom.bin"
+    [2] "other.bin"
+  #1055 Static enabled text="共 3 个文件"
+  #1050 Button disabled check=0
+  #1051 Button disabled check=0
+  #1052 Button enabled check=0
+  #1053 Button enabled check=0
+  #1056 Edit enabled text="added.bin"
+  #1059 Button enabled check=0
+  #1092 Button enabled check=0
+[167-rename after]
+  #1 Button enabled check=0
+  #1049 ListBox enabled count=3 sel=2
+    [0] "custom.bin"
+    [1] "other.bin"
+    [2] "renamed.bin"
+  #1055 Static enabled text="共 3 个文件"
+  #1050 Button disabled check=0
+  #1051 Button disabled check=0
+  #1052 Button enabled check=0
+  #1053 Button enabled check=0
+  #1056 Edit enabled text="renamed.bin"
+  #1059 Button enabled check=0
+  #1092 Button enabled check=0
+[167-rename diff] diffLines=10
+baselineLines=13 currentLines=13
+-   #1049 ListBox enabled count=3 sel=0
+-     [0] "added.bin"
+-     [1] "custom.bin"
+-     [2] "other.bin"
++   #1049 ListBox enabled count=3 sel=2
++     [0] "custom.bin"
++     [1] "other.bin"
++     [2] "renamed.bin"
+-   #1056 Edit enabled text="added.bin"
++   #1056 Edit enabled text="renamed.bin"
+[167-delete before]
+  #1 Button enabled check=0
+  #1049 ListBox enabled count=3 sel=2
+    [0] "custom.bin"
+    [1] "other.bin"
+    [2] "renamed.bin"
+  #1055 Static enabled text="共 3 个文件"
+  #1050 Button disabled check=0
+  #1051 Button disabled check=0
+  #1052 Button enabled check=0
+  #1053 Button enabled check=0
+  #1056 Edit enabled text="renamed.bin"
+  #1059 Button enabled check=0
+  #1092 Button enabled check=0
+[167-delete after]
+  #1 Button enabled check=0
+  #1049 ListBox enabled count=2 sel=1
+    [0] "other.bin"
+    [1] "renamed.bin"
+  #1055 Static enabled text="共 2 个文件"
+  #1050 Button disabled check=0
+  #1051 Button disabled check=0
+  #1052 Button enabled check=0
+  #1053 Button enabled check=0
+  #1056 Edit enabled text="custom.bin"
+  #1059 Button enabled check=0
+  #1092 Button enabled check=0
+[167-delete diff] diffLines=11
+baselineLines=13 currentLines=12
+-   #1049 ListBox enabled count=3 sel=2
+-     [0] "custom.bin"
+-     [1] "other.bin"
+-     [2] "renamed.bin"
+-   #1055 Static enabled text="共 3 个文件"
++   #1049 ListBox enabled count=2 sel=1
++     [0] "other.bin"
++     [1] "renamed.bin"
++   #1055 Static enabled text="共 2 个文件"
+-   #1056 Edit enabled text="renamed.bin"
++   #1056 Edit enabled text="custom.bin"
+[179-set before]
+  #1060 ListBox enabled count=256 sel=0
+    [0] "开关 1: (默认)"
+    [1] "开关 2: (默认)"
+    [2] "开关 3: (默认)"
+    [3] "开关 4: (默认)"
+    [4] "开关 5: (默认)"
+    [5] "开关 6: (默认)"
+    [6] "开关 7: (默认)"
+    [7] "开关 8: (默认)"
+    [8] "开关 9: (默认)"
+    [9] "开关 10: (默认)"
+    [10] "开关 11: (默认)"
+    [11] "开关 12: (默认)"
+    [12] "开关 13: (默认)"
+    [13] "开关 14: (默认)"
+    [14] "开关 15: (默认)"
+    [15] "开关 16: (默认)"
+    [16] "开关 17: (默认)"
+    [17] "开关 18: (默认)"
+    [18] "开关 19: (默认)"
+    [19] "开关 20: (默认)"
+    ...
+  #1079 Edit enabled
+  #1110 Button enabled check=0
+  #1111 Button enabled check=0
+[179-set after]
+  #1060 ListBox enabled count=256 sel=0
+    [0] "开关 1: 审计开关"
+    [1] "开关 2: (默认)"
+    [2] "开关 3: (默认)"
+    [3] "开关 4: (默认)"
+    [4] "开关 5: (默认)"
+    [5] "开关 6: (默认)"
+    [6] "开关 7: (默认)"
+    [7] "开关 8: (默认)"
+    [8] "开关 9: (默认)"
+    [9] "开关 10: (默认)"
+    [10] "开关 11: (默认)"
+    [11] "开关 12: (默认)"
+    [12] "开关 13: (默认)"
+    [13] "开关 14: (默认)"
+    [14] "开关 15: (默认)"
+    [15] "开关 16: (默认)"
+    [16] "开关 17: (默认)"
+    [17] "开关 18: (默认)"
+    [18] "开关 19: (默认)"
+    [19] "开关 20: (默认)"
+    ...
+  #1079 Edit enabled text="审计开关"
+  #1110 Button enabled check=0
+  #1111 Button enabled check=0
+[179-set diff] diffLines=4
+baselineLines=25 currentLines=25
+-     [0] "开关 1: (默认)"
++     [0] "开关 1: 审计开关"
+-   #1079 Edit enabled
++   #1079 Edit enabled text="审计开关"
+[179-restore before]
+  #1060 ListBox enabled count=256 sel=0
+    [0] "开关 1: 审计开关"
+    [1] "开关 2: (默认)"
+    [2] "开关 3: (默认)"
+    [3] "开关 4: (默认)"
+    [4] "开关 5: (默认)"
+    [5] "开关 6: (默认)"
+    [6] "开关 7: (默认)"
+    [7] "开关 8: (默认)"
+    [8] "开关 9: (默认)"
+    [9] "开关 10: (默认)"
+    [10] "开关 11: (默认)"
+    [11] "开关 12: (默认)"
+    [12] "开关 13: (默认)"
+    [13] "开关 14: (默认)"
+    [14] "开关 15: (默认)"
+    [15] "开关 16: (默认)"
+    [16] "开关 17: (默认)"
+    [17] "开关 18: (默认)"
+    [18] "开关 19: (默认)"
+    [19] "开关 20: (默认)"
+    ...
+  #1079 Edit enabled text="审计开关"
+  #1110 Button enabled check=0
+  #1111 Button enabled check=0
+[179-restore after]
+  #1060 ListBox enabled count=256 sel=0
+    [0] "开关 1: (默认)"
+    [1] "开关 2: (默认)"
+    [2] "开关 3: (默认)"
+    [3] "开关 4: (默认)"
+    [4] "开关 5: (默认)"
+    [5] "开关 6: (默认)"
+    [6] "开关 7: (默认)"
+    [7] "开关 8: (默认)"
+    [8] "开关 9: (默认)"
+    [9] "开关 10: (默认)"
+    [10] "开关 11: (默认)"
+    [11] "开关 12: (默认)"
+    [12] "开关 13: (默认)"
+    [13] "开关 14: (默认)"
+    [14] "开关 15: (默认)"
+    [15] "开关 16: (默认)"
+    [16] "开关 17: (默认)"
+    [17] "开关 18: (默认)"
+    [18] "开关 19: (默认)"
+    [19] "开关 20: (默认)"
+    ...
+  #1079 Edit enabled
+  #1110 Button enabled check=0
+  #1111 Button enabled check=0
+[179-restore diff] diffLines=4
+baselineLines=25 currentLines=25
+-     [0] "开关 1: 审计开关"
++     [0] "开关 1: (默认)"
+-   #1079 Edit enabled text="审计开关"
++   #1079 Edit enabled
+[198-set before]
+  #1500 ListBox enabled count=512 sel=0
+    [0] "#0  (空)"
+    [1] "#1  (空)"
+    [2] "#2  (空)"
+    [3] "#3  (空)"
+    [4] "#4  (空)"
+    [5] "#5  (空)"
+    [6] "#6  (空)"
+    [7] "#7  (空)"
+    [8] "#8  (空)"
+    [9] "#9  (空)"
+    [10] "#10  (空)"
+    [11] "#11  (空)"
+    [12] "#12  (空)"
+    [13] "#13  (空)"
+    [14] "#14  (空)"
+    [15] "#15  (空)"
+    [16] "#16  (空)"
+    [17] "#17  (空)"
+    [18] "#18  (空)"
+    [19] "#19  (空)"
+    ...
+  #1501 Edit enabled
+  #1502 Button enabled check=0
+  #1503 Button enabled check=0
+  #1504 Button enabled check=0
+  #-1 Static enabled text="选择槽位后输入 WAV 路径（写入 STR 表）。"
+[198-set after]
+  #1500 ListBox enabled count=512 sel=0
+    [0] "#0  sound\probe.wav"
+    [1] "#1  (空)"
+    [2] "#2  (空)"
+    [3] "#3  (空)"
+    [4] "#4  (空)"
+    [5] "#5  (空)"
+    [6] "#6  (空)"
+    [7] "#7  (空)"
+    [8] "#8  (空)"
+    [9] "#9  (空)"
+    [10] "#10  (空)"
+    [11] "#11  (空)"
+    [12] "#12  (空)"
+    [13] "#13  (空)"
+    [14] "#14  (空)"
+    [15] "#15  (空)"
+    [16] "#16  (空)"
+    [17] "#17  (空)"
+    [18] "#18  (空)"
+    [19] "#19  (空)"
+    ...
+  #1501 Edit enabled text="sound\probe.wav"
+  #1502 Button enabled check=0
+  #1503 Button enabled check=0
+  #1504 Button enabled check=0
+  #-1 Static enabled text="选择槽位后输入 WAV 路径（写入 STR 表）。"
+[198-set diff] diffLines=4
+baselineLines=27 currentLines=27
+-     [0] "#0  (空)"
++     [0] "#0  sound\probe.wav"
+-   #1501 Edit enabled
++   #1501 Edit enabled text="sound\probe.wav"
+[198-clear before]
+  #1500 ListBox enabled count=512 sel=0
+    [0] "#0  sound\probe.wav"
+    [1] "#1  (空)"
+    [2] "#2  (空)"
+    [3] "#3  (空)"
+    [4] "#4  (空)"
+    [5] "#5  (空)"
+    [6] "#6  (空)"
+    [7] "#7  (空)"
+    [8] "#8  (空)"
+    [9] "#9  (空)"
+    [10] "#10  (空)"
+    [11] "#11  (空)"
+    [12] "#12  (空)"
+    [13] "#13  (空)"
+    [14] "#14  (空)"
+    [15] "#15  (空)"
+    [16] "#16  (空)"
+    [17] "#17  (空)"
+    [18] "#18  (空)"
+    [19] "#19  (空)"
+    ...
+  #1501 Edit enabled text="sound\probe.wav"
+  #1502 Button enabled check=0
+  #1503 Button enabled check=0
+  #1504 Button enabled check=0
+  #-1 Static enabled text="选择槽位后输入 WAV 路径（写入 STR 表）。"
+[198-clear after]
+  #1500 ListBox enabled count=512 sel=0
+    [0] "#0  (空)"
+    [1] "#1  (空)"
+    [2] "#2  (空)"
+    [3] "#3  (空)"
+    [4] "#4  (空)"
+    [5] "#5  (空)"
+    [6] "#6  (空)"
+    [7] "#7  (空)"
+    [8] "#8  (空)"
+    [9] "#9  (空)"
+    [10] "#10  (空)"
+    [11] "#11  (空)"
+    [12] "#12  (空)"
+    [13] "#13  (空)"
+    [14] "#14  (空)"
+    [15] "#15  (空)"
+    [16] "#16  (空)"
+    [17] "#17  (空)"
+    [18] "#18  (空)"
+    [19] "#19  (空)"
+    ...
+  #1501 Edit enabled
+  #1502 Button enabled check=0
+  #1503 Button enabled check=0
+  #1504 Button enabled check=0
+  #-1 Static enabled text="选择槽位后输入 WAV 路径（写入 STR 表）。"
+[198-clear diff] diffLines=4
+baselineLines=27 currentLines=27
+-     [0] "#0  sound\probe.wav"
++     [0] "#0  (空)"
+-   #1501 Edit enabled text="sound\probe.wav"
++   #1501 Edit enabled
+[199-update before]
+  #1510 ListBox enabled count=1 sel=0
+    [0] "P1  文本消息  (空)"
+  #1511 Edit enabled
+  #1512 Button enabled check=0
+  #1513 Button enabled check=0
+  #-1 Static enabled text="仅编辑已有的文本/目标/传输行动；更新写入 STR。"
+[199-update after]
+  #1510 ListBox enabled count=1 sel=0
+    [0] "P1  文本消息  简报文本"
+  #1511 Edit enabled text="简报文本"
+  #1512 Button enabled check=0
+  #1513 Button enabled check=0
+  #-1 Static enabled text="仅编辑已有的文本/目标/传输行动；更新写入 STR。"
+[199-update diff] diffLines=4
+baselineLines=6 currentLines=6
+-     [0] "P1  文本消息  (空)"
+-   #1511 Edit enabled
++     [0] "P1  文本消息  简报文本"
++   #1511 Edit enabled text="简报文本"
+[181-new before]
+  #182 ListBox enabled count=0 sel=-1
+  #1022 ListBox enabled count=0 sel=0
+  #1100 Button enabled check=0
+  #1101 Button enabled check=0
+  #1104 Button enabled check=0
+  #1105 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #1102 Button enabled check=0
+  #1 Button enabled check=0
+  #1110 SysTreeView32 enabled text="0"
+  #-1 Static enabled text="玩家触发列表:"
+  #1113 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1022 SysListView32 enabled text="0"
+  #0 SysHeader32 enabled
+  #0 #32770 enabled hidden
+  #1123 ListBox enabled count=0 sel=-1
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1115 ListBox enabled count=0 sel=-1
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+[181-new after]
+  #182 ListBox enabled count=1 sel=0
+    [0] "触发 0  P1  [1 条件 / 0 行动]"
+  #1022 ListBox enabled count=0 sel=0
+  #1100 Button enabled check=0
+  #1101 Button enabled check=0
+  #1104 Button enabled check=0
+  #1105 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #1102 Button enabled check=0
+  #1 Button enabled check=0
+  #1110 SysTreeView32 enabled text="0"
+  #-1 Static enabled text="玩家触发列表:"
+  #1113 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1022 SysListView32 enabled text="0"
+  #0 SysHeader32 enabled
+  #0 #32770 enabled hidden
+  #1123 ListBox enabled count=1 sel=-1
+    [0] "[1] 总是  玩家 0  数量 0  单位 0  地点 #0  比较 至少"
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1115 ListBox enabled count=0 sel=-1
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+[181-new diff] diffLines=6
+baselineLines=32 currentLines=34
+-   #182 ListBox enabled count=0 sel=-1
++   #182 ListBox enabled count=1 sel=0
++     [0] "触发 0  P1  [1 条件 / 0 行动]"
+-   #1123 ListBox enabled count=0 sel=-1
++   #1123 ListBox enabled count=1 sel=-1
++     [0] "[1] 总是  玩家 0  数量 0  单位 0  地点 #0  比较 至少"
+[181-copy before]
+  #182 ListBox enabled count=1 sel=0
+    [0] "触发 0  P1  [1 条件 / 0 行动]"
+  #1022 ListBox enabled count=0 sel=0
+  #1100 Button enabled check=0
+  #1101 Button enabled check=0
+  #1104 Button enabled check=0
+  #1105 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #1102 Button enabled check=0
+  #1 Button enabled check=0
+  #1110 SysTreeView32 enabled text="0"
+  #-1 Static enabled text="玩家触发列表:"
+  #1113 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1022 SysListView32 enabled text="0"
+  #0 SysHeader32 enabled
+  #0 #32770 enabled hidden
+  #1123 ListBox enabled count=1 sel=-1
+    [0] "[1] 总是  玩家 0  数量 0  单位 0  地点 #0  比较 至少"
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1115 ListBox enabled count=0 sel=-1
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+[181-copy after]
+  #182 ListBox enabled count=2 sel=1
+    [0] "触发 0  P1  [1 条件 / 0 行动]"
+    [1] "触发 1  P1  [1 条件 / 0 行动]"
+  #1022 ListBox enabled count=0 sel=0
+  #1100 Button enabled check=0
+  #1101 Button enabled check=0
+  #1104 Button enabled check=0
+  #1105 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #1102 Button enabled check=0
+  #1 Button enabled check=0
+  #1110 SysTreeView32 enabled text="0"
+  #-1 Static enabled text="玩家触发列表:"
+  #1113 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1022 SysListView32 enabled text="0"
+  #0 SysHeader32 enabled
+  #0 #32770 enabled hidden
+  #1123 ListBox enabled count=1 sel=-1
+    [0] "[1] 总是  玩家 0  数量 0  单位 0  地点 #0  比较 至少"
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1115 ListBox enabled count=0 sel=-1
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+[181-copy diff] diffLines=3
+baselineLines=34 currentLines=35
+-   #182 ListBox enabled count=1 sel=0
++   #182 ListBox enabled count=2 sel=1
++     [1] "触发 1  P1  [1 条件 / 0 行动]"
+[181-modify before]
+  #182 ListBox enabled count=2 sel=1
+    [0] "触发 0  P1  [1 条件 / 0 行动]"
+    [1] "触发 1  P1  [1 条件 / 0 行动]"
+  #1022 ListBox enabled count=0 sel=0
+  #1100 Button enabled check=0
+  #1101 Button enabled check=0
+  #1104 Button enabled check=0
+  #1105 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #1102 Button enabled check=0
+  #1 Button enabled check=0
+  #1110 SysTreeView32 enabled text="0"
+  #-1 Static enabled text="玩家触发列表:"
+  #1113 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1022 SysListView32 enabled text="0"
+  #0 SysHeader32 enabled
+  #0 #32770 enabled hidden
+  #1123 ListBox enabled count=1 sel=-1
+    [0] "[1] 总是  玩家 0  数量 0  单位 0  地点 #0  比较 至少"
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1115 ListBox enabled count=0 sel=-1
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+[181-modify after]
+  #182 ListBox enabled hidden count=2 sel=1
+    [0] "触发 0  P1  [1 条件 / 0 行动]"
+    [1] "触发 1  P1  [1 条件 / 0 行动]"
+  #1022 ListBox enabled count=0 sel=0
+  #1100 Button enabled check=0
+  #1101 Button enabled check=0
+  #1104 Button enabled check=0
+  #1105 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #1102 Button enabled check=0
+  #1 Button enabled check=0
+  #1110 SysTreeView32 enabled hidden text="0"
+  #-1 Static enabled text="玩家触发列表:"
+  #1113 Button enabled check=0
+  #0 #32770 enabled
+  #1022 SysListView32 enabled text="0"
+  #0 SysHeader32 enabled
+  #0 #32770 enabled hidden
+  #1123 ListBox enabled count=1 sel=-1
+    [0] "[1] 总是  玩家 0  数量 0  单位 0  地点 #0  比较 至少"
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1115 ListBox enabled count=0 sel=-1
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+[181-modify diff] diffLines=6
+baselineLines=35 currentLines=35
+-   #182 ListBox enabled count=2 sel=1
++   #182 ListBox enabled hidden count=2 sel=1
+-   #1110 SysTreeView32 enabled text="0"
++   #1110 SysTreeView32 enabled hidden text="0"
+-   #0 #32770 enabled hidden
++   #0 #32770 enabled
+[181-delete before]
+  #182 ListBox enabled hidden count=2 sel=1
+    [0] "触发 0  P1  [1 条件 / 0 行动]"
+    [1] "触发 1  P1  [1 条件 / 0 行动]"
+  #1022 ListBox enabled count=0 sel=0
+  #1100 Button enabled check=0
+  #1101 Button enabled check=0
+  #1104 Button enabled check=0
+  #1105 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #1102 Button enabled check=0
+  #1 Button enabled check=0
+  #1110 SysTreeView32 enabled hidden text="0"
+  #-1 Static enabled text="玩家触发列表:"
+  #1113 Button enabled check=0
+  #0 #32770 enabled
+  #1022 SysListView32 enabled text="0"
+  #0 SysHeader32 enabled
+  #0 #32770 enabled hidden
+  #1123 ListBox enabled count=1 sel=-1
+    [0] "[1] 总是  玩家 0  数量 0  单位 0  地点 #0  比较 至少"
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1115 ListBox enabled count=0 sel=-1
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+[181-delete after]
+  #182 ListBox enabled hidden count=1 sel=0
+    [0] "触发 0  P1  [1 条件 / 0 行动]"
+  #1022 ListBox enabled count=0 sel=0
+  #1100 Button enabled check=0
+  #1101 Button enabled check=0
+  #1104 Button enabled check=0
+  #1105 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #1102 Button enabled check=0
+  #1 Button enabled check=0
+  #1110 SysTreeView32 enabled hidden text="0"
+  #-1 Static enabled text="玩家触发列表:"
+  #1113 Button enabled check=0
+  #0 #32770 enabled
+  #1022 SysListView32 enabled text="0"
+  #0 SysHeader32 enabled
+  #0 #32770 enabled hidden
+  #1123 ListBox enabled count=1 sel=-1
+    [0] "[1] 总是  玩家 0  数量 0  单位 0  地点 #0  比较 至少"
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1115 ListBox enabled count=0 sel=-1
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+[181-delete diff] diffLines=3
+baselineLines=35 currentLines=34
+-   #182 ListBox enabled hidden count=2 sel=1
++   #182 ListBox enabled hidden count=1 sel=0
+-     [1] "触发 1  P1  [1 条件 / 0 行动]"
+[193-amount before]
+  #1180 ComboBox enabled count=24 sel=23
+    [0] "从不"
+    [1] "带来"
+    [2] "倒计时"
+    [3] "对手"
+    [4] "分数"
+    [5] "击杀"
+    [6] "积累"
+    [7] "经过时间"
+    [8] "开关"
+    [9] "命令"
+    [10] "命令最多"
+    [11] "命令最多在位置"
+    [12] "命令最少"
+    [13] "命令最少在位置"
+    [14] "任务简报"
+    [15] "死亡"
+    [16] "自定义"
+    [17] "总是"
+    [18] "最低分数"
+    [19] "最多击杀"
+    ...
+  #1181 Edit enabled text="0"
+  #1182 Edit enabled text="0"
+  #1183 Edit enabled text="0"
+  #1184 Edit enabled text="0"
+  #1185 Edit enabled text="0"
+  #1186 ComboBox enabled count=3 sel=0
+    [0] "等于"
+    [1] "至多"
+    [2] "至少"
+  #1001 Edit enabled text="等于"
+  #1187 Edit enabled text="0"
+  #1188 Edit enabled text="0"
+  #-1 Static enabled text="类型"
+  #-1 Static enabled text="类型号"
+  #-1 Static enabled text="地点"
+  #-1 Static enabled text="玩家"
+  #-1 Static enabled text="数量"
+  #-1 Static enabled text="单位"
+  #-1 Static enabled text="比较"
+  #-1 Static enabled text="参数"
+  #-1 Static enabled text="属性"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[193-amount after]
+  #1180 ComboBox enabled count=24 sel=23
+    [0] "从不"
+    [1] "带来"
+    [2] "倒计时"
+    [3] "对手"
+    [4] "分数"
+    [5] "击杀"
+    [6] "积累"
+    [7] "经过时间"
+    [8] "开关"
+    [9] "命令"
+    [10] "命令最多"
+    [11] "命令最多在位置"
+    [12] "命令最少"
+    [13] "命令最少在位置"
+    [14] "任务简报"
+    [15] "死亡"
+    [16] "自定义"
+    [17] "总是"
+    [18] "最低分数"
+    [19] "最多击杀"
+    ...
+  #1181 Edit enabled text="0"
+  #1182 Edit enabled text="0"
+  #1183 Edit enabled text="0"
+  #1184 Edit enabled text="7"
+  #1185 Edit enabled text="0"
+  #1186 ComboBox enabled count=3 sel=0
+    [0] "等于"
+    [1] "至多"
+    [2] "至少"
+  #1001 Edit enabled text="等于"
+  #1187 Edit enabled text="0"
+  #1188 Edit enabled text="0"
+  #-1 Static enabled text="类型"
+  #-1 Static enabled text="类型号"
+  #-1 Static enabled text="地点"
+  #-1 Static enabled text="玩家"
+  #-1 Static enabled text="数量"
+  #-1 Static enabled text="单位"
+  #-1 Static enabled text="比较"
+  #-1 Static enabled text="参数"
+  #-1 Static enabled text="属性"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[193-amount diff] diffLines=2
+baselineLines=45 currentLines=45
+-   #1184 Edit enabled text="0"
++   #1184 Edit enabled text="7"
+[194-amount before]
+  #1190 ComboBox enabled count=58 sel=57
+    [0] "保留触发"
+    [1] "播放 WAV"
+    [2] "传输通讯"
+    [3] "创建带属性单位"
+    [4] "创建单位"
+    [5] "等待"
+    [6] "给予单位"
+    [7] "恢复计时器"
+    [8] "恢复游戏"
+    [9] "绘制"
+    [10] "击杀单位"
+    [11] "静音单位语音"
+    [12] "居中的视图"
+    [13] "排行榜电脑玩家"
+    [14] "排行榜分数"
+    [15] "排行榜击杀"
+    [16] "排行榜控制"
+    [17] "排行榜控制在位置"
+    [18] "排行榜目标分数"
+    [19] "排行榜目标击杀"
+    ...
+  #1191 Edit enabled text="0"
+  #1192 Edit enabled text="0"
+  #1193 Edit enabled text="0"
+  #1194 Edit enabled text="0"
+  #1195 Edit enabled text="0"
+  #1196 Edit enabled text="0"
+  #1197 Edit enabled text="0"
+  #1198 Edit enabled text="0"
+  #1199 Edit enabled text="0"
+  #1200 Edit enabled text="0"
+  #-1 Static enabled text="类型"
+  #-1 Static enabled text="类型号"
+  #-1 Static enabled text="地点"
+  #-1 Static enabled text="字符串"
+  #-1 Static enabled text="WAV"
+  #-1 Static enabled text="时间"
+  #-1 Static enabled text="玩家"
+  #-1 Static enabled text="目标"
+  #-1 Static enabled text="单位"
+  #-1 Static enabled text="数量"
+  #-1 Static enabled text="属性"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[194-amount after]
+  #1190 ComboBox enabled count=58 sel=57
+    [0] "保留触发"
+    [1] "播放 WAV"
+    [2] "传输通讯"
+    [3] "创建带属性单位"
+    [4] "创建单位"
+    [5] "等待"
+    [6] "给予单位"
+    [7] "恢复计时器"
+    [8] "恢复游戏"
+    [9] "绘制"
+    [10] "击杀单位"
+    [11] "静音单位语音"
+    [12] "居中的视图"
+    [13] "排行榜电脑玩家"
+    [14] "排行榜分数"
+    [15] "排行榜击杀"
+    [16] "排行榜控制"
+    [17] "排行榜控制在位置"
+    [18] "排行榜目标分数"
+    [19] "排行榜目标击杀"
+    ...
+  #1191 Edit enabled text="0"
+  #1192 Edit enabled text="0"
+  #1193 Edit enabled text="0"
+  #1194 Edit enabled text="0"
+  #1195 Edit enabled text="0"
+  #1196 Edit enabled text="0"
+  #1197 Edit enabled text="0"
+  #1198 Edit enabled text="0"
+  #1199 Edit enabled text="9"
+  #1200 Edit enabled text="0"
+  #-1 Static enabled text="类型"
+  #-1 Static enabled text="类型号"
+  #-1 Static enabled text="地点"
+  #-1 Static enabled text="字符串"
+  #-1 Static enabled text="WAV"
+  #-1 Static enabled text="时间"
+  #-1 Static enabled text="玩家"
+  #-1 Static enabled text="目标"
+  #-1 Static enabled text="单位"
+  #-1 Static enabled text="数量"
+  #-1 Static enabled text="属性"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[194-amount diff] diffLines=2
+baselineLines=45 currentLines=45
+-   #1199 Edit enabled text="0"
++   #1199 Edit enabled text="9"
+[196-player before]
+  #-1 Static enabled text="玩家槽位"
+  #1300 ListBox enabled count=12 sel=0
+    [0] "P1  未启用 / 不活动 / F1 / 红"
+    [1] "P2  未启用 / 不活动 / F1 / 蓝"
+    [2] "P3  未启用 / 不活动 / F1 / 青"
+    [3] "P4  未启用 / 不活动 / F1 / 紫"
+    [4] "P5  未启用 / 不活动 / F1 / 橙"
+    [5] "P6  未启用 / 不活动 / F1 / 棕"
+    [6] "P7  未启用 / 不活动 / F1 / 白"
+    [7] "P8  未启用 / 不活动 / F1 / 黄"
+    [8] "槽 10  未启用 / 不活动"
+    [9] "槽 11  未启用 / 不活动"
+    [10] "槽 12  未启用 / 未知(中立)"
+    [11] "槽 9  未启用 / 不活动"
+  #-1 Static enabled text="控制者:"
+  #1301 ComboBox enabled count=9 sel=0
+    [0] "Rescue Passive"
+    [1] "电脑"
+    [2] "电脑(游戏)"
+    [3] "关闭槽"
+    [4] "人类(开放槽)"
+    [5] "人类玩家"
+    [6] "未启用"
+    [7] "未使用"
+    [8] "中立"
+  #1001 Edit enabled text="Rescue Passive"
+  #-1 Static enabled text="种族:"
+  #1302 ComboBox enabled count=8 sel=7
+    [0] "不活动"
+    [1] "虫族"
+    [2] "人族"
+    [3] "神族"
+    [4] "随机"
+    [5] "未知(独立)"
+    [6] "未知(中立)"
+    [7] "用户选择"
+  #1001 Edit enabled text="用户选择"
+  #-1 Static enabled text="队伍:"
+  #1303 ComboBox enabled count=4 sel=0
+    [0] "Force 1"
+    [1] "Force 2"
+    [2] "Force 3"
+    [3] "Force 4"
+  #1001 Edit enabled text="Force 1"
+  #-1 Static enabled text="颜色:"
+  #1304 ComboBox enabled count=16 sel=0
+    [0] "白"
+    [1] "橙"
+    [2] "淡黄"
+    [3] "淡绿"
+    [4] "粉"
+    [5] "红"
+    [6] "黄"
+    [7] "蓝"
+    [8] "蓝紫"
+    [9] "绿"
+    [10] "青"
+    [11] "深青"
+    [12] "水蓝"
+    [13] "紫"
+    [14] "棕"
+    [15] "棕褐"
+  #1001 Edit enabled text="白"
+  #-1 Static enabled text="队伍(Force)"
+  #1310 ListBox enabled count=4 sel=0
+    [0] "Force 1  #0  #0"
+    [1] "Force 2  #0  #0"
+    [2] "Force 3  #0  #0"
+    [3] "Force 4  #0  #0"
+  #-1 Static enabled text="名称 STR ID:"
+  #1311 Edit enabled text="0"
+  #-1 Static enabled text="名称:"
+  #1313 Static enabled text="#0"
+  #-1 Static enabled text="标志位(0-255):"
+  #1312 Edit enabled text="0"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[196-player after]
+  #-1 Static enabled text="玩家槽位"
+  #1300 ListBox enabled count=12 sel=1
+    [0] "P1  未启用 / 不活动 / F1 / 红"
+    [1] "P2  未启用 / 不活动 / F1 / 蓝"
+    [2] "P3  未启用 / 不活动 / F1 / 青"
+    [3] "P4  未启用 / 不活动 / F1 / 紫"
+    [4] "P5  未启用 / 不活动 / F1 / 橙"
+    [5] "P6  未启用 / 不活动 / F1 / 棕"
+    [6] "P7  未启用 / 不活动 / F1 / 白"
+    [7] "P8  未启用 / 不活动 / F1 / 黄"
+    [8] "槽 10  未启用 / 不活动"
+    [9] "槽 11  未启用 / 不活动"
+    [10] "槽 12  未启用 / 未知(中立)"
+    [11] "槽 9  未启用 / 不活动"
+  #-1 Static enabled text="控制者:"
+  #1301 ComboBox enabled count=9 sel=0
+    [0] "Rescue Passive"
+    [1] "电脑"
+    [2] "电脑(游戏)"
+    [3] "关闭槽"
+    [4] "人类(开放槽)"
+    [5] "人类玩家"
+    [6] "未启用"
+    [7] "未使用"
+    [8] "中立"
+  #1001 Edit enabled text="Rescue Passive"
+  #-1 Static enabled text="种族:"
+  #1302 ComboBox enabled count=8 sel=7
+    [0] "不活动"
+    [1] "虫族"
+    [2] "人族"
+    [3] "神族"
+    [4] "随机"
+    [5] "未知(独立)"
+    [6] "未知(中立)"
+    [7] "用户选择"
+  #1001 Edit enabled text="用户选择"
+  #-1 Static enabled text="队伍:"
+  #1303 ComboBox enabled count=4 sel=0
+    [0] "Force 1"
+    [1] "Force 2"
+    [2] "Force 3"
+    [3] "Force 4"
+  #1001 Edit enabled text="Force 1"
+  #-1 Static enabled text="颜色:"
+  #1304 ComboBox enabled count=16 sel=1
+    [0] "白"
+    [1] "橙"
+    [2] "淡黄"
+    [3] "淡绿"
+    [4] "粉"
+    [5] "红"
+    [6] "黄"
+    [7] "蓝"
+    [8] "蓝紫"
+    [9] "绿"
+    [10] "青"
+    [11] "深青"
+    [12] "水蓝"
+    [13] "紫"
+    [14] "棕"
+    [15] "棕褐"
+  #1001 Edit enabled text="橙"
+  #-1 Static enabled text="队伍(Force)"
+  #1310 ListBox enabled count=4 sel=0
+    [0] "Force 1  #0  #0"
+    [1] "Force 2  #0  #0"
+    [2] "Force 3  #0  #0"
+    [3] "Force 4  #0  #0"
+  #-1 Static enabled text="名称 STR ID:"
+  #1311 Edit enabled text="0"
+  #-1 Static enabled text="名称:"
+  #1313 Static enabled text="#0"
+  #-1 Static enabled text="标志位(0-255):"
+  #1312 Edit enabled text="0"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[196-player diff] diffLines=6
+baselineLines=77 currentLines=77
+-   #1300 ListBox enabled count=12 sel=0
++   #1300 ListBox enabled count=12 sel=1
+-   #1304 ComboBox enabled count=16 sel=0
++   #1304 ComboBox enabled count=16 sel=1
+-   #1001 Edit enabled text="白"
++   #1001 Edit enabled text="橙"
+[196-controller before]
+  #-1 Static enabled text="玩家槽位"
+  #1300 ListBox enabled count=12 sel=1
+    [0] "P1  未启用 / 不活动 / F1 / 红"
+    [1] "P2  未启用 / 不活动 / F1 / 蓝"
+    [2] "P3  未启用 / 不活动 / F1 / 青"
+    [3] "P4  未启用 / 不活动 / F1 / 紫"
+    [4] "P5  未启用 / 不活动 / F1 / 橙"
+    [5] "P6  未启用 / 不活动 / F1 / 棕"
+    [6] "P7  未启用 / 不活动 / F1 / 白"
+    [7] "P8  未启用 / 不活动 / F1 / 黄"
+    [8] "槽 10  未启用 / 不活动"
+    [9] "槽 11  未启用 / 不活动"
+    [10] "槽 12  未启用 / 未知(中立)"
+    [11] "槽 9  未启用 / 不活动"
+  #-1 Static enabled text="控制者:"
+  #1301 ComboBox enabled count=9 sel=0
+    [0] "Rescue Passive"
+    [1] "电脑"
+    [2] "电脑(游戏)"
+    [3] "关闭槽"
+    [4] "人类(开放槽)"
+    [5] "人类玩家"
+    [6] "未启用"
+    [7] "未使用"
+    [8] "中立"
+  #1001 Edit enabled text="Rescue Passive"
+  #-1 Static enabled text="种族:"
+  #1302 ComboBox enabled count=8 sel=7
+    [0] "不活动"
+    [1] "虫族"
+    [2] "人族"
+    [3] "神族"
+    [4] "随机"
+    [5] "未知(独立)"
+    [6] "未知(中立)"
+    [7] "用户选择"
+  #1001 Edit enabled text="用户选择"
+  #-1 Static enabled text="队伍:"
+  #1303 ComboBox enabled count=4 sel=0
+    [0] "Force 1"
+    [1] "Force 2"
+    [2] "Force 3"
+    [3] "Force 4"
+  #1001 Edit enabled text="Force 1"
+  #-1 Static enabled text="颜色:"
+  #1304 ComboBox enabled count=16 sel=1
+    [0] "白"
+    [1] "橙"
+    [2] "淡黄"
+    [3] "淡绿"
+    [4] "粉"
+    [5] "红"
+    [6] "黄"
+    [7] "蓝"
+    [8] "蓝紫"
+    [9] "绿"
+    [10] "青"
+    [11] "深青"
+    [12] "水蓝"
+    [13] "紫"
+    [14] "棕"
+    [15] "棕褐"
+  #1001 Edit enabled text="橙"
+  #-1 Static enabled text="队伍(Force)"
+  #1310 ListBox enabled count=4 sel=0
+    [0] "Force 1  #0  #0"
+    [1] "Force 2  #0  #0"
+    [2] "Force 3  #0  #0"
+    [3] "Force 4  #0  #0"
+  #-1 Static enabled text="名称 STR ID:"
+  #1311 Edit enabled text="0"
+  #-1 Static enabled text="名称:"
+  #1313 Static enabled text="#0"
+  #-1 Static enabled text="标志位(0-255):"
+  #1312 Edit enabled text="0"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[196-controller after]
+  #-1 Static enabled text="玩家槽位"
+  #1300 ListBox enabled count=12 sel=1
+    [0] "P1  未启用 / 不活动 / F1 / 红"
+    [1] "P2  电脑(游戏) / 不活动 / F1 / 蓝"
+    [2] "P3  未启用 / 不活动 / F1 / 青"
+    [3] "P4  未启用 / 不活动 / F1 / 紫"
+    [4] "P5  未启用 / 不活动 / F1 / 橙"
+    [5] "P6  未启用 / 不活动 / F1 / 棕"
+    [6] "P7  未启用 / 不活动 / F1 / 白"
+    [7] "P8  未启用 / 不活动 / F1 / 黄"
+    [8] "槽 10  未启用 / 不活动"
+    [9] "槽 11  未启用 / 不活动"
+    [10] "槽 12  未启用 / 未知(中立)"
+    [11] "槽 9  未启用 / 不活动"
+  #-1 Static enabled text="控制者:"
+  #1301 ComboBox enabled count=9 sel=1
+    [0] "Rescue Passive"
+    [1] "电脑"
+    [2] "电脑(游戏)"
+    [3] "关闭槽"
+    [4] "人类(开放槽)"
+    [5] "人类玩家"
+    [6] "未启用"
+    [7] "未使用"
+    [8] "中立"
+  #1001 Edit enabled text="电脑"
+  #-1 Static enabled text="种族:"
+  #1302 ComboBox enabled count=8 sel=7
+    [0] "不活动"
+    [1] "虫族"
+    [2] "人族"
+    [3] "神族"
+    [4] "随机"
+    [5] "未知(独立)"
+    [6] "未知(中立)"
+    [7] "用户选择"
+  #1001 Edit enabled text="用户选择"
+  #-1 Static enabled text="队伍:"
+  #1303 ComboBox enabled count=4 sel=0
+    [0] "Force 1"
+    [1] "Force 2"
+    [2] "Force 3"
+    [3] "Force 4"
+  #1001 Edit enabled text="Force 1"
+  #-1 Static enabled text="颜色:"
+  #1304 ComboBox enabled count=16 sel=1
+    [0] "白"
+    [1] "橙"
+    [2] "淡黄"
+    [3] "淡绿"
+    [4] "粉"
+    [5] "红"
+    [6] "黄"
+    [7] "蓝"
+    [8] "蓝紫"
+    [9] "绿"
+    [10] "青"
+    [11] "深青"
+    [12] "水蓝"
+    [13] "紫"
+    [14] "棕"
+    [15] "棕褐"
+  #1001 Edit enabled text="橙"
+  #-1 Static enabled text="队伍(Force)"
+  #1310 ListBox enabled count=4 sel=0
+    [0] "Force 1  #0  #0"
+    [1] "Force 2  #0  #0"
+    [2] "Force 3  #0  #0"
+    [3] "Force 4  #0  #0"
+  #-1 Static enabled text="名称 STR ID:"
+  #1311 Edit enabled text="0"
+  #-1 Static enabled text="名称:"
+  #1313 Static enabled text="#0"
+  #-1 Static enabled text="标志位(0-255):"
+  #1312 Edit enabled text="0"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[196-controller diff] diffLines=6
+baselineLines=77 currentLines=77
+-     [1] "P2  未启用 / 不活动 / F1 / 蓝"
++     [1] "P2  电脑(游戏) / 不活动 / F1 / 蓝"
+-   #1301 ComboBox enabled count=9 sel=0
++   #1301 ComboBox enabled count=9 sel=1
+-   #1001 Edit enabled text="Rescue Passive"
++   #1001 Edit enabled text="电脑"
+[196-force before]
+  #-1 Static enabled text="玩家槽位"
+  #1300 ListBox enabled count=12 sel=1
+    [0] "P1  未启用 / 不活动 / F1 / 红"
+    [1] "P2  电脑(游戏) / 不活动 / F1 / 蓝"
+    [2] "P3  未启用 / 不活动 / F1 / 青"
+    [3] "P4  未启用 / 不活动 / F1 / 紫"
+    [4] "P5  未启用 / 不活动 / F1 / 橙"
+    [5] "P6  未启用 / 不活动 / F1 / 棕"
+    [6] "P7  未启用 / 不活动 / F1 / 白"
+    [7] "P8  未启用 / 不活动 / F1 / 黄"
+    [8] "槽 10  未启用 / 不活动"
+    [9] "槽 11  未启用 / 不活动"
+    [10] "槽 12  未启用 / 未知(中立)"
+    [11] "槽 9  未启用 / 不活动"
+  #-1 Static enabled text="控制者:"
+  #1301 ComboBox enabled count=9 sel=1
+    [0] "Rescue Passive"
+    [1] "电脑"
+    [2] "电脑(游戏)"
+    [3] "关闭槽"
+    [4] "人类(开放槽)"
+    [5] "人类玩家"
+    [6] "未启用"
+    [7] "未使用"
+    [8] "中立"
+  #1001 Edit enabled text="电脑"
+  #-1 Static enabled text="种族:"
+  #1302 ComboBox enabled count=8 sel=7
+    [0] "不活动"
+    [1] "虫族"
+    [2] "人族"
+    [3] "神族"
+    [4] "随机"
+    [5] "未知(独立)"
+    [6] "未知(中立)"
+    [7] "用户选择"
+  #1001 Edit enabled text="用户选择"
+  #-1 Static enabled text="队伍:"
+  #1303 ComboBox enabled count=4 sel=0
+    [0] "Force 1"
+    [1] "Force 2"
+    [2] "Force 3"
+    [3] "Force 4"
+  #1001 Edit enabled text="Force 1"
+  #-1 Static enabled text="颜色:"
+  #1304 ComboBox enabled count=16 sel=1
+    [0] "白"
+    [1] "橙"
+    [2] "淡黄"
+    [3] "淡绿"
+    [4] "粉"
+    [5] "红"
+    [6] "黄"
+    [7] "蓝"
+    [8] "蓝紫"
+    [9] "绿"
+    [10] "青"
+    [11] "深青"
+    [12] "水蓝"
+    [13] "紫"
+    [14] "棕"
+    [15] "棕褐"
+  #1001 Edit enabled text="橙"
+  #-1 Static enabled text="队伍(Force)"
+  #1310 ListBox enabled count=4 sel=0
+    [0] "Force 1  #0  #0"
+    [1] "Force 2  #0  #0"
+    [2] "Force 3  #0  #0"
+    [3] "Force 4  #0  #0"
+  #-1 Static enabled text="名称 STR ID:"
+  #1311 Edit enabled text="0"
+  #-1 Static enabled text="名称:"
+  #1313 Static enabled text="#0"
+  #-1 Static enabled text="标志位(0-255):"
+  #1312 Edit enabled text="0"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[196-force after]
+  #-1 Static enabled text="玩家槽位"
+  #1300 ListBox enabled count=12 sel=1
+    [0] "P1  未启用 / 不活动 / F1 / 红"
+    [1] "P2  电脑(游戏) / 不活动 / F1 / 蓝"
+    [2] "P3  未启用 / 不活动 / F1 / 青"
+    [3] "P4  未启用 / 不活动 / F1 / 紫"
+    [4] "P5  未启用 / 不活动 / F1 / 橙"
+    [5] "P6  未启用 / 不活动 / F1 / 棕"
+    [6] "P7  未启用 / 不活动 / F1 / 白"
+    [7] "P8  未启用 / 不活动 / F1 / 黄"
+    [8] "槽 10  未启用 / 不活动"
+    [9] "槽 11  未启用 / 不活动"
+    [10] "槽 12  未启用 / 未知(中立)"
+    [11] "槽 9  未启用 / 不活动"
+  #-1 Static enabled text="控制者:"
+  #1301 ComboBox enabled count=9 sel=1
+    [0] "Rescue Passive"
+    [1] "电脑"
+    [2] "电脑(游戏)"
+    [3] "关闭槽"
+    [4] "人类(开放槽)"
+    [5] "人类玩家"
+    [6] "未启用"
+    [7] "未使用"
+    [8] "中立"
+  #1001 Edit enabled text="电脑"
+  #-1 Static enabled text="种族:"
+  #1302 ComboBox enabled count=8 sel=7
+    [0] "不活动"
+    [1] "虫族"
+    [2] "人族"
+    [3] "神族"
+    [4] "随机"
+    [5] "未知(独立)"
+    [6] "未知(中立)"
+    [7] "用户选择"
+  #1001 Edit enabled text="用户选择"
+  #-1 Static enabled text="队伍:"
+  #1303 ComboBox enabled count=4 sel=0
+    [0] "Force 1"
+    [1] "Force 2"
+    [2] "Force 3"
+    [3] "Force 4"
+  #1001 Edit enabled text="Force 1"
+  #-1 Static enabled text="颜色:"
+  #1304 ComboBox enabled count=16 sel=1
+    [0] "白"
+    [1] "橙"
+    [2] "淡黄"
+    [3] "淡绿"
+    [4] "粉"
+    [5] "红"
+    [6] "黄"
+    [7] "蓝"
+    [8] "蓝紫"
+    [9] "绿"
+    [10] "青"
+    [11] "深青"
+    [12] "水蓝"
+    [13] "紫"
+    [14] "棕"
+    [15] "棕褐"
+  #1001 Edit enabled text="橙"
+  #-1 Static enabled text="队伍(Force)"
+  #1310 ListBox enabled count=4 sel=1
+    [0] "Force 1  #0  #0"
+    [1] "Force 2  #0  #0"
+    [2] "Force 3  #0  #0"
+    [3] "Force 4  #0  #0"
+  #-1 Static enabled text="名称 STR ID:"
+  #1311 Edit enabled text="0"
+  #-1 Static enabled text="名称:"
+  #1313 Static enabled text="#0"
+  #-1 Static enabled text="标志位(0-255):"
+  #1312 Edit enabled text="0"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[196-force diff] diffLines=2
+baselineLines=77 currentLines=77
+-   #1310 ListBox enabled count=4 sel=0
++   #1310 ListBox enabled count=4 sel=1
+[197-upgrade before]
+  #-1 Static enabled text="数据版本:"
+  #1400 ComboBox enabled count=2 sel=0
+    [0] "原版 (UPGR / PTEC)"
+    [1] "资料片 (PUPx / PTEx)"
+  #1001 Edit enabled text="原版 (UPGR / PTEC)"
+  #-1 Static enabled text="玩家:"
+  #1401 ComboBox enabled count=13 sel=0
+    [0] "Player 1"
+    [1] "Player 10"
+    [2] "Player 11"
+    [3] "Player 12"
+    [4] "Player 2"
+    [5] "Player 3"
+    [6] "Player 4"
+    [7] "Player 5"
+    [8] "Player 6"
+    [9] "Player 7"
+    [10] "Player 8"
+    [11] "Player 9"
+    [12] "全局默认"
+  #1001 Edit enabled text="Player 1"
+  #-1 Static enabled text="升级"
+  #-1 Static enabled text="科技"
+  #1402 ListBox enabled count=46 sel=0
+    [0] "升级 0"
+    [1] "升级 1"
+    [2] "升级 10"
+    [3] "升级 11"
+    [4] "升级 12"
+    [5] "升级 13"
+    [6] "升级 14"
+    [7] "升级 15"
+    [8] "升级 16"
+    [9] "升级 17"
+    [10] "升级 18"
+    [11] "升级 19"
+    [12] "升级 2"
+    [13] "升级 20"
+    [14] "升级 21"
+    [15] "升级 22"
+    [16] "升级 23"
+    [17] "升级 24"
+    [18] "升级 25"
+    [19] "升级 26"
+    ...
+  #1403 ListBox enabled count=24 sel=0
+    [0] "科技 0"
+    [1] "科技 1"
+    [2] "科技 10"
+    [3] "科技 11"
+    [4] "科技 12"
+    [5] "科技 13"
+    [6] "科技 14"
+    [7] "科技 15"
+    [8] "科技 16"
+    [9] "科技 17"
+    [10] "科技 18"
+    [11] "科技 19"
+    [12] "科技 2"
+    [13] "科技 20"
+    [14] "科技 21"
+    [15] "科技 22"
+    [16] "科技 23"
+    [17] "科技 3"
+    [18] "科技 4"
+    [19] "科技 5"
+    ...
+  #-1 Static enabled text="最大/可用:"
+  #1404 Edit enabled text="0"
+  #-1 Static enabled text="初始:"
+  #1405 Edit enabled text="0"
+  #1406 Button disabled check=0
+  #1407 Button enabled check=0
+  #1408 Button enabled check=0
+  #1409 Button disabled check=0
+  #-1 Static enabled text="升级：最大等级/初始等级；科技：可用/初始拥有。玩家=全局默认时编辑全局值。"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[197-upgrade after]
+  #-1 Static enabled text="数据版本:"
+  #1400 ComboBox enabled count=2 sel=0
+    [0] "原版 (UPGR / PTEC)"
+    [1] "资料片 (PUPx / PTEx)"
+  #1001 Edit enabled text="原版 (UPGR / PTEC)"
+  #-1 Static enabled text="玩家:"
+  #1401 ComboBox enabled count=13 sel=0
+    [0] "Player 1"
+    [1] "Player 10"
+    [2] "Player 11"
+    [3] "Player 12"
+    [4] "Player 2"
+    [5] "Player 3"
+    [6] "Player 4"
+    [7] "Player 5"
+    [8] "Player 6"
+    [9] "Player 7"
+    [10] "Player 8"
+    [11] "Player 9"
+    [12] "全局默认"
+  #1001 Edit enabled text="Player 1"
+  #-1 Static enabled text="升级"
+  #-1 Static enabled text="科技"
+  #1402 ListBox enabled count=46 sel=1
+    [0] "升级 0"
+    [1] "升级 1"
+    [2] "升级 10"
+    [3] "升级 11"
+    [4] "升级 12"
+    [5] "升级 13"
+    [6] "升级 14"
+    [7] "升级 15"
+    [8] "升级 16"
+    [9] "升级 17"
+    [10] "升级 18"
+    [11] "升级 19"
+    [12] "升级 2"
+    [13] "升级 20"
+    [14] "升级 21"
+    [15] "升级 22"
+    [16] "升级 23"
+    [17] "升级 24"
+    [18] "升级 25"
+    [19] "升级 26"
+    ...
+  #1403 ListBox enabled count=24 sel=0
+    [0] "科技 0"
+    [1] "科技 1"
+    [2] "科技 10"
+    [3] "科技 11"
+    [4] "科技 12"
+    [5] "科技 13"
+    [6] "科技 14"
+    [7] "科技 15"
+    [8] "科技 16"
+    [9] "科技 17"
+    [10] "科技 18"
+    [11] "科技 19"
+    [12] "科技 2"
+    [13] "科技 20"
+    [14] "科技 21"
+    [15] "科技 22"
+    [16] "科技 23"
+    [17] "科技 3"
+    [18] "科技 4"
+    [19] "科技 5"
+    ...
+  #-1 Static enabled text="最大/可用:"
+  #1404 Edit enabled text="0"
+  #-1 Static enabled text="初始:"
+  #1405 Edit enabled text="0"
+  #1406 Button disabled check=0
+  #1407 Button enabled check=0
+  #1408 Button enabled check=0
+  #1409 Button disabled check=0
+  #-1 Static enabled text="升级：最大等级/初始等级；科技：可用/初始拥有。玩家=全局默认时编辑全局值。"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[197-upgrade diff] diffLines=2
+baselineLines=78 currentLines=78
+-   #1402 ListBox enabled count=46 sel=0
++   #1402 ListBox enabled count=46 sel=1
+[197-player before]
+  #-1 Static enabled text="数据版本:"
+  #1400 ComboBox enabled count=2 sel=0
+    [0] "原版 (UPGR / PTEC)"
+    [1] "资料片 (PUPx / PTEx)"
+  #1001 Edit enabled text="原版 (UPGR / PTEC)"
+  #-1 Static enabled text="玩家:"
+  #1401 ComboBox enabled count=13 sel=0
+    [0] "Player 1"
+    [1] "Player 10"
+    [2] "Player 11"
+    [3] "Player 12"
+    [4] "Player 2"
+    [5] "Player 3"
+    [6] "Player 4"
+    [7] "Player 5"
+    [8] "Player 6"
+    [9] "Player 7"
+    [10] "Player 8"
+    [11] "Player 9"
+    [12] "全局默认"
+  #1001 Edit enabled text="Player 1"
+  #-1 Static enabled text="升级"
+  #-1 Static enabled text="科技"
+  #1402 ListBox enabled count=46 sel=1
+    [0] "升级 0"
+    [1] "升级 1"
+    [2] "升级 10"
+    [3] "升级 11"
+    [4] "升级 12"
+    [5] "升级 13"
+    [6] "升级 14"
+    [7] "升级 15"
+    [8] "升级 16"
+    [9] "升级 17"
+    [10] "升级 18"
+    [11] "升级 19"
+    [12] "升级 2"
+    [13] "升级 20"
+    [14] "升级 21"
+    [15] "升级 22"
+    [16] "升级 23"
+    [17] "升级 24"
+    [18] "升级 25"
+    [19] "升级 26"
+    ...
+  #1403 ListBox enabled count=24 sel=0
+    [0] "科技 0"
+    [1] "科技 1"
+    [2] "科技 10"
+    [3] "科技 11"
+    [4] "科技 12"
+    [5] "科技 13"
+    [6] "科技 14"
+    [7] "科技 15"
+    [8] "科技 16"
+    [9] "科技 17"
+    [10] "科技 18"
+    [11] "科技 19"
+    [12] "科技 2"
+    [13] "科技 20"
+    [14] "科技 21"
+    [15] "科技 22"
+    [16] "科技 23"
+    [17] "科技 3"
+    [18] "科技 4"
+    [19] "科技 5"
+    ...
+  #-1 Static enabled text="最大/可用:"
+  #1404 Edit enabled text="0"
+  #-1 Static enabled text="初始:"
+  #1405 Edit enabled text="0"
+  #1406 Button disabled check=0
+  #1407 Button enabled check=0
+  #1408 Button enabled check=0
+  #1409 Button disabled check=0
+  #-1 Static enabled text="升级：最大等级/初始等级；科技：可用/初始拥有。玩家=全局默认时编辑全局值。"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[197-player after]
+  #-1 Static enabled text="数据版本:"
+  #1400 ComboBox enabled count=2 sel=0
+    [0] "原版 (UPGR / PTEC)"
+    [1] "资料片 (PUPx / PTEx)"
+  #1001 Edit enabled text="原版 (UPGR / PTEC)"
+  #-1 Static enabled text="玩家:"
+  #1401 ComboBox enabled count=13 sel=1
+    [0] "Player 1"
+    [1] "Player 10"
+    [2] "Player 11"
+    [3] "Player 12"
+    [4] "Player 2"
+    [5] "Player 3"
+    [6] "Player 4"
+    [7] "Player 5"
+    [8] "Player 6"
+    [9] "Player 7"
+    [10] "Player 8"
+    [11] "Player 9"
+    [12] "全局默认"
+  #1001 Edit enabled text="Player 10"
+  #-1 Static enabled text="升级"
+  #-1 Static enabled text="科技"
+  #1402 ListBox enabled count=46 sel=1
+    [0] "升级 0"
+    [1] "升级 1"
+    [2] "升级 10"
+    [3] "升级 11"
+    [4] "升级 12"
+    [5] "升级 13"
+    [6] "升级 14"
+    [7] "升级 15"
+    [8] "升级 16"
+    [9] "升级 17"
+    [10] "升级 18"
+    [11] "升级 19"
+    [12] "升级 2"
+    [13] "升级 20"
+    [14] "升级 21"
+    [15] "升级 22"
+    [16] "升级 23"
+    [17] "升级 24"
+    [18] "升级 25"
+    [19] "升级 26"
+    ...
+  #1403 ListBox enabled count=24 sel=0
+    [0] "科技 0"
+    [1] "科技 1"
+    [2] "科技 10"
+    [3] "科技 11"
+    [4] "科技 12"
+    [5] "科技 13"
+    [6] "科技 14"
+    [7] "科技 15"
+    [8] "科技 16"
+    [9] "科技 17"
+    [10] "科技 18"
+    [11] "科技 19"
+    [12] "科技 2"
+    [13] "科技 20"
+    [14] "科技 21"
+    [15] "科技 22"
+    [16] "科技 23"
+    [17] "科技 3"
+    [18] "科技 4"
+    [19] "科技 5"
+    ...
+  #-1 Static enabled text="最大/可用:"
+  #1404 Edit enabled text="0"
+  #-1 Static enabled text="初始:"
+  #1405 Edit enabled text="0"
+  #1406 Button enabled check=1
+  #1407 Button enabled check=0
+  #1408 Button enabled check=0
+  #1409 Button enabled check=1
+  #-1 Static enabled text="升级：最大等级/初始等级；科技：可用/初始拥有。玩家=全局默认时编辑全局值。"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[197-player diff] diffLines=8
+baselineLines=78 currentLines=78
+-   #1401 ComboBox enabled count=13 sel=0
++   #1401 ComboBox enabled count=13 sel=1
+-   #1001 Edit enabled text="Player 1"
++   #1001 Edit enabled text="Player 10"
+-   #1406 Button disabled check=0
++   #1406 Button enabled check=1
+-   #1409 Button disabled check=0
++   #1409 Button enabled check=1
+[197-defaults before]
+  #-1 Static enabled text="数据版本:"
+  #1400 ComboBox enabled count=2 sel=0
+    [0] "原版 (UPGR / PTEC)"
+    [1] "资料片 (PUPx / PTEx)"
+  #1001 Edit enabled text="原版 (UPGR / PTEC)"
+  #-1 Static enabled text="玩家:"
+  #1401 ComboBox enabled count=13 sel=1
+    [0] "Player 1"
+    [1] "Player 10"
+    [2] "Player 11"
+    [3] "Player 12"
+    [4] "Player 2"
+    [5] "Player 3"
+    [6] "Player 4"
+    [7] "Player 5"
+    [8] "Player 6"
+    [9] "Player 7"
+    [10] "Player 8"
+    [11] "Player 9"
+    [12] "全局默认"
+  #1001 Edit enabled text="Player 10"
+  #-1 Static enabled text="升级"
+  #-1 Static enabled text="科技"
+  #1402 ListBox enabled count=46 sel=1
+    [0] "升级 0"
+    [1] "升级 1"
+    [2] "升级 10"
+    [3] "升级 11"
+    [4] "升级 12"
+    [5] "升级 13"
+    [6] "升级 14"
+    [7] "升级 15"
+    [8] "升级 16"
+    [9] "升级 17"
+    [10] "升级 18"
+    [11] "升级 19"
+    [12] "升级 2"
+    [13] "升级 20"
+    [14] "升级 21"
+    [15] "升级 22"
+    [16] "升级 23"
+    [17] "升级 24"
+    [18] "升级 25"
+    [19] "升级 26"
+    ...
+  #1403 ListBox enabled count=24 sel=0
+    [0] "科技 0"
+    [1] "科技 1"
+    [2] "科技 10"
+    [3] "科技 11"
+    [4] "科技 12"
+    [5] "科技 13"
+    [6] "科技 14"
+    [7] "科技 15"
+    [8] "科技 16"
+    [9] "科技 17"
+    [10] "科技 18"
+    [11] "科技 19"
+    [12] "科技 2"
+    [13] "科技 20"
+    [14] "科技 21"
+    [15] "科技 22"
+    [16] "科技 23"
+    [17] "科技 3"
+    [18] "科技 4"
+    [19] "科技 5"
+    ...
+  #-1 Static enabled text="最大/可用:"
+  #1404 Edit enabled text="0"
+  #-1 Static enabled text="初始:"
+  #1405 Edit enabled text="0"
+  #1406 Button enabled check=1
+  #1407 Button enabled check=0
+  #1408 Button enabled check=0
+  #1409 Button enabled check=1
+  #-1 Static enabled text="升级：最大等级/初始等级；科技：可用/初始拥有。玩家=全局默认时编辑全局值。"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[197-defaults after]
+  #-1 Static enabled text="数据版本:"
+  #1400 ComboBox enabled count=2 sel=0
+    [0] "原版 (UPGR / PTEC)"
+    [1] "资料片 (PUPx / PTEx)"
+  #1001 Edit enabled text="原版 (UPGR / PTEC)"
+  #-1 Static enabled text="玩家:"
+  #1401 ComboBox enabled count=13 sel=1
+    [0] "Player 1"
+    [1] "Player 10"
+    [2] "Player 11"
+    [3] "Player 12"
+    [4] "Player 2"
+    [5] "Player 3"
+    [6] "Player 4"
+    [7] "Player 5"
+    [8] "Player 6"
+    [9] "Player 7"
+    [10] "Player 8"
+    [11] "Player 9"
+    [12] "全局默认"
+  #1001 Edit enabled text="Player 10"
+  #-1 Static enabled text="升级"
+  #-1 Static enabled text="科技"
+  #1402 ListBox enabled count=46 sel=1
+    [0] "升级 0"
+    [1] "升级 1"
+    [2] "升级 10"
+    [3] "升级 11"
+    [4] "升级 12"
+    [5] "升级 13"
+    [6] "升级 14"
+    [7] "升级 15"
+    [8] "升级 16"
+    [9] "升级 17"
+    [10] "升级 18"
+    [11] "升级 19"
+    [12] "升级 2"
+    [13] "升级 20"
+    [14] "升级 21"
+    [15] "升级 22"
+    [16] "升级 23"
+    [17] "升级 24"
+    [18] "升级 25"
+    [19] "升级 26"
+    ...
+  #1403 ListBox enabled count=24 sel=0
+    [0] "科技 0"
+    [1] "科技 1"
+    [2] "科技 10"
+    [3] "科技 11"
+    [4] "科技 12"
+    [5] "科技 13"
+    [6] "科技 14"
+    [7] "科技 15"
+    [8] "科技 16"
+    [9] "科技 17"
+    [10] "科技 18"
+    [11] "科技 19"
+    [12] "科技 2"
+    [13] "科技 20"
+    [14] "科技 21"
+    [15] "科技 22"
+    [16] "科技 23"
+    [17] "科技 3"
+    [18] "科技 4"
+    [19] "科技 5"
+    ...
+  #-1 Static enabled text="最大/可用:"
+  #1404 Edit enabled text="0"
+  #-1 Static enabled text="初始:"
+  #1405 Edit enabled text="0"
+  #1406 Button enabled check=0
+  #1407 Button enabled check=0
+  #1408 Button enabled check=0
+  #1409 Button enabled check=1
+  #-1 Static enabled text="升级：最大等级/初始等级；科技：可用/初始拥有。玩家=全局默认时编辑全局值。"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[197-defaults diff] diffLines=2
+baselineLines=78 currentLines=78
+-   #1406 Button enabled check=1
++   #1406 Button enabled check=0

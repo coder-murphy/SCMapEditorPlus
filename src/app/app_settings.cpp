@@ -109,6 +109,18 @@ void AppSettings::SetAutoBackupMinutes(int minutes) {
     autoBackupMinutes_ = minutes;
 }
 
+namespace {
+int ClampLimit(int value) {
+    if (value < 0) value = 0;
+    if (value > 100000) value = 100000;
+    return value;
+}
+}  // namespace
+
+void AppSettings::SetMaxUnits(int value) { maxUnits_ = ClampLimit(value); }
+void AppSettings::SetMaxSpUnits(int value) { maxSpUnits_ = ClampLimit(value); }
+void AppSettings::SetMaxLocations(int value) { maxLocations_ = ClampLimit(value); }
+
 void AppSettings::AddRecentMap(const std::wstring& path) {
     if (path.empty()) return;
     for (auto it = recent_.begin(); it != recent_.end(); ++it) {
@@ -137,10 +149,18 @@ bool AppSettings::Load() {
     defaultGas_ = 1;
     gameDir_.clear();
     mpqFiles_.clear();
+    brushFiles_.clear();
     backupEnabled_ = true;
     backupCount_ = 5;
     autoBackupEnabled_ = false;
     autoBackupMinutes_ = 5;
+    startMaximized_ = false;
+    loadFitZoom_ = true;
+    maxUnits_ = 3400;
+    maxSpUnits_ = 1700;
+    maxLocations_ = 500;
+    triggerBaseNames_ = false;
+    singleFile_ = true;
     view_ = ViewState{};
     soundEnabled_ = true;
     autoCheckUpdate_ = false;
@@ -158,6 +178,7 @@ bool AppSettings::Load() {
     std::size_t pos = 0;
     std::vector<std::wstring> slots(kMaxRecent);
     std::vector<std::wstring> mpqSlots;
+    std::vector<std::wstring> brushSlots;
     while (pos < text.size()) {
         std::size_t nl = text.find('\n', pos);
         if (nl == std::string::npos) nl = text.size();
@@ -182,6 +203,15 @@ bool AppSettings::Load() {
                 }
                 mpqSlots[static_cast<std::size_t>(idx)] = value;
             }
+        } else if (key.compare(0, 5, "brush") == 0 && key.size() > 5 &&
+                   key[5] >= '0' && key[5] <= '9') {
+            const int idx = std::atoi(key.c_str() + 5);
+            if (idx >= 0 && idx < 64 && !value.empty()) {
+                if (brushSlots.size() <= static_cast<std::size_t>(idx)) {
+                    brushSlots.resize(static_cast<std::size_t>(idx) + 1);
+                }
+                brushSlots[static_cast<std::size_t>(idx)] = value;
+            }
         } else if (key == "undoLimit") {
             SetUndoLimit(std::atoi(line.c_str() + eq + 1));
         } else if (key == "defaultMineral") {
@@ -202,6 +232,20 @@ bool AppSettings::Load() {
             autoBackupEnabled_ = std::atoi(line.c_str() + eq + 1) != 0;
         } else if (key == "autoBackupMinutes") {
             SetAutoBackupMinutes(std::atoi(line.c_str() + eq + 1));
+        } else if (key == "startMaximized") {
+            startMaximized_ = std::atoi(line.c_str() + eq + 1) != 0;
+        } else if (key == "loadFitZoom") {
+            loadFitZoom_ = std::atoi(line.c_str() + eq + 1) != 0;
+        } else if (key == "maxUnits") {
+            SetMaxUnits(std::atoi(line.c_str() + eq + 1));
+        } else if (key == "maxSpUnits") {
+            SetMaxSpUnits(std::atoi(line.c_str() + eq + 1));
+        } else if (key == "maxLocations") {
+            SetMaxLocations(std::atoi(line.c_str() + eq + 1));
+        } else if (key == "triggerBaseNames") {
+            triggerBaseNames_ = std::atoi(line.c_str() + eq + 1) != 0;
+        } else if (key == "singleFile") {
+            singleFile_ = std::atoi(line.c_str() + eq + 1) != 0;
         } else if (key.compare(0, 5, "view.") == 0) {
             const std::string sub = key.substr(5);
             const int iv = std::atoi(line.c_str() + eq + 1);
@@ -209,6 +253,9 @@ bool AppSettings::Load() {
             else if (sub == "gridEnabled") view_.gridEnabled = iv != 0;
             else if (sub == "gridCellX") view_.gridCellX = ClampInt(iv, 1, 256);
             else if (sub == "gridCellY") view_.gridCellY = ClampInt(iv, 1, 256);
+            else if (sub == "staticGridEnabled") view_.staticGridEnabled = iv != 0;
+            else if (sub == "staticGridCellX") view_.staticGridCellX = ClampInt(iv, 1, 256);
+            else if (sub == "staticGridCellY") view_.staticGridCellY = ClampInt(iv, 1, 256);
             else if (sub == "gridColorId") view_.gridColorId = iv;
             else if (sub == "gridColorValue") view_.gridColorValue = static_cast<unsigned>(iv);
             else if (sub == "layer") view_.layer = ClampInt(iv, 0, 5);
@@ -231,6 +278,9 @@ bool AppSettings::Load() {
     for (const std::wstring& p : mpqSlots) {
         if (!p.empty()) mpqFiles_.push_back(p);
     }
+    for (const std::wstring& p : brushSlots) {
+        if (!p.empty()) brushFiles_.push_back(p);
+    }
     return true;
 }
 
@@ -249,6 +299,10 @@ bool AppSettings::Save() {
     for (std::size_t i = 0; i < mpqFiles_.size(); i++) {
         out += "mpq" + std::to_string(i) + "=" + WideToUtf8(mpqFiles_[i]) + "\n";
     }
+    out += "brushCount=" + std::to_string(brushFiles_.size()) + "\n";
+    for (std::size_t i = 0; i < brushFiles_.size(); i++) {
+        out += "brush" + std::to_string(i) + "=" + WideToUtf8(brushFiles_[i]) + "\n";
+    }
     out += "defaultMineral=" + std::to_string(defaultMineral_) + "\n";
     out += "defaultGas=" + std::to_string(defaultGas_) + "\n";
     out += "gameDir=" + WideToUtf8(gameDir_) + "\n";
@@ -258,10 +312,20 @@ bool AppSettings::Save() {
     out += "backupCount=" + std::to_string(backupCount_) + "\n";
     out += "autoBackup=" + std::to_string(autoBackupEnabled_ ? 1 : 0) + "\n";
     out += "autoBackupMinutes=" + std::to_string(autoBackupMinutes_) + "\n";
+    out += "startMaximized=" + std::to_string(startMaximized_ ? 1 : 0) + "\n";
+    out += "loadFitZoom=" + std::to_string(loadFitZoom_ ? 1 : 0) + "\n";
+    out += "maxUnits=" + std::to_string(maxUnits_) + "\n";
+    out += "maxSpUnits=" + std::to_string(maxSpUnits_) + "\n";
+    out += "maxLocations=" + std::to_string(maxLocations_) + "\n";
+    out += "triggerBaseNames=" + std::to_string(triggerBaseNames_ ? 1 : 0) + "\n";
+    out += "singleFile=" + std::to_string(singleFile_ ? 1 : 0) + "\n";
     out += "view.zoom=" + std::to_string(view_.zoomPx) + "\n";
     out += "view.gridEnabled=" + std::to_string(view_.gridEnabled ? 1 : 0) + "\n";
     out += "view.gridCellX=" + std::to_string(view_.gridCellX) + "\n";
     out += "view.gridCellY=" + std::to_string(view_.gridCellY) + "\n";
+    out += "view.staticGridEnabled=" + std::to_string(view_.staticGridEnabled ? 1 : 0) + "\n";
+    out += "view.staticGridCellX=" + std::to_string(view_.staticGridCellX) + "\n";
+    out += "view.staticGridCellY=" + std::to_string(view_.staticGridCellY) + "\n";
     out += "view.gridColorId=" + std::to_string(view_.gridColorId) + "\n";
     out += "view.gridColorValue=" + std::to_string(view_.gridColorValue) + "\n";
     out += "view.layer=" + std::to_string(view_.layer) + "\n";

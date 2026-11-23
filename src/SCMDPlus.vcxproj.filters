@@ -21,6 +21,7 @@
     <ClCompile Include="app\backups.cpp"><Filter>app</Filter></ClCompile>
     <ClCompile Include="ui\main_window.cpp"><Filter>ui</Filter></ClCompile>
     <ClCompile Include="ui\brush_palette.cpp"><Filter>ui</Filter></ClCompile>
+    <ClCompile Include="ui\doodad_palette.cpp"><Filter>ui</Filter></ClCompile>
     <ClCompile Include="ui\dialogs.cpp"><Filter>ui</Filter></ClCompile>
     <ClCompile Include="ui\dlg_players.cpp"><Filter>ui</Filter></ClCompile>
     <ClCompile Include="ui\dlg_restrictions.cpp"><Filter>ui</Filter></ClCompile>
@@ -47,6 +48,7 @@
     <ClInclude Include="app\backups.h"><Filter>app</Filter></ClInclude>
     <ClInclude Include="ui\main_window.h"><Filter>ui</Filter></ClInclude>
     <ClInclude Include="ui\brush_palette.h"><Filter>ui</Filter></ClInclude>
+    <ClInclude Include="ui\doodad_palette.h"><Filter>ui</Filter></ClInclude>
     <ClInclude Include="ui\dialogs.h"><Filter>ui</Filter></ClInclude>
     <ClInclude Include="ui\command_ids.h"><Filter>ui</Filter></ClInclude>
     <ClInclude Include="platform\file_dialog.h"><Filter>platform</Filter></ClInclude>

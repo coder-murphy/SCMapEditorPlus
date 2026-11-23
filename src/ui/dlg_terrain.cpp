@@ -147,14 +147,22 @@ bool LastCustomBrushAccepted() { return g_brushAccepted; }
 // 166：方格设置（两组 X/Y 与偏移 + 启用开关）
 INT_PTR CALLBACK ProcGridSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
-        case WM_INITDIALOG:
+        case WM_INITDIALOG: {
             CenterDialog(dlg);
             ::CheckDlgButton(dlg, IDC_D166_1048, g_seed.enabled ? BST_CHECKED : BST_UNCHECKED);
             ::SetDlgItemInt(dlg, IDC_D166_1044, static_cast<UINT>(g_seed.cellX), FALSE);
             ::SetDlgItemInt(dlg, IDC_D166_1045, static_cast<UINT>(g_seed.cellY), FALSE);
             ::SetDlgItemInt(dlg, IDC_D166_1046, static_cast<UINT>(g_seed.offsetX), TRUE);
             ::SetDlgItemInt(dlg, IDC_D166_1047, static_cast<UINT>(g_seed.offsetY), TRUE);
+            // 第二组“静态方格”（1049..1053）：固定于地图原点的第二套参考网格
+            ::CheckDlgButton(dlg, IDC_D166_1053,
+                             g_seed.staticEnabled ? BST_CHECKED : BST_UNCHECKED);
+            ::SetDlgItemInt(dlg, IDC_D166_1049, static_cast<UINT>(g_seed.staticCellX), FALSE);
+            ::SetDlgItemInt(dlg, IDC_D166_1050, static_cast<UINT>(g_seed.staticCellY), FALSE);
+            ::SetDlgItemInt(dlg, IDC_D166_1051, static_cast<UINT>(g_seed.staticOffsetX), TRUE);
+            ::SetDlgItemInt(dlg, IDC_D166_1052, static_cast<UINT>(g_seed.staticOffsetY), TRUE);
             return TRUE;
+        }
         case WM_COMMAND:
             if (LOWORD(wParam) == IDC_D166_1) {                 // 确定
                 g_grid.enabled = ::IsDlgButtonChecked(dlg, IDC_D166_1048) == BST_CHECKED;
@@ -162,9 +170,19 @@ INT_PTR CALLBACK ProcGridSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                 g_grid.cellY = ReadClampedInt(dlg, IDC_D166_1045, 32, 1, 64);
                 g_grid.offsetX = ReadClampedInt(dlg, IDC_D166_1046, 0, -64, 64);
                 g_grid.offsetY = ReadClampedInt(dlg, IDC_D166_1047, 0, -64, 64);
+                g_grid.staticEnabled =
+                    ::IsDlgButtonChecked(dlg, IDC_D166_1053) == BST_CHECKED;
+                g_grid.staticCellX = ReadClampedInt(dlg, IDC_D166_1049, 32, 1, 64);
+                g_grid.staticCellY = ReadClampedInt(dlg, IDC_D166_1050, 32, 1, 64);
+                g_grid.staticOffsetX = ReadClampedInt(dlg, IDC_D166_1051, 0, -64, 64);
+                g_grid.staticOffsetY = ReadClampedInt(dlg, IDC_D166_1052, 0, -64, 64);
                 g_gridAccepted = true;
-                Log(L"[grid] %dx%d off=%d,%d on=%d", g_grid.cellX, g_grid.cellY,
-                    g_grid.offsetX, g_grid.offsetY, g_grid.enabled ? 1 : 0);
+                Log(L"[grid] %dx%d off=%d,%d on=%d | static %dx%d off=%d,%d on=%d",
+                    g_grid.cellX, g_grid.cellY, g_grid.offsetX, g_grid.offsetY,
+                    g_grid.enabled ? 1 : 0,
+                    g_grid.staticCellX, g_grid.staticCellY,
+                    g_grid.staticOffsetX, g_grid.staticOffsetY,
+                    g_grid.staticEnabled ? 1 : 0);
                 ::EndDialog(dlg, IDOK);
                 return TRUE;
             }

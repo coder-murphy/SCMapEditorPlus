@@ -10,6 +10,7 @@ struct MapSizeParams {
     int width = 64;
     int height = 64;
     int triggerPreset = 1;   // 0=无 / 1=3 条默认触发 / 2=4 条默认触发
+    int era = 0;             // 0..7 地形集
 };
 
 struct ResizeParams {
@@ -18,6 +19,8 @@ struct ResizeParams {
     int offsetX = 0;
     int offsetY = 0;
     bool smoothEdges = false;
+    int currentEra = 0;      // 打开对话框时的 ERA
+    int era = -1;            // 目标 ERA；-1 表示保持不变
 };
 
 struct LocationRect {
@@ -53,6 +56,12 @@ struct GridSettings {
     int cellY = 32;
     int offsetX = 0;
     int offsetY = 0;
+    // 166 第二组“静态方格”（1049..1053）
+    bool staticEnabled = false;
+    int staticCellX = 32;
+    int staticCellY = 32;
+    int staticOffsetX = 0;
+    int staticOffsetY = 0;
 };
 
 }  // namespace scmd

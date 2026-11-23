@@ -11,6 +11,9 @@ struct ViewState {
     bool gridEnabled = true;
     int gridCellX = 32;
     int gridCellY = 32;
+    bool staticGridEnabled = false;   // 第二套“静态方格”（166-1053）
+    int staticGridCellX = 32;
+    int staticGridCellY = 32;
     int gridColorId = 0x8036;
     unsigned gridColorValue = 0;   // COLORREF
     int layer = 0;                 // EditLayer
@@ -56,6 +59,10 @@ public:
     const std::vector<std::wstring>& mpqFiles() const { return mpqFiles_; }
     void SetMpqFiles(std::vector<std::wstring> files) { mpqFiles_ = std::move(files); }
 
+    // 155 自定义刷子文件列表：启动时加载并追加到 182 的刷子列表
+    const std::vector<std::wstring>& brushFiles() const { return brushFiles_; }
+    void SetBrushFiles(std::vector<std::wstring> files) { brushFiles_ = std::move(files); }
+
     // 自动备份（155 的“启动备份 / 最大备份数量”）
     bool backupEnabled() const { return backupEnabled_; }
     void SetBackupEnabled(bool enabled) { backupEnabled_ = enabled; }
@@ -65,6 +72,26 @@ public:
     void SetAutoBackupEnabled(bool enabled) { autoBackupEnabled_ = enabled; }
     int autoBackupMinutes() const { return autoBackupMinutes_; }
     void SetAutoBackupMinutes(int minutes);
+
+    // 155 原版剩余选项（语义为本工程解释，见 doc/05-ui/ui-map.md）
+    bool startMaximized() const { return startMaximized_; }
+    void SetStartMaximized(bool enabled) { startMaximized_ = enabled; }
+    // “地图载入最大值”：开图时自动适配缩放；关闭则沿用保存的缩放
+    bool loadFitZoom() const { return loadFitZoom_; }
+    void SetLoadFitZoom(bool enabled) { loadFitZoom_ = enabled; }
+    // 数量上限（0 = 不限制）
+    int maxUnits() const { return maxUnits_; }
+    void SetMaxUnits(int value);
+    int maxSpUnits() const { return maxSpUnits_; }
+    void SetMaxSpUnits(int value);
+    int maxLocations() const { return maxLocations_; }
+    void SetMaxLocations(int value);
+    // “触发使用基本名称”：触发列表只显示“触发 N”
+    bool triggerBaseNames() const { return triggerBaseNames_; }
+    void SetTriggerBaseNames(bool enabled) { triggerBaseNames_ = enabled; }
+    // “单一文件”：本工程保存本就是单文件，仅持久化保留原版字段
+    bool singleFile() const { return singleFile_; }
+    void SetSingleFile(bool enabled) { singleFile_ = enabled; }
 
     const ViewState& view() const { return view_; }
     ViewState& mutableView() { return view_; }
@@ -90,10 +117,18 @@ private:
     int defaultGas_ = 1;
     std::wstring gameDir_;
     std::vector<std::wstring> mpqFiles_;
+    std::vector<std::wstring> brushFiles_;
     bool backupEnabled_ = true;
     int backupCount_ = 5;
     bool autoBackupEnabled_ = false;
     int autoBackupMinutes_ = 5;
+    bool startMaximized_ = false;
+    bool loadFitZoom_ = true;
+    int maxUnits_ = 3400;
+    int maxSpUnits_ = 1700;
+    int maxLocations_ = 500;
+    bool triggerBaseNames_ = false;
+    bool singleFile_ = true;
     ViewState view_;
     bool soundEnabled_ = true;
     bool autoCheckUpdate_ = false;

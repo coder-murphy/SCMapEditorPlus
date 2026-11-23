@@ -8,6 +8,7 @@
 #include "players/player_model.h"
 #include "players/restriction_model.h"
 #include "terrain/brush.h"
+#include "triggers/trigger_model.h"
 #include "ui/dlg_types.h"
 
 namespace scmd {
@@ -58,6 +59,12 @@ const ResizeParams& LastResizeParams();   // 175
 const UnitProps& LastUnitProps();         // 180
 const LocationRect& LastLocation();       // 171
 void SeedLocation(const LocationRect& seed);   // 171
+void SeedResizeParams(const ResizeParams& seed); // 175
+// 193 / 194 条件 / 行动编辑结果（与 EditConditionDialog / EditActionDialog 同步）
+const TriggerCondition& LastTriggerCondition();
+bool LastTriggerConditionAccepted();
+const TriggerAction& LastTriggerAction();
+bool LastTriggerActionAccepted();
 const UnitPlacementParams& LastUnitPlacement();  // 195
 // 164 SP 单位属性：编辑 THG2 记录列表
 void SeedSpUnits(const std::vector<SpriteRecord>& units, int selected);

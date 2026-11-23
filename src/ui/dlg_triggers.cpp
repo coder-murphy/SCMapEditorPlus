@@ -7,6 +7,7 @@
 
 #include "common/log.h"
 #include "common/string_util.h"
+#include "app/app_settings.h"
 #include "map/map_document.h"
 #include "res/control_ids.h"
 #include "res/resource.h"
@@ -20,6 +21,7 @@ namespace {
 
 LocationRect g_location;
 int g_selectedTrigger = 0;
+int g_playerFilter = -1;   // -1 = 全部玩家；0..7 = 仅该玩家的触发
 
 // 触发编辑器内部刷新消息：子面板改动后通知 181 重填列表
 constexpr UINT kMsgTriggerRefresh = WM_APP + 181;
@@ -93,7 +95,13 @@ std::wstring LocationName(const MapDocument& doc, u32 id) {
     const auto& strs = doc.strings();
     if (id < locs.Count()) {
         const u16 sid = locs.Items()[id].stringId;
-        if (sid < strs.Count() && !strs.At(sid).empty()) return Utf8ToWide(strs.At(sid));
+        if (sid < strs.Count() && !strs.At(sid).empty()) {
+            std::wstring text = Utf8ToWide(strs.At(sid));
+            // 真实地图的地点名可能极长（实测出现过 2048 字），必须截断，
+            // 否则下游 ConditionText/ActionText/FillDetailList 的固定栈缓冲会溢出
+            if (text.size() > 24) text = text.substr(0, 21) + L"…";
+            return text;
+        }
     }
     wchar_t buf[24];
     ::wsprintfW(buf, L"#%u", static_cast<unsigned>(id));
@@ -268,6 +276,24 @@ void FillActionList(HWND list, const Trigger* t) {
     }
 }
 
+// 列表行 -> 实际触发下标（筛选后行号不再等于触发下标）
+int TriggerIndexAtRow(HWND list, int row) {
+    const LRESULT data = ::SendMessageW(list, LB_GETITEMDATA, static_cast<WPARAM>(row), 0);
+    return data == LB_ERR ? -1 : static_cast<int>(data);
+}
+
+// 选中指定实际触发；返回是否找到
+bool SelectTriggerRow(HWND list, int triggerIndex) {
+    const int count = static_cast<int>(::SendMessageW(list, LB_GETCOUNT, 0, 0));
+    for (int i = 0; i < count; i++) {
+        if (TriggerIndexAtRow(list, i) == triggerIndex) {
+            ::SendMessageW(list, LB_SETCURSEL, static_cast<WPARAM>(i), 0);
+            return true;
+        }
+    }
+    return false;
+}
+
 void FillTriggerList(HWND dlg) {
     HWND list = ::GetDlgItem(dlg, IDC_D181_TRIGGER_LIST);
     if (!list) return;
@@ -275,22 +301,36 @@ void FillTriggerList(HWND dlg) {
     MapDocument* doc = DialogDocument();
     if (!doc) return;
     const auto& items = doc->triggers().Items();
+    int row = 0;
     for (std::size_t i = 0; i < items.size(); i++) {
         const Trigger& t = items[i];
-        wchar_t label[192];
-        ::wsprintfW(label, L"触发 %u  %s  [%d 条件 / %d 行动]%s", static_cast<unsigned>(i),
-                    PlayerSummary(t).c_str(), t.ConditionCount(), t.ActionCount(),
-                    (t.executionFlags & 0x8) ? L"  已禁用" : L"");
-        ::SendMessageW(list, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
-    }
-    if (!items.empty()) {
-        if (g_selectedTrigger < 0) g_selectedTrigger = 0;
-        if (static_cast<std::size_t>(g_selectedTrigger) >= items.size()) {
-            g_selectedTrigger = static_cast<int>(items.size()) - 1;
+        if (g_playerFilter >= 0 && !t.HasPlayer(g_playerFilter)) continue;
+        // 避免 wsprintfW 的 %s 宽窄字符串歧义：直接拼接 std::wstring
+        std::wstring label;
+        if (AppSettings::Instance().triggerBaseNames()) {
+            // “触发使用基本名称”（155-1093）：只显示基础名称
+            label = L"触发 " + std::to_wstring(i);
+        } else {
+            label = L"触发 " + std::to_wstring(i) + L"  " + PlayerSummary(t) +
+                    L"  [" + std::to_wstring(t.ConditionCount()) + L" 条件 / " +
+                    std::to_wstring(t.ActionCount()) + L" 行动]" +
+                    ((t.executionFlags & 0x8) ? L"  已禁用" : L"");
         }
-        ::SendMessageW(list, LB_SETCURSEL, static_cast<WPARAM>(g_selectedTrigger), 0);
+        const LRESULT at = ::SendMessageW(list, LB_ADDSTRING, 0,
+                                          reinterpret_cast<LPARAM>(label.c_str()));
+        if (at != LB_ERR) {
+            ::SendMessageW(list, LB_SETITEMDATA, static_cast<WPARAM>(at),
+                           static_cast<LPARAM>(i));
+        }
+        row++;
+    }
+    if (row > 0) {
+        if (!SelectTriggerRow(list, g_selectedTrigger)) {
+            ::SendMessageW(list, LB_SETCURSEL, 0, 0);
+            g_selectedTrigger = TriggerIndexAtRow(list, 0);
+        }
     } else {
-        g_selectedTrigger = 0;
+        g_selectedTrigger = -1;
     }
 }
 
@@ -310,15 +350,19 @@ void FillPlayerTree(HWND dlg) {
     HWND tree = ::GetDlgItem(dlg, IDC_D181_PLAYER_TREE);
     if (!tree) return;
     TreeView_DeleteAllItems(tree);
-    for (int p = 1; p <= 8; p++) {
+    // 第一项“全”= 不筛选；随后 1..8 对应玩家 0..7（控件很窄，使用短标签）
+    const wchar_t* labels[] = {L"全", L"1", L"2", L"3", L"4", L"5", L"6", L"7", L"8"};
+    for (int i = 0; i < 9; i++) {
         TVINSERTSTRUCTW ins = {};
         ins.hParent = TVI_ROOT;
         ins.hInsertAfter = TVI_LAST;
-        ins.item.mask = TVIF_TEXT;
-        wchar_t label[32];
-        ::wsprintfW(label, L"玩家 %d", p);
-        ins.item.pszText = label;
+        ins.item.mask = TVIF_TEXT | TVIF_PARAM;
+        ins.item.pszText = const_cast<wchar_t*>(labels[i]);
+        ins.item.lParam = (i == 0) ? -1 : i - 1;
         TreeView_InsertItem(tree, &ins);
+    }
+    if (HTREEITEM root = TreeView_GetRoot(tree)) {
+        TreeView_SelectItem(tree, root);
     }
 }
 
@@ -507,12 +551,17 @@ INT_PTR HandleListEditor(HWND dlg, UINT msg, WPARAM wParam) {
 
 const LocationRect& LastLocation() { return g_location; }
 void SeedLocation(const LocationRect& seed) { g_location = seed; }
+const TriggerCondition& LastTriggerCondition() { return g_condSeed; }
+bool LastTriggerConditionAccepted() { return g_condAccepted; }
+const TriggerAction& LastTriggerAction() { return g_actSeed; }
+bool LastTriggerActionAccepted() { return g_actAccepted; }
 
 // 181：触发编辑器。列表/条件/行动全部接到 MapDocument::triggers。
-INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
+INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_INITDIALOG: {
             CenterDialog(dlg);
+            g_playerFilter = -1;
             auto* panels = new TriggerPanels();
             ::SetWindowLongPtrW(dlg, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(panels));
             const HINSTANCE inst =
@@ -539,10 +588,14 @@ INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
             switch (LOWORD(wParam)) {
                 case IDC_D181_TRIGGER_LIST:
                     if (HIWORD(wParam) == LBN_SELCHANGE) {
-                        const int sel = ListSelectedIndex(dlg, IDC_D181_TRIGGER_LIST);
-                        if (sel >= 0) {
-                            g_selectedTrigger = sel;
-                            if (TriggerPanels* p = PanelsOf(dlg)) RefreshPanels(dlg, *p);
+                        const int row = ListSelectedIndex(dlg, IDC_D181_TRIGGER_LIST);
+                        if (row >= 0) {
+                            const int index = TriggerIndexAtRow(
+                                ::GetDlgItem(dlg, IDC_D181_TRIGGER_LIST), row);
+                            if (index >= 0) {
+                                g_selectedTrigger = index;
+                                if (TriggerPanels* p = PanelsOf(dlg)) RefreshPanels(dlg, *p);
+                            }
                         }
                         return TRUE;
                     }
@@ -559,6 +612,9 @@ INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     Trigger t;
                     t.conditions[0].type = 22;                   // 总是
                     t.effectivePlayers[0] = 1;
+                    if (g_playerFilter >= 0 && g_playerFilter < 27) {
+                        t.effectivePlayers[g_playerFilter] = 1;  // 保持当前筛选下可见
+                    }
                     items.push_back(t);
                     g_selectedTrigger = static_cast<int>(items.size()) - 1;
                     doc->MarkDirty();
@@ -620,6 +676,22 @@ INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     break;
             }
             break;
+        case WM_NOTIFY: {
+            LPNMHDR hdr = reinterpret_cast<LPNMHDR>(lParam);
+            if (hdr && hdr->idFrom == IDC_D181_PLAYER_TREE &&
+                hdr->code == TVN_SELCHANGEDW) {
+                auto* tv = reinterpret_cast<LPNMTREEVIEWW>(lParam);
+                TVITEMW item = {};
+                item.mask = TVIF_PARAM;
+                item.hItem = tv->itemNew.hItem;
+                if (TreeView_GetItem(hdr->hwndFrom, &item)) {
+                    g_playerFilter = static_cast<int>(item.lParam);
+                    FillTriggerList(dlg);
+                    if (TriggerPanels* p = PanelsOf(dlg)) RefreshPanels(dlg, *p);
+                }
+            }
+            break;
+        }
         case WM_DESTROY: {
             TriggerPanels* panels = PanelsOf(dlg);
             ::SetWindowLongPtrW(dlg, GWLP_USERDATA, 0);
@@ -633,6 +705,48 @@ INT_PTR CALLBACK ProcTriggerEditor(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
             break;
     }
     return FALSE;
+}
+
+// 193：类型下拉 <-> 类型号 双向同步（最后一项为“自定义”）
+void SyncConditionTypeId(HWND dlg) {
+    const LRESULT sel = ::SendDlgItemMessageW(dlg, IDC_D193_TYPE, CB_GETCURSEL, 0, 0);
+    if (sel == CB_ERR) return;
+    if (sel < kConditionNameCount - 1) {
+        ::SetDlgItemInt(dlg, IDC_D193_TYPE_ID, static_cast<UINT>(sel) + 1, FALSE);
+    }
+}
+
+void SyncConditionTypeCombo(HWND dlg) {
+    BOOL ok = FALSE;
+    const UINT id = ::GetDlgItemInt(dlg, IDC_D193_TYPE_ID, &ok, FALSE);
+    if (!ok) return;
+    if (id >= 1 && id < static_cast<UINT>(kConditionNameCount)) {
+        ::SendDlgItemMessageW(dlg, IDC_D193_TYPE, CB_SETCURSEL, id - 1, 0);
+    } else {
+        ::SendDlgItemMessageW(dlg, IDC_D193_TYPE, CB_SETCURSEL,
+                              static_cast<WPARAM>(kConditionNameCount - 1), 0);
+    }
+}
+
+// 194：类型下拉 <-> 类型号 双向同步
+void SyncActionTypeId(HWND dlg) {
+    const LRESULT sel = ::SendDlgItemMessageW(dlg, IDC_D194_TYPE, CB_GETCURSEL, 0, 0);
+    if (sel == CB_ERR) return;
+    if (sel < kActionNameCount - 1) {
+        ::SetDlgItemInt(dlg, IDC_D194_TYPE_ID, static_cast<UINT>(sel) + 1, FALSE);
+    }
+}
+
+void SyncActionTypeCombo(HWND dlg) {
+    BOOL ok = FALSE;
+    const UINT id = ::GetDlgItemInt(dlg, IDC_D194_TYPE_ID, &ok, FALSE);
+    if (!ok) return;
+    if (id >= 1 && id < static_cast<UINT>(kActionNameCount)) {
+        ::SendDlgItemMessageW(dlg, IDC_D194_TYPE, CB_SETCURSEL, id - 1, 0);
+    } else {
+        ::SendDlgItemMessageW(dlg, IDC_D194_TYPE, CB_SETCURSEL,
+                              static_cast<WPARAM>(kActionNameCount - 1), 0);
+    }
 }
 
 // 193：编辑条件
@@ -666,6 +780,14 @@ INT_PTR CALLBACK ProcTriggerCondition(HWND dlg, UINT msg, WPARAM wParam, LPARAM)
             return TRUE;
         }
         case WM_COMMAND:
+            if (LOWORD(wParam) == IDC_D193_TYPE && HIWORD(wParam) == CBN_SELCHANGE) {
+                SyncConditionTypeId(dlg);
+                return TRUE;
+            }
+            if (LOWORD(wParam) == IDC_D193_TYPE_ID && HIWORD(wParam) == EN_CHANGE) {
+                SyncConditionTypeCombo(dlg);
+                return TRUE;
+            }
             if (LOWORD(wParam) == IDC_D193_1) {
                 const int sel = static_cast<int>(
                     ::SendDlgItemMessageW(dlg, IDC_D193_TYPE, CB_GETCURSEL, 0, 0));
@@ -730,6 +852,14 @@ INT_PTR CALLBACK ProcTriggerAction(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
             return TRUE;
         }
         case WM_COMMAND:
+            if (LOWORD(wParam) == IDC_D194_TYPE && HIWORD(wParam) == CBN_SELCHANGE) {
+                SyncActionTypeId(dlg);
+                return TRUE;
+            }
+            if (LOWORD(wParam) == IDC_D194_TYPE_ID && HIWORD(wParam) == EN_CHANGE) {
+                SyncActionTypeCombo(dlg);
+                return TRUE;
+            }
             if (LOWORD(wParam) == IDC_D194_1) {
                 const int sel = static_cast<int>(
                     ::SendDlgItemMessageW(dlg, IDC_D194_TYPE, CB_GETCURSEL, 0, 0));
@@ -817,10 +947,11 @@ INT_PTR CALLBACK ProcEditLocation(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
             }
             switch (id) {
                 case IDC_D171_1: {                                // 确定
-                    int left = ReadClampedInt(dlg, IDC_D171_1079, g_location.left, 0, 255);
-                    int top = ReadClampedInt(dlg, IDC_D171_1080, g_location.top, 0, 255);
-                    int right = ReadClampedInt(dlg, IDC_D171_1081, g_location.right, 0, 255);
-                    int bottom = ReadClampedInt(dlg, IDC_D171_1082, g_location.bottom, 0, 255);
+                    // MRGN 坐标为地图像素（0..8192），right/bottom 为开区间
+                    int left = ReadClampedInt(dlg, IDC_D171_1079, g_location.left, 0, 8192);
+                    int top = ReadClampedInt(dlg, IDC_D171_1080, g_location.top, 0, 8192);
+                    int right = ReadClampedInt(dlg, IDC_D171_1081, g_location.right, 0, 8192);
+                    int bottom = ReadClampedInt(dlg, IDC_D171_1082, g_location.bottom, 0, 8192);
                     if (right < left) std::swap(left, right);
                     if (bottom < top) std::swap(top, bottom);
                     g_location.left = left;

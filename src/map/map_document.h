@@ -28,6 +28,8 @@ public:
     bool Save(const std::wstring& path);
     // 更改地图尺寸：旧内容按 (offsetX, offsetY) 平移进新画布，越界单位丢弃
     bool Resize(int width, int height, int offsetX, int offsetY, bool smoothEdges);
+    // 切换地形集：写 ERA 段并按新 ERA 重新加载地形集（需打开时提供过 tilesetDir）
+    bool SetEra(u16 era);
     // 关闭文档并释放地形集（path 清空）
     void Close();
 
@@ -110,6 +112,11 @@ public:
     bool PlaceUnit(int tx, int ty, u16 type, u8 owner, u32 resource, bool force = false);
     // 删除像素落点所在格的全部单位，返回删除数量
     int RemoveUnitsAtTile(int tx, int ty);
+    // DD2 装饰物：坐标取瓦片中心 (tx*32+16, ty*32+16)。
+    // 未 force 时只允许放在可行走地形上；disabled 写 enabled 字段（0 启用 / 1 禁用）。
+    bool PlaceDoodad(int tx, int ty, u16 type, u8 owner, bool disabled, bool force = false);
+    // 删除落在该格的全部装饰物，返回删除数量
+    int RemoveDoodadsAtTile(int tx, int ty);
     // 删除越界与重复 serial 的单位（类型合法性需单位属性表，暂不处理）
     int RemoveInvalidUnits();
     // 返回该格上的单位数
@@ -119,6 +126,7 @@ public:
 
 private:
     std::wstring path_;
+    std::wstring tilesetDir_;      // 记录打开/新建时的地形集目录，SetEra 重载用
     ChkDocument chk_;
     Tileset tileset_;
 

@@ -26,3 +26,7 @@ ts2/
 # 补丁脚本的中间文件
 *.new
 *.bak
+
+# 排查工具产物与本地复现素材
+tools/*.exe
+tools/repro/

@@ -22,10 +22,21 @@ INT_PTR CALLBACK ProcInputCount(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
         case WM_INITDIALOG:
             CenterDialog(dlg);
             ::SetDlgItemInt(dlg, IDC_D188_1118, 1, FALSE);
+            ::CheckDlgButton(dlg, IDC_D188_1119, BST_UNCHECKED);
             return TRUE;
         case WM_COMMAND:
+            if (LOWORD(wParam) == IDC_D188_1119) {   // 所有单位：固定 255 并禁用输入
+                const bool all = ::IsDlgButtonChecked(dlg, IDC_D188_1119) == BST_CHECKED;
+                ::EnableWindow(::GetDlgItem(dlg, IDC_D188_1118), !all);
+                if (all) ::SetDlgItemInt(dlg, IDC_D188_1118, 255, FALSE);
+                return TRUE;
+            }
             if (LOWORD(wParam) == IDC_D188_1) {
-                g_lastInputValue = ReadClampedInt(dlg, IDC_D188_1118, 1, 1, 255);
+                if (::IsDlgButtonChecked(dlg, IDC_D188_1119) == BST_CHECKED) {
+                    g_lastInputValue = 255;
+                } else {
+                    g_lastInputValue = ReadClampedInt(dlg, IDC_D188_1118, 1, 1, 255);
+                }
                 ::EndDialog(dlg, IDOK);
                 return TRUE;
             }

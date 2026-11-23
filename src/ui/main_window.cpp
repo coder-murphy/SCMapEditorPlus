@@ -1,10 +1,12 @@
 ﻿#include "ui/main_window.h"
 
 #include <algorithm>
+#include <commctrl.h>
 #include <commdlg.h>
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
+#include <functional>
 #include <objbase.h>
 #include <shlobj.h>
 #include <unordered_map>
@@ -27,12 +29,17 @@
 #include "ui/dialogs.h"
 
 #pragma comment(lib, "msimg32.lib")   // DrawFog 的 AlphaBlend
+#pragma comment(lib, "comctl32.lib")  // 右侧栏场景树（TreeView）
 
 namespace scmd {
 
 namespace {
 constexpr const wchar_t* kWindowClass = L"SCMDPlusMainWindow";
 constexpr const wchar_t* kWindowTitle = L"SCMD Plus 3.0";
+
+// 布局常量：右侧栏宽度 / 场景树控件 ID
+constexpr int kSidebarWidth = 236;
+constexpr int kSceneTreeId = 0x8FF0;
 
 constexpr const wchar_t* kMapFilter =
     L"StarCraft 地图 (*.scx;*.scm)\0*.scx;*.scm\0所有文件 (*.*)\0*.*\0\0";
@@ -584,37 +591,70 @@ int GridPresetOf(bool enabled, int cellX, int cellY) {
         default: return 0x80CF;       // 自定义
     }
 }
+
+// 向下 / 向上整除（正确处理负余数）
+int FloorDivI(int a, int b) {
+    int q = a / b;
+    if (a % b != 0 && (a < 0) != (b < 0)) q--;
+    return q;
+}
+int CeilDivI(int a, int b) {
+    int q = a / b;
+    if (a % b != 0 && (a < 0) == (b < 0)) q++;
+    return q;
+}
+
+struct PixelRectI {
+    int left = 0;
+    int top = 0;
+    int right = 0;
+    int bottom = 0;
+};
+
+// 按描绘模式把拖拽起止像素换成 MRGN 开区间矩形（right/bottom 不含）
+PixelRectI BuildLocationRect(LocationDrawMode mode, int px0, int py0, int px1, int py1,
+                             int cellX, int cellY, int offX, int offY, int mapW, int mapH) {
+    PixelRectI rc;
+    if (mode == LocationDrawMode::kAnywhere) {
+        rc.left = std::min(px0, px1);
+        rc.top = std::min(py0, py1);
+        rc.right = std::max(px0, px1) + 1;
+        rc.bottom = std::max(py0, py1) + 1;
+    } else {
+        int cx = mode == LocationDrawMode::kNeat ? kTilePixels : cellX;
+        int cy = mode == LocationDrawMode::kNeat ? kTilePixels : cellY;
+        const int ox = mode == LocationDrawMode::kNeat ? 0 : offX;
+        const int oy = mode == LocationDrawMode::kNeat ? 0 : offY;
+        if (cx <= 0) cx = kTilePixels;
+        if (cy <= 0) cy = kTilePixels;
+        rc.left = ox + FloorDivI(std::min(px0, px1) - ox, cx) * cx;
+        rc.top = oy + FloorDivI(std::min(py0, py1) - oy, cy) * cy;
+        rc.right = ox + CeilDivI(std::max(px0, px1) - ox, cx) * cx;
+        rc.bottom = oy + CeilDivI(std::max(py0, py1) - oy, cy) * cy;
+        if (rc.right <= rc.left) rc.right = rc.left + cx;
+        if (rc.bottom <= rc.top) rc.bottom = rc.top + cy;
+    }
+    rc.left = std::clamp(rc.left, 0, mapW);
+    rc.top = std::clamp(rc.top, 0, mapH);
+    rc.right = std::clamp(rc.right, 0, mapW);
+    rc.bottom = std::clamp(rc.bottom, 0, mapH);
+    if (rc.left >= mapW) rc.left = std::max(0, mapW - 1);
+    if (rc.top >= mapH) rc.top = std::max(0, mapH - 1);
+    if (rc.right <= rc.left) rc.right = std::min(mapW, rc.left + 1);
+    if (rc.bottom <= rc.top) rc.bottom = std::min(mapH, rc.top + 1);
+    if (rc.right <= rc.left || rc.bottom <= rc.top) return PixelRectI();
+    return rc;
+}
 }  // namespace
 
-bool MainWindow::Create(HINSTANCE hInstance) {
-    hInstance_ = hInstance;
+bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
     brushPattern_.SetSingle(brushTile_, L"单格");
     renderer_.SetTileset(&map_.tileset());
     history_.SetLimit(static_cast<std::size_t>(AppSettings::Instance().undoLimit()));
     soundEnabled_ = AppSettings::Instance().soundEnabled();
 
     // 恢复上次会话的视图状态
-    {
-        const ViewState& view = AppSettings::Instance().view();
-        pxPerTile_ = std::clamp(view.zoomPx, 1, 128);
-        gridEnabled_ = view.gridEnabled;
-        gridCellX_ = std::clamp(view.gridCellX, 1, 256);
-        gridCellY_ = std::clamp(view.gridCellY, 1, 256);
-        gridColorCommand_ = view.gridColorId;
-        gridColor_ = static_cast<COLORREF>(view.gridColorValue);
-        layer_ = static_cast<EditLayer>(std::clamp(view.layer, 0, 5));
-        showUnits_ = view.showUnits;
-        showDoodads_ = view.showDoodads;
-        showSpUnits_ = view.showSpUnits;
-        showAllColors_ = view.showAllColors;
-        showZergGround_ = view.showZergGround;
-        showSpecialStates_ = view.showSpecialStates;
-        hideMinimap_ = view.hideMinimap;
-        allowColorCycle_ = view.allowColorCycle;
-        showDeathFx_ = view.showDeathFx;
-        showFog_ = view.showFog;
-        showLocations_ = view.showLocations;
-    }
+    ReloadViewState();
 
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
@@ -680,8 +720,9 @@ bool MainWindow::Create(HINSTANCE hInstance) {
     }
     SyncMenuChecks();
 
+    CreateSceneTree();
     UpdateTitle();
-    ::ShowWindow(hwnd_, SW_SHOW);
+    ::ShowWindow(hwnd_, AppSettings::Instance().startMaximized() ? SW_MAXIMIZE : SW_SHOW);
     ::UpdateWindow(hwnd_);
     ::SetTimer(hwnd_, 1, 60000, nullptr);   // 每分钟检查一次自动备份
     ::SetTimer(hwnd_, 2, 120, nullptr);     // 颜色循环 / 死亡效果动画
@@ -694,6 +735,35 @@ bool MainWindow::Create(HINSTANCE hInstance) {
 
 bool MainWindow::TranslateAccel(MSG& msg) const {
     return hAccel_ && ::TranslateAcceleratorW(hwnd_, hAccel_, &msg) != 0;
+}
+
+// 从 AppSettings 恢复视图状态（启动时与无头回归重置时共用）
+void MainWindow::ReloadViewState() {
+    const ViewState& view = AppSettings::Instance().view();
+    pxPerTile_ = std::clamp(view.zoomPx, 1, 128);
+    gridEnabled_ = view.gridEnabled;
+    gridCellX_ = std::clamp(view.gridCellX, 1, 256);
+    gridCellY_ = std::clamp(view.gridCellY, 1, 256);
+    staticGridEnabled_ = view.staticGridEnabled;
+    staticGridCellX_ = std::clamp(view.staticGridCellX, 1, 256);
+    staticGridCellY_ = std::clamp(view.staticGridCellY, 1, 256);
+    gridColorCommand_ = view.gridColorId;
+    gridColor_ = static_cast<COLORREF>(view.gridColorValue);
+    layer_ = static_cast<EditLayer>(std::clamp(view.layer, 0, 5));
+    showUnits_ = view.showUnits;
+    showDoodads_ = view.showDoodads;
+    showSpUnits_ = view.showSpUnits;
+    showAllColors_ = view.showAllColors;
+    showZergGround_ = view.showZergGround;
+    showSpecialStates_ = view.showSpecialStates;
+    hideMinimap_ = view.hideMinimap;
+    allowColorCycle_ = view.allowColorCycle;
+    showDeathFx_ = view.showDeathFx;
+    showFog_ = view.showFog;
+    showLocations_ = view.showLocations;
+    SyncMenuChecks();
+    LayoutSceneTree();
+    ::InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
 void MainWindow::UpdateTitle() {
@@ -729,6 +799,12 @@ int MainWindow::FitZoom() const {
         zoom = NextZoom(zoom, -1);
     }
     return zoom;
+}
+
+// “地图载入最大值”（155-1129）：勾选时开图自动适配缩放，否则沿用保存的缩放
+int MainWindow::LoadZoom() const {
+    if (AppSettings::Instance().loadFitZoom()) return FitZoom();
+    return std::clamp(AppSettings::Instance().view().zoomPx, 1, 128);
 }
 
 void MainWindow::ApplyZoomPercent(int percent) {
@@ -797,10 +873,9 @@ bool MainWindow::RebuildView(int pxPerTile) {
 }
 
 void MainWindow::UpdateScrollBars() {
-    RECT rc;
-    ::GetClientRect(hwnd_, &rc);
-    const int viewW = rc.right - rc.left;
-    const int viewH = rc.bottom - rc.top;
+    const RECT view = MapViewRect();
+    const int viewW = std::max(0, static_cast<int>(view.right - view.left));
+    const int viewH = std::max(0, static_cast<int>(view.bottom - view.top));
     const int maxX = std::max(0, image_.width - viewW);
     const int maxY = std::max(0, image_.height - viewH);
     scrollX_ = std::min(scrollX_, maxX);
@@ -809,6 +884,90 @@ void MainWindow::UpdateScrollBars() {
     ::SetScrollPos(hwnd_, SB_HORZ, scrollX_, TRUE);
     ::SetScrollRange(hwnd_, SB_VERT, 0, maxY, TRUE);
     ::SetScrollPos(hwnd_, SB_VERT, scrollY_, TRUE);
+}
+
+int MainWindow::LogHeight() const {
+    const int h = OutputPanelHeight();
+    if (h <= 0 || !hwnd_) return 0;
+    RECT rc;
+    ::GetClientRect(hwnd_, &rc);
+    return std::min(h, std::max(0, static_cast<int>(rc.bottom - rc.top)) / 3);
+}
+
+RECT MainWindow::MapViewRect() const {
+    RECT rc = {0, 0, 0, 0};
+    if (!hwnd_) return rc;
+    ::GetClientRect(hwnd_, &rc);
+    const int logH = LogHeight();
+    const int maxSide = std::max(0, static_cast<int>(rc.right - rc.left)) / 3;
+    const int sideW = std::min(kSidebarWidth, maxSide);
+    rc.right = static_cast<LONG>(std::max(0, static_cast<int>(rc.right) - sideW));
+    rc.bottom = static_cast<LONG>(std::max(0, static_cast<int>(rc.bottom) - logH));
+    return rc;
+}
+
+RECT MainWindow::SideRect() const {
+    RECT side = {0, 0, 0, 0};
+    if (!hwnd_) return side;
+    RECT rc;
+    ::GetClientRect(hwnd_, &rc);
+    const RECT view = MapViewRect();
+    side.left = view.right;
+    side.top = 0;
+    side.right = rc.right;
+    side.bottom = rc.bottom - LogHeight();
+    if (side.right < side.left) side.right = side.left;
+    if (side.bottom < side.top) side.bottom = side.top;
+    return side;
+}
+
+RECT MainWindow::LogRect() const {
+    RECT r = {0, 0, 0, 0};
+    if (!hwnd_) return r;
+    RECT rc;
+    ::GetClientRect(hwnd_, &rc);
+    r.left = 0;
+    r.right = rc.right;
+    r.bottom = rc.bottom;
+    r.top = rc.bottom - LogHeight();
+    return r;
+}
+
+RECT MainWindow::MinimapRect() const {
+    RECT empty = {0, 0, 0, 0};
+    if (hideMinimap_ || !map_.IsOpen() || pxPerTile_ <= 0) return empty;
+    const RECT side = SideRect();
+    const int sideW = static_cast<int>(side.right - side.left);
+    if (sideW < 40) return empty;
+    const int avail = std::min(sideW - 16, 180);
+    if (avail < 32) return empty;
+    int mw = avail;
+    int mh = avail;
+    if (map_.width() >= map_.height()) {
+        mh = std::max(16, avail * map_.height() / map_.width());
+    } else {
+        mw = std::max(16, avail * map_.width() / map_.height());
+    }
+    const int cx = static_cast<int>(side.left + side.right) / 2;
+    RECT r = {cx - mw / 2, side.top + 22, cx - mw / 2 + mw, side.top + 22 + mh};
+    return r;
+}
+
+RECT MainWindow::SceneTreeRect() const {
+    const RECT side = SideRect();
+    const RECT mm = MinimapRect();
+    // 微缩地图可见时紧随其下（留 26px 给“场景树”标题）；隐藏时整体上移
+    const int top = (mm.bottom > mm.top) ? static_cast<int>(mm.bottom) + 26
+                                         : static_cast<int>(side.top) + 42;
+    RECT r = {side.left + 6, top, side.right - 6, side.bottom - 6};
+    if (r.right < r.left) r.right = r.left;
+    if (r.bottom < r.top) r.bottom = r.top;
+    return r;
+}
+
+bool MainWindow::PointInMapView(int mx, int my) const {
+    const RECT view = MapViewRect();
+    return mx >= view.left && my >= view.top && mx < view.right && my < view.bottom;
 }
 
 bool MainWindow::OpenMap(const std::wstring& path) {
@@ -826,12 +985,15 @@ bool MainWindow::OpenMap(const std::wstring& path) {
     }
     history_.Clear();
     editOpen_ = false;
+    locationDrawing_ = false;
     ClearSelection();
     AppSettings::Instance().AddRecentMap(path);
     AppSettings::Instance().Save();
     UpdateTitle();
-    RebuildView(FitZoom());
+    RebuildView(LoadZoom());
     RefreshBrushPalette();
+    RefreshDoodadPalette();
+    RefreshSceneTree();
     return true;
 }
 
@@ -840,7 +1002,10 @@ void MainWindow::NewMap() {
     ShowRecoveredDialog(IDD_DLG_169, hwnd_);
     if (LastDialogResult() != IDOK) return;
     const MapSizeParams& size = LastMapSize();
-    if (!map_.CreateNew(size.width, size.height, 0, tilesetDir_, size.triggerPreset)) return;
+    if (!map_.CreateNew(size.width, size.height, static_cast<u16>(size.era), tilesetDir_,
+                        size.triggerPreset)) {
+        return;
+    }
     {
         wchar_t msg[128];
         ::wsprintfW(msg, L"新建地图: %dx%d", size.width, size.height);
@@ -850,10 +1015,13 @@ void MainWindow::NewMap() {
     fileName_.clear();
     history_.Clear();
     editOpen_ = false;
+    locationDrawing_ = false;
     ClearSelection();
     UpdateTitle();
-    RebuildView(FitZoom());
+    RebuildView(LoadZoom());
     RefreshBrushPalette();
+    RefreshDoodadPalette();
+    RefreshSceneTree();
 }
 
 void MainWindow::CloseMap() {
@@ -864,10 +1032,13 @@ void MainWindow::CloseMap() {
     fileName_.clear();
     history_.Clear();
     editOpen_ = false;
+    locationDrawing_ = false;
     ClearSelection();
     ReleaseBackBuffer();
     UpdateTitle();
     RefreshBrushPalette();
+    RefreshDoodadPalette();
+    RefreshSceneTree();
     ::InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
@@ -896,6 +1067,7 @@ bool MainWindow::SaveMap(bool saveAs) {
         Output(2, msg);
     }
     lastBackupTick_ = ::GetTickCount64();
+    RefreshSceneTree();
     UpdateTitle();
     return true;
 }
@@ -914,6 +1086,16 @@ void MainWindow::ResizeMapDialog() {
         BeepWarning();
         return;
     }
+    ResizeParams seed;
+    seed.width = map_.width();
+    seed.height = map_.height();
+    seed.offsetX = 0;
+    seed.offsetY = 0;
+    seed.smoothEdges = false;
+    seed.currentEra = static_cast<int>(map_.era());
+    seed.era = -1;
+    SeedResizeParams(seed);
+
     ShowRecoveredDialog(IDD_DLG_175, hwnd_);
     if (LastDialogResult() != IDOK) return;
 
@@ -922,10 +1104,13 @@ void MainWindow::ResizeMapDialog() {
         ::MessageBoxW(hwnd_, L"重设地图大小失败。", kWindowTitle, MB_ICONWARNING);
         return;
     }
+    if (p.era >= 0 && p.era != static_cast<int>(map_.era())) {
+        map_.SetEra(static_cast<u16>(p.era));
+    }
     history_.Clear();     // 旧快照与新尺寸不兼容
     editOpen_ = false;
     ClearSelection();
-    RebuildView(FitZoom());
+    RebuildView(LoadZoom());
     UpdateTitle();
 }
 
@@ -957,6 +1142,9 @@ void MainWindow::EditUnitProps() {
     seed.shield = unit.shieldPercent;
     seed.energy = unit.energyPercent;
     seed.resource = static_cast<int>(unit.resource);
+    // UNIT +26 是激活状态位（bit0 隐形 / bit1 钻地 / bit2 升起 / bit3 幻影 / bit4 无敌）
+    seed.flags = unit.queueCount & 0x001Fu;
+    seed.ammo = unit.stackCount;                  // +24 机库/载弹数量
     SeedUnitProps(seed);
 
     ShowRecoveredDialog(IDD_DLG_180, hwnd_);
@@ -969,6 +1157,11 @@ void MainWindow::EditUnitProps() {
     target.shieldPercent = static_cast<u8>(props.shield);
     target.energyPercent = static_cast<u8>(props.energy);
     target.resource = static_cast<u32>(props.resource);
+    target.stackCount = static_cast<u16>(props.ammo);
+    target.queueCount = static_cast<u16>((target.queueCount & ~0x001Fu) |
+                                         (props.flags & 0x001Fu));
+    // 勾选的状态同时标记为“可应用”，否则隐形/钻地等在该单位上会被游戏忽略
+    target.validState = static_cast<u16>(target.validState | (props.flags & 0x001Fu));
     map_.MarkDirty();
     CommitEdit(L"修改单位属性");
     UpdateTitle();
@@ -999,10 +1192,10 @@ void MainWindow::EditLocation(int index) {
     if (LastDialogResult() == IDOK) {
         const LocationRect& r = LastLocation();
         Location& target = map_.mutableLocations().MutableItems()[index];
-        target.left = static_cast<u16>(r.left);
-        target.top = static_cast<u16>(r.top);
-        target.right = static_cast<u16>(r.right);
-        target.bottom = static_cast<u16>(r.bottom);
+        target.left = static_cast<u32>(r.left);
+        target.top = static_cast<u32>(r.top);
+        target.right = static_cast<u32>(r.right);
+        target.bottom = static_cast<u32>(r.bottom);
         target.flags = static_cast<u16>((target.flags & ~0x3Fu) |
                                         (r.elevationMask & 0x3Fu));
 
@@ -1082,16 +1275,26 @@ void MainWindow::OpenSpUnitEditor(int selected) {
         }
     }
     CommitEdit(L"SP单位属性");
+    // 记住最后一次编辑的类型/玩家/标志，供 SP 层继续放置
+    const auto& editedFinal = LastSpUnits();
+    if (selected >= 0 && static_cast<std::size_t>(selected) < editedFinal.size()) {
+        spPlaceType_ = editedFinal[static_cast<std::size_t>(selected)].type;
+        spPlaceOwner_ = editedFinal[static_cast<std::size_t>(selected)].owner;
+        spPlaceFlags_ = editedFinal[static_cast<std::size_t>(selected)].flags;
+    }
     UpdateTitle();
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 int MainWindow::LocationIndexAtTile(int tx, int ty) const {
+    // MRGN 坐标是像素，right/bottom 为开区间；用瓦片中心点做命中
+    const int px = tx * kTilePixels + kTilePixels / 2;
+    const int py = ty * kTilePixels + kTilePixels / 2;
     const auto& items = map_.locations().Items();
     for (int i = static_cast<int>(items.size()) - 1; i >= 0; i--) {
         const Location& loc = items[static_cast<std::size_t>(i)];
-        if (tx >= static_cast<int>(loc.left) && tx <= static_cast<int>(loc.right) &&
-            ty >= static_cast<int>(loc.top) && ty <= static_cast<int>(loc.bottom)) {
+        if (px >= static_cast<int>(loc.left) && px < static_cast<int>(loc.right) &&
+            py >= static_cast<int>(loc.top) && py < static_cast<int>(loc.bottom)) {
             return i;
         }
     }
@@ -1133,12 +1336,11 @@ void MainWindow::GotoStartPosition() {
     if (!map_.IsOpen()) return;
     for (const auto& u : map_.units()) {
         if (u.type != 214) continue;      // 出生点
-        RECT rc;
-        ::GetClientRect(hwnd_, &rc);
+        const RECT view = MapViewRect();
         const int tx = static_cast<int>(u.x) / 32;
         const int ty = static_cast<int>(u.y) / 32;
-        const int viewW = static_cast<int>(rc.right - rc.left);
-        const int viewH = static_cast<int>(rc.bottom - rc.top);
+        const int viewW = static_cast<int>(view.right - view.left);
+        const int viewH = static_cast<int>(view.bottom - view.top);
         scrollX_ = std::max(0, tx * pxPerTile_ - viewW / 2);
         scrollY_ = std::max(0, ty * pxPerTile_ - viewH / 2);
         UpdateScrollBars();
@@ -1440,6 +1642,10 @@ void MainWindow::TogglePlacementRule(int commandId) {
         case kPlaceAirOverlap: allowAirOverlap_ = !allowAirOverlap_; break;
         case kPlaceAutoAddon: autoConnectAddon_ = !autoConnectAddon_; break;
         case kPlaceMineralDistance: mineralBaseDistance_ = !mineralBaseDistance_; break;
+        case kDoodadAnywhere:
+            placeDoodadsAnywhere_ = !placeDoodadsAnywhere_;
+            doodadPalette_.SetAllowAnywhere(placeDoodadsAnywhere_);
+            break;
         case kClipboardDoodads: clipboardDoodads_ = !clipboardDoodads_; break;
         default:
             return;
@@ -1468,6 +1674,12 @@ bool MainWindow::PlaceUnitAtTile(int tx, int ty) {
         Output(1, L"与同层单位重叠，已拒绝放置（可在 选项→单位 中允许重叠）");
         return false;
     }
+    // “最多单位”（155-1094）：0 = 不限制
+    const int maxUnits = AppSettings::Instance().maxUnits();
+    if (maxUnits > 0 && map_.units().size() >= static_cast<std::size_t>(maxUnits)) {
+        Output(1, L"已达“最多单位”上限，已拒绝放置（可在 155 基本设置调整）");
+        return false;
+    }
 
     BeginEdit();
     u32 resource = unitResource_;
@@ -1486,6 +1698,147 @@ bool MainWindow::PlaceUnitAtTile(int tx, int ty) {
     UpdateTitle();
     ::InvalidateRect(hwnd_, nullptr, FALSE);
     return true;
+}
+
+void MainWindow::SetDoodadPlacement(u16 type, u8 owner, bool disabled) {
+    doodadType_ = type;
+    doodadOwner_ = owner;
+    doodadDisabled_ = disabled;
+}
+
+void MainWindow::SetDoodadAnywhere(bool allow) {
+    placeDoodadsAnywhere_ = allow;
+    doodadPalette_.SetAllowAnywhere(allow);
+    SyncMenuChecks();
+}
+
+bool MainWindow::PlaceDoodadAtTile(int tx, int ty) {
+    if (!map_.IsOpen()) return false;
+    if (tx < 0 || ty < 0 || tx >= map_.width() || ty >= map_.height()) return false;
+    if (!placeDoodadsAnywhere_ && !map_.IsWalkableTile(tx, ty)) {
+        Output(1, L"装饰物只能放在可通行地形上，已拒绝放置（可在 选项→装饰物 中允许任意放置）");
+        return false;
+    }
+
+    BeginEdit();
+    if (!map_.PlaceDoodad(tx, ty, doodadType_, doodadOwner_, doodadDisabled_,
+                          placeDoodadsAnywhere_)) {
+        editOpen_ = false;
+        return false;
+    }
+    CommitEdit(L"放置装饰物");
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+    return true;
+}
+
+int MainWindow::RemoveDoodadsAtTile(int tx, int ty) {
+    if (!map_.IsOpen()) return 0;
+    BeginEdit();
+    const int removed = map_.RemoveDoodadsAtTile(tx, ty);
+    if (removed > 0) {
+        CommitEdit(L"删除装饰物");
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    } else {
+        editOpen_ = false;
+    }
+    return removed;
+}
+
+void MainWindow::SetLocationDrawMode(int mode) {
+    locationDrawMode_ = static_cast<LocationDrawMode>(std::clamp(mode, 0, 2));
+    SyncMenuChecks();
+}
+
+int MainWindow::AddLocationFromDrag(int px0, int py0, int px1, int py1) {
+    if (!map_.IsOpen()) return -1;
+    const PixelRectI r =
+        BuildLocationRect(locationDrawMode_, px0, py0, px1, py1, gridCellX_, gridCellY_,
+                          gridOffsetX_, gridOffsetY_, map_.width() * kTilePixels,
+                          map_.height() * kTilePixels);
+    if (r.right <= r.left || r.bottom <= r.top) return -1;
+    // “Location编号”（155-1013）：地点数量上限，0 = 不限制
+    const int maxLocations = AppSettings::Instance().maxLocations();
+    if (maxLocations > 0 &&
+        map_.locations().Count() >= static_cast<std::size_t>(maxLocations)) {
+        Output(1, L"已达“Location编号”上限，已拒绝新建地点（可在 155 基本设置调整）");
+        return -1;
+    }
+
+    Location loc;
+    loc.left = static_cast<u32>(r.left);
+    loc.top = static_cast<u32>(r.top);
+    loc.right = static_cast<u32>(r.right);
+    loc.bottom = static_cast<u32>(r.bottom);
+    loc.stringId = 0;
+    loc.flags = 0;
+
+    BeginEdit();
+    map_.mutableLocations().MutableItems().push_back(loc);
+    map_.MarkDirty();
+    CommitEdit(L"描绘地点");
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+    return static_cast<int>(map_.locations().Count()) - 1;
+}
+
+void MainWindow::SetSpPlacement(u16 type, u8 owner, u16 flags) {
+    spPlaceType_ = type;
+    spPlaceOwner_ = owner;
+    spPlaceFlags_ = flags;
+}
+
+void MainWindow::SetSpAlignGrid(bool align) {
+    spAlignGrid_ = align;
+    SyncMenuChecks();
+}
+
+bool MainWindow::PlaceSpriteAtPixels(int px, int py) {
+    if (!map_.IsOpen()) return false;
+    const int maxX = map_.width() * kTilePixels;
+    const int maxY = map_.height() * kTilePixels;
+    if (px < 0 || py < 0 || px >= maxX || py >= maxY) return false;
+    // “SP单位”（155-1009）：0 = 不限制
+    const int maxSpUnits = AppSettings::Instance().maxSpUnits();
+    if (maxSpUnits > 0 &&
+        map_.sprites().Count() >= static_cast<std::size_t>(maxSpUnits)) {
+        Output(1, L"已达“SP单位”上限，已拒绝放置（可在 155 基本设置调整）");
+        return false;
+    }
+
+    SpriteRecord s;
+    s.type = spPlaceType_;
+    s.owner = spPlaceOwner_;
+    s.flags = spPlaceFlags_;
+    if (spAlignGrid_) {
+        s.x = static_cast<u16>((px / kTilePixels) * kTilePixels + kTilePixels / 2);
+        s.y = static_cast<u16>((py / kTilePixels) * kTilePixels + kTilePixels / 2);
+    } else {
+        s.x = static_cast<u16>(px);
+        s.y = static_cast<u16>(py);
+    }
+
+    BeginEdit();
+    map_.mutableSprites().MutableItems().push_back(s);
+    map_.MarkDirty();
+    CommitEdit(L"放置SP单位");
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+    return true;
+}
+
+int MainWindow::RemoveSpriteAtTile(int tx, int ty) {
+    const int index = SpriteIndexAtTile(tx, ty);
+    if (index < 0) return 0;
+    BeginEdit();
+    auto& items = map_.mutableSprites().MutableItems();
+    items.erase(items.begin() + index);
+    map_.MarkDirty();
+    CommitEdit(L"删除SP单位");
+    UpdateTitle();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+    return 1;
 }
 
 void MainWindow::BeginSelection(int tx, int ty) {
@@ -1757,6 +2110,46 @@ void MainWindow::RefreshBrushPalette() {
     brushPalette_.Refresh(map_.hasTileset() ? &map_.tileset() : nullptr, brushTile_);
 }
 
+void MainWindow::LoadBrushFiles(const std::vector<std::wstring>& paths) {
+    for (const std::wstring& path : paths) {
+        std::vector<TerrainBrush> loaded;
+        if (!LoadBrushes(path, loaded)) {
+            Log(L"[brush] 无法读取 %s", path.c_str());
+            continue;
+        }
+        for (TerrainBrush& brush : loaded) {
+            const bool exists = std::any_of(
+                customBrushes_.begin(), customBrushes_.end(), [&brush](const TerrainBrush& b) {
+                    return b.width == brush.width && b.height == brush.height &&
+                           _wcsicmp(b.name.c_str(), brush.name.c_str()) == 0;
+                });
+            if (!exists) customBrushes_.push_back(std::move(brush));
+        }
+    }
+}
+
+void MainWindow::ShowDoodadPalette() {
+    if (!map_.IsOpen()) {
+        Log(L"[doodad] 需要先打开地图");
+        BeepWarning();
+        return;
+    }
+    if (layer_ != EditLayer::kDoodads) SetLayer(EditLayer::kDoodads);
+    if (!doodadPalette_.Show(hInstance_, hwnd_, &map_.doodads(), doodadType_, doodadOwner_,
+                             doodadDisabled_, placeDoodadsAnywhere_)) {
+        wchar_t msg[96];
+        ::wsprintfW(msg, L"装饰物窗口创建失败（错误 %u）", doodadPalette_.lastError());
+        Output(0, msg);
+        BeepWarning();
+    }
+}
+
+void MainWindow::RefreshDoodadPalette() {
+    if (!doodadPalette_.IsOpen()) return;
+    doodadPalette_.Refresh(map_.IsOpen() ? &map_.doodads() : nullptr, doodadType_, doodadOwner_,
+                           doodadDisabled_);
+}
+
 void MainWindow::OpenCustomBrush() {
     if (!map_.IsOpen()) {
         BeepWarning();
@@ -1840,7 +2233,7 @@ void MainWindow::SetLayer(EditLayer layer) {
             showSpUnits_ = true;
             break;
         default:
-            tool_ = Tool::kNone;   // 装饰物/迷雾/地点：只显示，不放置
+            tool_ = Tool::kNone;   // 装饰物/迷雾/地点/SP：按层在鼠标事件中处理
             break;
     }
     if (layer == EditLayer::kLocations) showLocations_ = true;
@@ -1867,6 +2260,11 @@ void MainWindow::OpenGridSettings() {
     seed.cellY = gridCellY_;
     seed.offsetX = gridOffsetX_;
     seed.offsetY = gridOffsetY_;
+    seed.staticEnabled = staticGridEnabled_;
+    seed.staticCellX = staticGridCellX_;
+    seed.staticCellY = staticGridCellY_;
+    seed.staticOffsetX = staticGridOffsetX_;
+    seed.staticOffsetY = staticGridOffsetY_;
     SeedGridSettings(seed);
 
     ShowRecoveredDialog(IDD_DLG_166, hwnd_);
@@ -1877,6 +2275,11 @@ void MainWindow::OpenGridSettings() {
         gridCellY_ = s.cellY;
         gridOffsetX_ = s.offsetX;
         gridOffsetY_ = s.offsetY;
+        staticGridEnabled_ = s.staticEnabled;
+        staticGridCellX_ = s.staticCellX;
+        staticGridCellY_ = s.staticCellY;
+        staticGridOffsetX_ = s.staticOffsetX;
+        staticGridOffsetY_ = s.staticOffsetY;
         SyncMenuChecks();
         ::InvalidateRect(hwnd_, nullptr, TRUE);
     }
@@ -1911,6 +2314,7 @@ void MainWindow::ToggleDisplay(int commandId) {
         case kDispColorCycle: allowColorCycle_ = !allowColorCycle_; break;
         case kDispDeathFx: showDeathFx_ = !showDeathFx_; break;
         case kDispFog:
+        case kDispFogExplored:
         case kLayerFogToggle: showFog_ = !showFog_; break;
         case kDispLocations: showLocations_ = !showLocations_; break;
         default: return;
@@ -1926,6 +2330,10 @@ void MainWindow::SyncMenuChecks() {
     CheckOnly(bar, kLayerIds, 6, kLayerIds[static_cast<int>(layer_)]);
     CheckOnly(bar, kGridIds, 7, GridPresetOf(gridEnabled_, gridCellX_, gridCellY_));
     CheckOnly(bar, kGridColorIds, 7, gridColorCommand_);
+    {
+        static const int kLocModeIds[] = {kLocDrawNeat, kLocDrawGrid, kLocDrawAnywhere};
+        CheckOnly(bar, kLocModeIds, 3, kLocModeIds[static_cast<int>(locationDrawMode_)]);
+    }
 
     static const int kZoomIds[] = {kZoom25, kZoom33, kZoom50, kZoom66, kZoom100,
                                    kZoom150, kZoom200, kZoom300, kZoom400};
@@ -1969,7 +2377,8 @@ void MainWindow::SyncMenuChecks() {
         {kDispDoodads, showDoodads_}, {kDispSpUnits, showSpUnits_},
         {kDispZergGround, showZergGround_}, {kDispSpecialStates, showSpecialStates_},
         {kDispHideMinimap, hideMinimap_}, {kDispColorCycle, allowColorCycle_},
-        {kDispDeathFx, showDeathFx_}, {kDispFog, showFog_}, {kLayerFogToggle, showFog_},
+        {kDispDeathFx, showDeathFx_}, {kDispFog, showFog_},
+        {kDispFogExplored, showFog_}, {kLayerFogToggle, showFog_},
         {kDispLocations, showLocations_},
         {kDebugEnable, debugMode_}, {kDebugOverlaps, showOverlapMarkers_},
         {kDebugCpu, showCpuTiming_}, {kDebugImageSize, showDebugImageSize_},
@@ -1993,6 +2402,8 @@ void MainWindow::SyncMenuChecks() {
         {kPlaceBuildingAnywhere, placeBuildingsAnywhere_},
         {kPlaceAutoAddon, autoConnectAddon_},
         {kPlaceMineralDistance, mineralBaseDistance_},
+        {kDoodadAnywhere, placeDoodadsAnywhere_},
+        {kSpAlignGrid, spAlignGrid_},
         {kClipboardDoodads, clipboardDoodads_},
     };
     for (const Toggle& t : placementToggles) {
@@ -2005,42 +2416,52 @@ void MainWindow::SyncMenuChecks() {
 
 void MainWindow::DrawGrid(HDC dc, const RECT& client) const {
     const bool unitGrid = unitGridDisplay_ && layer_ == EditLayer::kUnits;
-    if ((!gridEnabled_ && !unitGrid) || !map_.IsOpen() || pxPerTile_ <= 0) return;
+    if ((!gridEnabled_ && !staticGridEnabled_ && !unitGrid) || !map_.IsOpen() ||
+        pxPerTile_ <= 0) {
+        return;
+    }
+
+    const int oldBk = ::SetBkMode(dc, TRANSPARENT);
 
     // 方格尺寸按源像素定义（32 = 一格），随缩放换算到屏幕；
     // 单位层“按方格显示”在网格关闭时使用 1 格（32 px）间距
-    const int srcCellX = gridEnabled_ ? gridCellX_ : 32;
-    const int srcCellY = gridEnabled_ ? gridCellY_ : 32;
-    const int cellX = srcCellX * pxPerTile_ / 32;
-    const int cellY = srcCellY * pxPerTile_ / 32;
-    if (cellX < 2 && cellY < 2) return;
-
-    const HPEN pen = ::CreatePen(PS_DOT, 1, gridColor_);
-    const HGDIOBJ oldPen = ::SelectObject(dc, pen);
-    const int oldBk = ::SetBkMode(dc, TRANSPARENT);
-    const int offX = gridEnabled_ ? gridOffsetX_ : 0;
-    const int offY = gridEnabled_ ? gridOffsetY_ : 0;
-
-    if (cellX >= 2) {
-        int x = offX * pxPerTile_ / 32 - scrollX_;
-        while (x < client.left) x += cellX;
-        for (; x < client.right; x += cellX) {
-            ::MoveToEx(dc, x, client.top, nullptr);
-            ::LineTo(dc, x, client.bottom);
+    auto drawLines = [&](int srcCellX, int srcCellY, int offX, int offY, int penStyle) {
+        const int cellX = srcCellX * pxPerTile_ / 32;
+        const int cellY = srcCellY * pxPerTile_ / 32;
+        if (cellX < 2 && cellY < 2) return;
+        const HPEN pen = ::CreatePen(penStyle, 1, gridColor_);
+        const HGDIOBJ oldPen = ::SelectObject(dc, pen);
+        if (cellX >= 2) {
+            int x = offX * pxPerTile_ / 32 - scrollX_;
+            while (x < client.left) x += cellX;
+            for (; x < client.right; x += cellX) {
+                ::MoveToEx(dc, x, client.top, nullptr);
+                ::LineTo(dc, x, client.bottom);
+            }
         }
+        if (cellY >= 2) {
+            int y = offY * pxPerTile_ / 32 - scrollY_;
+            while (y < client.top) y += cellY;
+            for (; y < client.bottom; y += cellY) {
+                ::MoveToEx(dc, client.left, y, nullptr);
+                ::LineTo(dc, client.right, y);
+            }
+        }
+        ::SelectObject(dc, oldPen);
+        ::DeleteObject(pen);
+    };
+
+    // 第一套：主方格（虚线）；第二套：静态方格（实线），两套独立开关/尺寸/偏移
+    if (gridEnabled_ || unitGrid) {
+        drawLines(gridEnabled_ ? gridCellX_ : 32, gridEnabled_ ? gridCellY_ : 32,
+                  gridEnabled_ ? gridOffsetX_ : 0, gridEnabled_ ? gridOffsetY_ : 0, PS_DOT);
     }
-    if (cellY >= 2) {
-        int y = offY * pxPerTile_ / 32 - scrollY_;
-        while (y < client.top) y += cellY;
-        for (; y < client.bottom; y += cellY) {
-            ::MoveToEx(dc, client.left, y, nullptr);
-            ::LineTo(dc, client.right, y);
-        }
+    if (staticGridEnabled_) {
+        drawLines(staticGridCellX_, staticGridCellY_, staticGridOffsetX_, staticGridOffsetY_,
+                  PS_SOLID);
     }
 
     ::SetBkMode(dc, oldBk);
-    ::SelectObject(dc, oldPen);
-    ::DeleteObject(pen);
 }
 
 void MainWindow::DrawLocations(HDC dc, const RECT& client) const {
@@ -2056,10 +2477,12 @@ void MainWindow::DrawLocations(HDC dc, const RECT& client) const {
     for (std::size_t i = 0; i < items.size(); i++) {
         const Location& loc = items[i];
         RECT r;
-        r.left = static_cast<int>(loc.left) * pxPerTile_ - scrollX_;
-        r.top = static_cast<int>(loc.top) * pxPerTile_ - scrollY_;
-        r.right = (static_cast<int>(loc.right) + 1) * pxPerTile_ - scrollX_;
-        r.bottom = (static_cast<int>(loc.bottom) + 1) * pxPerTile_ - scrollY_;
+        r.left = static_cast<int>(loc.left) * pxPerTile_ / kTilePixels - scrollX_;
+        r.top = static_cast<int>(loc.top) * pxPerTile_ / kTilePixels - scrollY_;
+        r.right = static_cast<int>(loc.right) * pxPerTile_ / kTilePixels - scrollX_;
+        r.bottom = static_cast<int>(loc.bottom) * pxPerTile_ / kTilePixels - scrollY_;
+        if (r.right <= r.left) r.right = r.left + 1;
+        if (r.bottom <= r.top) r.bottom = r.top + 1;
         if (r.right < client.left || r.bottom < client.top ||
             r.left > client.right || r.top > client.bottom) {
             continue;
@@ -2073,6 +2496,35 @@ void MainWindow::DrawLocations(HDC dc, const RECT& client) const {
 
     ::SetTextColor(dc, oldColor);
     ::SetBkMode(dc, oldBk);
+    ::SelectObject(dc, oldBrush);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(pen);
+}
+
+void MainWindow::DrawLocationPreview(HDC dc, const RECT& client) const {
+    if (!map_.IsOpen() || pxPerTile_ <= 0) return;
+    const PixelRectI r =
+        BuildLocationRect(locationDrawMode_, locDrawX0_, locDrawY0_, locDrawX1_, locDrawY1_,
+                          gridCellX_, gridCellY_, gridOffsetX_, gridOffsetY_,
+                          map_.width() * kTilePixels, map_.height() * kTilePixels);
+    if (r.right <= r.left || r.bottom <= r.top) return;
+
+    RECT screen;
+    screen.left = r.left * pxPerTile_ / kTilePixels - scrollX_;
+    screen.top = r.top * pxPerTile_ / kTilePixels - scrollY_;
+    screen.right = r.right * pxPerTile_ / kTilePixels - scrollX_;
+    screen.bottom = r.bottom * pxPerTile_ / kTilePixels - scrollY_;
+    if (screen.right <= screen.left) screen.right = screen.left + 1;
+    if (screen.bottom <= screen.top) screen.bottom = screen.top + 1;
+    if (screen.right < client.left || screen.bottom < client.top ||
+        screen.left > client.right || screen.top > client.bottom) {
+        return;
+    }
+
+    const HPEN pen = ::CreatePen(PS_DOT, 1, RGB(0, 220, 90));
+    const HGDIOBJ oldPen = ::SelectObject(dc, pen);
+    const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
+    ::Rectangle(dc, screen.left, screen.top, screen.right, screen.bottom);
     ::SelectObject(dc, oldBrush);
     ::SelectObject(dc, oldPen);
     ::DeleteObject(pen);
@@ -2183,11 +2635,55 @@ void MainWindow::TileCoordsFromClient(int mx, int my, int& tx, int& ty) const {
     tx = -1;
     ty = -1;
     if (pxPerTile_ <= 0 || !map_.IsOpen()) return;
+    if (!PointInMapView(mx, my)) return;   // 侧栏 / 日志区域不参与地图操作
     tx = (mx + scrollX_) / pxPerTile_;
     ty = (my + scrollY_) / pxPerTile_;
     if (tx < 0 || ty < 0 || tx >= map_.width() || ty >= map_.height()) {
         tx = ty = -1;
     }
+}
+
+void MainWindow::PixelCoordsFromClient(int mx, int my, int& px, int& py) const {
+    px = 0;
+    py = 0;
+    if (pxPerTile_ <= 0 || !map_.IsOpen()) return;
+    if (!PointInMapView(mx, my)) return;
+    px = (mx + scrollX_) * kTilePixels / pxPerTile_;
+    py = (my + scrollY_) * kTilePixels / pxPerTile_;
+    px = std::clamp(px, 0, map_.width() * kTilePixels);
+    py = std::clamp(py, 0, map_.height() * kTilePixels);
+}
+
+void MainWindow::BeginLocationDraw(int mx, int my) {
+    if (!map_.IsOpen()) return;
+    int px = 0, py = 0;
+    PixelCoordsFromClient(mx, my, px, py);
+    locationDrawing_ = true;
+    locDrawX0_ = locDrawX1_ = px;
+    locDrawY0_ = locDrawY1_ = py;
+    BeginEdit();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::UpdateLocationDraw(int mx, int my) {
+    if (!locationDrawing_) return;
+    int px = 0, py = 0;
+    PixelCoordsFromClient(mx, my, px, py);
+    locDrawX1_ = px;
+    locDrawY1_ = py;
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::FinishLocationDraw() {
+    if (!locationDrawing_) return;
+    locationDrawing_ = false;
+    if (!map_.IsOpen()) {
+        editOpen_ = false;
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+        return;
+    }
+    AddLocationFromDrag(locDrawX0_, locDrawY0_, locDrawX1_, locDrawY1_);
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void MainWindow::PaintTileToBuffer(int tx, int ty, u16 value) {
@@ -2244,6 +2740,36 @@ void MainWindow::OnLButtonDown(int mx, int my) {
             r.right = r.left + pxPerTile_;
             r.bottom = r.top + pxPerTile_;
             ::InvalidateRect(hwnd_, &r, FALSE);
+        }
+        cursorTx_ = tx;
+        cursorTy_ = ty;
+        UpdateTitle();
+        return;
+    }
+
+    if (layer_ == EditLayer::kDoodads && tool_ == Tool::kNone) {
+        if (!PlaceDoodadAtTile(tx, ty)) BeepWarning();
+        cursorTx_ = tx;
+        cursorTy_ = ty;
+        UpdateTitle();
+        return;
+    }
+
+    if (layer_ == EditLayer::kLocations && tool_ == Tool::kNone) {
+        // 点在已有地点上留给双击（打开 171），空白处开始拖拽描绘
+        if (LocationIndexAtTile(tx, ty) < 0) BeginLocationDraw(mx, my);
+        cursorTx_ = tx;
+        cursorTy_ = ty;
+        UpdateTitle();
+        return;
+    }
+
+    if (layer_ == EditLayer::kSpUnits && tool_ == Tool::kNone) {
+        // 点在已有标记上留给双击（打开 164）
+        if (SpriteIndexAtTile(tx, ty) < 0) {
+            int px = 0, py = 0;
+            PixelCoordsFromClient(mx, my, px, py);
+            if (!PlaceSpriteAtPixels(px, py)) BeepWarning();
         }
         cursorTx_ = tx;
         cursorTy_ = ty;
@@ -2311,6 +2837,11 @@ void MainWindow::OnMouseMove(int mx, int my, bool leftDown) {
         UpdateTitle();
         return;
     }
+    if (leftDown && locationDrawing_) {
+        UpdateLocationDraw(mx, my);
+        UpdateTitle();
+        return;
+    }
     if (leftDown && tool_ == Tool::kSelect && selecting_ && tx >= 0) {
         UpdateSelection(tx, ty);
         UpdateTitle();
@@ -2328,6 +2859,14 @@ void MainWindow::OnRButtonDown(int mx, int my) {
     int tx = -1, ty = -1;
     TileCoordsFromClient(mx, my, tx, ty);
     if (tx < 0) return;
+    if (layer_ == EditLayer::kDoodads) {
+        if (RemoveDoodadsAtTile(tx, ty) == 0) BeepWarning();
+        return;
+    }
+    if (layer_ == EditLayer::kSpUnits) {
+        if (RemoveSpriteAtTile(tx, ty) == 0) BeepWarning();
+        return;
+    }
     if (tool_ == Tool::kSelect) {
         ClearSelection();
         return;
@@ -2350,6 +2889,12 @@ void MainWindow::OnKeyDown(int vk) {
     }
     if (ctrl && vk == 'Y') {
         Redo();
+        return;
+    }
+    if (vk == VK_ESCAPE && locationDrawing_) {
+        locationDrawing_ = false;
+        editOpen_ = false;
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
         return;
     }
     switch (vk) {
@@ -2645,29 +3190,9 @@ void MainWindow::DrawUnitConflictSizes(HDC dc, const RECT& client) const {
     ::DeleteObject(pen);
 }
 
-RECT MainWindow::MinimapRect(const RECT& client) const {
-    RECT empty = {0, 0, 0, 0};
-    if (hideMinimap_ || !map_.IsOpen() || pxPerTile_ <= 0) return empty;
-    const int viewW = client.right - client.left;
-    const int viewH = client.bottom - client.top;
-    const int maxSide = std::min(180, std::min(viewW, viewH) / 3);
-    if (maxSide < 32) return empty;
-    int mw = maxSide;
-    int mh = maxSide;
-    if (map_.width() >= map_.height()) {
-        mh = std::max(16, maxSide * map_.height() / map_.width());
-    } else {
-        mw = std::max(16, maxSide * map_.width() / map_.height());
-    }
-    RECT r = {viewW - mw - 10, viewH - mh - 10, viewW - 10, viewH - 10};
-    return r;
-}
-
 bool MainWindow::ClickMinimapAt(int mx, int my) {
     if (!map_.IsOpen()) return false;
-    RECT client;
-    ::GetClientRect(hwnd_, &client);
-    const RECT mm = MinimapRect(client);
+    const RECT mm = MinimapRect();
     if (mm.right <= mm.left || mm.bottom <= mm.top) return false;
     if (mx < mm.left || mx >= mm.right || my < mm.top || my >= mm.bottom) return false;
 
@@ -2677,8 +3202,9 @@ bool MainWindow::ClickMinimapAt(int mx, int my) {
                               0, map_.width() - 1);
     const int ty = std::clamp((my - static_cast<int>(mm.top)) * map_.height() / mmH,
                               0, map_.height() - 1);
-    const int viewW = client.right - client.left;
-    const int viewH = client.bottom - client.top;
+    const RECT view = MapViewRect();
+    const int viewW = static_cast<int>(view.right - view.left);
+    const int viewH = static_cast<int>(view.bottom - view.top);
     scrollX_ = std::clamp(tx * pxPerTile_ - viewW / 2, 0,
                           std::max(0, image_.width - viewW));
     scrollY_ = std::clamp(ty * pxPerTile_ - viewH / 2, 0,
@@ -2688,8 +3214,8 @@ bool MainWindow::ClickMinimapAt(int mx, int my) {
     return true;
 }
 
-void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
-    const RECT mm = MinimapRect(client);
+void MainWindow::DrawMinimap(HDC dc) const {
+    const RECT mm = MinimapRect();
     if (mm.right <= mm.left) return;
     const int mx = mm.left;
     const int my = mm.top;
@@ -2728,8 +3254,9 @@ void MainWindow::DrawMinimap(HDC dc, const RECT& client) const {
 
     // 当前视口范围
     if (image_.width > 0 && image_.height > 0) {
-        const int viewW = client.right - client.left;
-        const int viewH = client.bottom - client.top;
+        const RECT view = MapViewRect();
+        const int viewW = static_cast<int>(view.right - view.left);
+        const int viewH = static_cast<int>(view.bottom - view.top);
         const int vx0 = mx + scrollX_ * mw / image_.width;
         const int vy0 = my + scrollY_ * mh / image_.height;
         const int vx1 = std::min(mx + mw, mx + (scrollX_ + viewW) * mw / image_.width);
@@ -2847,43 +3374,309 @@ void MainWindow::DrawHud(HDC dc) const {
 void MainWindow::Present(HDC dc, const RECT& client) {
     ::FillRect(dc, &client, reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1));
 
+    const RECT view = MapViewRect();
+    const int viewW = static_cast<int>(view.right - view.left);
+    const int viewH = static_cast<int>(view.bottom - view.top);
+
     if (backBuffer_) {
         const HDC mem = ::CreateCompatibleDC(dc);
         if (mem) {
             const HGDIOBJ old = ::SelectObject(mem, backBuffer_);
-            const int w = std::min<int>(client.right - client.left, image_.width - scrollX_);
-            const int h = std::min<int>(client.bottom - client.top, image_.height - scrollY_);
+            const int w = std::min<int>(viewW, image_.width - scrollX_);
+            const int h = std::min<int>(viewH, image_.height - scrollY_);
             if (w > 0 && h > 0) {
-                ::BitBlt(dc, 0, 0, w, h, mem, scrollX_, scrollY_, SRCCOPY);
+                ::BitBlt(dc, view.left, view.top, w, h, mem, scrollX_, scrollY_, SRCCOPY);
             }
             ::SelectObject(mem, old);
             ::DeleteDC(mem);
         }
     }
 
-    if (showZergGround_) DrawCreep(dc, client);
-    if (showDoodads_) DrawDoodads(dc, client);
-    if (showSpUnits_) DrawSprites(dc, client);
-    if (showFog_) DrawFog(dc, client);
-    DrawGrid(dc, client);
-    if (showUnits_) DrawUnits(dc, client);
-    if (showDeathFx_) DrawDeathMarks(dc, client);
-    if (showOverlapMarkers_) DrawOverlapMarkers(dc, client);
-    if (showUnitConflict_) DrawUnitConflictSizes(dc, client);
-    if (showLocations_) DrawLocations(dc, client);
-    DrawSelection(dc, client);
+    if (viewW > 0 && viewH > 0) {
+        const int saved = ::SaveDC(dc);
+        ::IntersectClipRect(dc, view.left, view.top, view.right, view.bottom);
 
-    // 光标所在格高亮
-    if (cursorTx_ >= 0) {
-        const int sx = cursorTx_ * pxPerTile_ - scrollX_;
-        const int sy = cursorTy_ * pxPerTile_ - scrollY_;
-        RECT r = {sx, sy, sx + pxPerTile_, sy + pxPerTile_};
-        ::DrawFocusRect(dc, &r);
+        if (showZergGround_) DrawCreep(dc, view);
+        if (showDoodads_) DrawDoodads(dc, view);
+        if (showSpUnits_) DrawSprites(dc, view);
+        if (showFog_) DrawFog(dc, view);
+        DrawGrid(dc, view);
+        if (showUnits_) DrawUnits(dc, view);
+        if (showDeathFx_) DrawDeathMarks(dc, view);
+        if (showOverlapMarkers_) DrawOverlapMarkers(dc, view);
+        if (showUnitConflict_) DrawUnitConflictSizes(dc, view);
+        if (showLocations_) DrawLocations(dc, view);
+        if (locationDrawing_) DrawLocationPreview(dc, view);
+        DrawSelection(dc, view);
+
+        // 光标所在格高亮
+        if (cursorTx_ >= 0) {
+            const int sx = cursorTx_ * pxPerTile_ - scrollX_;
+            const int sy = cursorTy_ * pxPerTile_ - scrollY_;
+            RECT r = {sx, sy, sx + pxPerTile_, sy + pxPerTile_};
+            ::DrawFocusRect(dc, &r);
+        }
+
+        DrawHud(dc);
+        ::RestoreDC(dc, saved);
     }
 
-    DrawMinimap(dc, client);
-    DrawHud(dc);
+    DrawSidebar(dc);
     DrawOutputPanel(dc, client);
+}
+
+// 右侧栏：上=微缩地图，下=场景树（场景树是 TreeView 子窗口，这里只画背景/分隔线与标题）
+void MainWindow::DrawSidebar(HDC dc) const {
+    const RECT side = SideRect();
+    if (side.right <= side.left || side.bottom <= side.top) return;
+
+    HBRUSH back = ::CreateSolidBrush(RGB(30, 30, 30));
+    ::FillRect(dc, &side, back);
+    ::DeleteObject(back);
+
+    HPEN border = ::CreatePen(PS_SOLID, 1, RGB(96, 96, 96));
+    const HGDIOBJ oldPen = ::SelectObject(dc, border);
+    ::MoveToEx(dc, side.left, side.top, nullptr);
+    ::LineTo(dc, side.left, side.bottom);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(border);
+
+    const int oldMode = ::SetBkMode(dc, TRANSPARENT);
+    const COLORREF oldColor = ::SetTextColor(dc, RGB(205, 205, 205));
+    const HGDIOBJ oldFont = ::SelectObject(dc, ::GetStockObject(DEFAULT_GUI_FONT));
+
+    const RECT mm = MinimapRect();
+    RECT title = {side.left + 8, side.top + 4, side.right - 8, side.top + 18};
+    ::DrawTextW(dc, (mm.right > mm.left) ? L"微缩地图" : L"微缩地图（已隐藏）", -1, &title,
+                DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
+
+    const RECT tree = SceneTreeRect();
+    if (tree.top > side.top + 20) {
+        RECT treeTitle = {side.left + 8, tree.top - 20, side.right - 8, tree.top - 6};
+        ::DrawTextW(dc, L"场景树", -1, &treeTitle,
+                    DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
+    }
+
+    ::SelectObject(dc, oldFont);
+    ::SetTextColor(dc, oldColor);
+    ::SetBkMode(dc, oldMode);
+
+    DrawMinimap(dc);
+}
+
+// ── 场景树（右侧栏下方）──
+// lParam 编码：高 4 位 = 种类（1 单位 / 2 SP单位 / 3 装饰物 / 4 地点 / 5 触发），低 20 位 = 下标
+namespace {
+constexpr int kSceneKindShift = 20;
+constexpr int kSceneKindMask = 0xF;
+constexpr int kSceneIndexMask = 0xFFFFF;
+constexpr int kSceneMaxChildren = 200;
+
+LPARAM SceneItemData(int kind, int index) {
+    return (static_cast<LPARAM>(kind) << kSceneKindShift) |
+           (static_cast<LPARAM>(index) & kSceneIndexMask);
+}
+
+HTREEITEM InsertSceneItem(HWND tree, HTREEITEM parent, const wchar_t* text, LPARAM data) {
+    TVINSERTSTRUCTW ins = {};
+    ins.hParent = parent ? parent : TVI_ROOT;
+    ins.hInsertAfter = TVI_LAST;
+    ins.item.mask = TVIF_TEXT | TVIF_PARAM;
+    ins.item.pszText = const_cast<wchar_t*>(text);
+    ins.item.lParam = data;
+    return TreeView_InsertItem(tree, &ins);
+}
+}  // namespace
+
+void MainWindow::CreateSceneTree() {
+    if (sceneTree_ || !hwnd_) return;
+    sceneTree_ = ::CreateWindowExW(
+        WS_EX_CLIENTEDGE, WC_TREEVIEWW, L"",
+        WS_CHILD | WS_VISIBLE | TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT |
+            TVS_SHOWSELALWAYS | TVS_DISABLEDRAGDROP,
+        0, 0, 10, 10, hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kSceneTreeId)), hInstance_, nullptr);
+    LayoutSceneTree();
+    RefreshSceneTree();
+}
+
+void MainWindow::LayoutSceneTree() {
+    if (!sceneTree_) return;
+    const RECT r = SceneTreeRect();
+    const int w = std::max(0L, r.right - r.left);
+    const int h = std::max(0L, r.bottom - r.top);
+    ::SetWindowPos(sceneTree_, nullptr, r.left, r.top, w, h,
+                   SWP_NOZORDER | SWP_NOACTIVATE);
+    ::ShowWindow(sceneTree_, (w > 0 && h > 0) ? SW_SHOW : SW_HIDE);
+}
+
+void MainWindow::RefreshSceneTree() {
+    if (!sceneTree_) return;
+    ::SendMessageW(sceneTree_, WM_SETREDRAW, FALSE, 0);
+    TreeView_DeleteAllItems(sceneTree_);
+
+    if (!map_.IsOpen()) {
+        InsertSceneItem(sceneTree_, nullptr, L"（未打开地图）", 0);
+    } else {
+        wchar_t rootText[220];
+        ::wsprintfW(rootText, L"%s  %dx%d  ERA %u",
+                    fileName_.empty() ? L"未命名" : fileName_.c_str(), map_.width(),
+                    map_.height(), static_cast<unsigned>(map_.era()));
+        InsertSceneItem(sceneTree_, nullptr, rootText, 0);
+
+        auto addGroup = [&](const wchar_t* name, int count, int kind,
+                            const std::function<void(int, std::wstring&)>& describe) {
+            wchar_t head[128];
+            ::wsprintfW(head, L"%s (%d)", name, count);
+            HTREEITEM group = InsertSceneItem(sceneTree_, nullptr, head, 0);
+            const int shown = std::min(count, kSceneMaxChildren);
+            for (int i = 0; i < shown; i++) {
+                std::wstring text;
+                describe(i, text);
+                InsertSceneItem(sceneTree_, group, text.c_str(), SceneItemData(kind, i));
+            }
+            if (count > shown) {
+                wchar_t more[64];
+                ::wsprintfW(more, L"… 其余 %d 条", count - shown);
+                InsertSceneItem(sceneTree_, group, more, 0);
+            }
+            return group;
+        };
+
+        addGroup(L"单位", static_cast<int>(map_.units().size()), 1,
+                 [this](int i, std::wstring& out) {
+                     const UnitRecord& u = map_.units()[static_cast<std::size_t>(i)];
+                     wchar_t buf[128];
+                     ::wsprintfW(buf, L"#%u 类型 %u @ 格 %d,%d  玩家 %u",
+                                 static_cast<unsigned>(u.serial), static_cast<unsigned>(u.type),
+                                 static_cast<int>(u.x) / kTilePixels,
+                                 static_cast<int>(u.y) / kTilePixels,
+                                 static_cast<unsigned>(u.owner));
+                     out = buf;
+                 });
+        addGroup(L"SP单位", static_cast<int>(map_.sprites().Count()), 2,
+                 [this](int i, std::wstring& out) {
+                     const SpriteRecord& s = map_.sprites().Items()[static_cast<std::size_t>(i)];
+                     wchar_t buf[128];
+                     ::wsprintfW(buf, L"类型 %u @ 格 %d,%d  玩家 %u",
+                                 static_cast<unsigned>(s.type), static_cast<int>(s.x) / kTilePixels,
+                                 static_cast<int>(s.y) / kTilePixels,
+                                 static_cast<unsigned>(s.owner));
+                     out = buf;
+                 });
+        addGroup(L"装饰物", static_cast<int>(map_.doodads().Count()), 3,
+                 [this](int i, std::wstring& out) {
+                     const Doodad& d = map_.doodads().Items()[static_cast<std::size_t>(i)];
+                     wchar_t buf[128];
+                     ::wsprintfW(buf, L"类型 %u @ 格 %d,%d  玩家 %u",
+                                 static_cast<unsigned>(d.type), static_cast<int>(d.x) / kTilePixels,
+                                 static_cast<int>(d.y) / kTilePixels,
+                                 static_cast<unsigned>(d.owner));
+                     out = buf;
+                 });
+        addGroup(L"地点", static_cast<int>(map_.locations().Count()), 4,
+                 [this](int i, std::wstring& out) {
+                     const Location& l = map_.locations().Items()[static_cast<std::size_t>(i)];
+                     std::wstring name;
+                     if (l.stringId < map_.strings().Count()) {
+                         name = Utf8ToWide(map_.strings().At(l.stringId));
+                     }
+                     if (name.empty()) name = L"（未命名）";
+                     if (name.size() > 24) name = name.substr(0, 21) + L"…";
+                     wchar_t buf[160];
+                     ::wsprintfW(buf, L"#%d  %s  (%u,%u)-(%u,%u)", i, name.c_str(),
+                                 static_cast<unsigned>(l.left), static_cast<unsigned>(l.top),
+                                 static_cast<unsigned>(l.right), static_cast<unsigned>(l.bottom));
+                     out = buf;
+                 });
+        addGroup(L"触发", static_cast<int>(map_.triggers().BlockCount()), 5,
+                 [this](int i, std::wstring& out) {
+                     const Trigger& t = map_.triggers().Items()[static_cast<std::size_t>(i)];
+                     wchar_t buf[128];
+                     ::wsprintfW(buf, L"触发 %d  [%d 条件 / %d 行动]%s", i, t.ConditionCount(),
+                                 t.ActionCount(), (t.executionFlags & 0x8) ? L"  已禁用" : L"");
+                     out = buf;
+                 });
+
+        // 玩家：仅显示占用情况，双击无跳转
+        HTREEITEM players = InsertSceneItem(sceneTree_, nullptr, L"玩家", 0);
+        for (int p = 0; p < 8; p++) {
+            const bool active = map_.players().player(p).controller < 6;
+            wchar_t buf[80];
+            ::wsprintfW(buf, L"玩家 %d  %s", p + 1, active ? L"启用" : L"未使用");
+            InsertSceneItem(sceneTree_, players, buf, 0);
+        }
+    }
+
+    ::SendMessageW(sceneTree_, WM_SETREDRAW, TRUE, 0);
+    ::InvalidateRect(sceneTree_, nullptr, TRUE);
+    LayoutSceneTree();
+}
+
+void MainWindow::OnSceneTreeDblClk() {
+    if (!sceneTree_ || !map_.IsOpen()) return;
+    TVITEMW item = {};
+    item.mask = TVIF_PARAM;
+    item.hItem = TreeView_GetSelection(sceneTree_);
+    if (!item.hItem || !TreeView_GetItem(sceneTree_, &item)) return;
+    const LPARAM data = item.lParam;
+    if (data == 0) return;
+    const int kind = static_cast<int>((data >> kSceneKindShift) & kSceneKindMask);
+    const int index = static_cast<int>(data & kSceneIndexMask);
+
+    auto centerOnTile = [this](int tx, int ty) {
+        const RECT view = MapViewRect();
+        const int viewW = static_cast<int>(view.right - view.left);
+        const int viewH = static_cast<int>(view.bottom - view.top);
+        scrollX_ = std::clamp(tx * pxPerTile_ - viewW / 2, 0,
+                              std::max(0, image_.width - viewW));
+        scrollY_ = std::clamp(ty * pxPerTile_ - viewH / 2, 0,
+                              std::max(0, image_.height - viewH));
+        UpdateScrollBars();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    };
+
+    switch (kind) {
+        case 1: {
+            const auto& items = map_.units();
+            if (index < 0 || static_cast<std::size_t>(index) >= items.size()) return;
+            const UnitRecord& u = items[static_cast<std::size_t>(index)];
+            centerOnTile(static_cast<int>(u.x) / kTilePixels, static_cast<int>(u.y) / kTilePixels);
+            break;
+        }
+        case 2: {
+            const auto& items = map_.sprites().Items();
+            if (index < 0 || static_cast<std::size_t>(index) >= items.size()) return;
+            const SpriteRecord& s = items[static_cast<std::size_t>(index)];
+            centerOnTile(static_cast<int>(s.x) / kTilePixels, static_cast<int>(s.y) / kTilePixels);
+            break;
+        }
+        case 3: {
+            const auto& items = map_.doodads().Items();
+            if (index < 0 || static_cast<std::size_t>(index) >= items.size()) return;
+            const Doodad& d = items[static_cast<std::size_t>(index)];
+            centerOnTile(static_cast<int>(d.x) / kTilePixels, static_cast<int>(d.y) / kTilePixels);
+            break;
+        }
+        case 4:
+            if (index >= 0 && static_cast<std::size_t>(index) < map_.locations().Count()) {
+                EditLocation(index);
+            }
+            break;
+        case 5: {
+            if (index < 0 || static_cast<std::size_t>(index) >= map_.triggers().BlockCount()) return;
+            BeginEdit();
+            SetDialogDocument(&map_);
+            ShowRecoveredDialog(IDD_DLG_181, hwnd_);
+            SetDialogDocument(nullptr);
+            CommitEdit(L"编辑触发");
+            UpdateTitle();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 void MainWindow::BeepWarning() const {
@@ -3019,6 +3812,7 @@ void MainWindow::CommitEdit(const wchar_t* label) {
     wavSnapshot_.clear();
     swnmSnapshot_.clear();
     mbrfSnapshot_.clear();
+    RefreshSceneTree();
     UpdateTitle();
 }
 
@@ -3340,6 +4134,7 @@ void MainWindow::OnCommand(int id) {
         case kPlaceBuildingAnywhere:
         case kPlaceAutoAddon:
         case kPlaceMineralDistance:
+        case kDoodadAnywhere:
         case kClipboardDoodads:
             TogglePlacementRule(id);
             break;
@@ -3431,8 +4226,7 @@ void MainWindow::OnCommand(int id) {
             InvalidateRect(hwnd_, nullptr, FALSE);   // 地形视图即主视图，重绘即可
             break;
         case kWindowDoodads:
-            Log(L"[ui] 装饰物窗口暂未实现");
-            BeepWarning();
+            ShowDoodadPalette();
             break;
         case kEditCut:
             CopySelection(true);
@@ -3567,6 +4361,19 @@ void MainWindow::OnCommand(int id) {
         case kLayerSpUnits:
             SetLayer(EditLayer::kSpUnits);
             break;
+        case kLocDrawNeat:
+            SetLocationDrawMode(0);
+            break;
+        case kLocDrawGrid:
+            SetLocationDrawMode(1);
+            break;
+        case kLocDrawAnywhere:
+            SetLocationDrawMode(2);
+            break;
+        case kSpAlignGrid:
+            spAlignGrid_ = !spAlignGrid_;
+            SyncMenuChecks();
+            break;
         case kGridTiny:
             ApplyGridPreset(8);
             break;
@@ -3679,6 +4486,7 @@ void MainWindow::OnCommand(int id) {
         case kDispColorCycle:
         case kDispDeathFx:
         case kDispFog:
+        case kDispFogExplored:
         case kLayerFogToggle:
         case kDispLocations:
             ToggleDisplay(id);
@@ -3749,6 +4557,15 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
         case BrushPalette::kMsgSelected:
             SetBrushTile(static_cast<u16>(wParam));
             return 0;
+        case DoodadPalette::kMsgParamsChanged:
+            doodadType_ = doodadPalette_.type();
+            doodadOwner_ = doodadPalette_.owner();
+            doodadDisabled_ = doodadPalette_.disabled();
+            return 0;
+        case DoodadPalette::kMsgAllowAnywhere:
+            placeDoodadsAnywhere_ = wParam != 0;
+            SyncMenuChecks();
+            return 0;
         case WM_COMMAND:
             OnCommand(LOWORD(wParam));
             return 0;
@@ -3803,6 +4620,11 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_LBUTTONUP:
             ::ReleaseCapture();
+            if (locationDrawing_) {
+                FinishLocationDraw();
+                UpdateTitle();
+                return 0;
+            }
             if (selecting_) {
                 selecting_ = false;
                 UpdateTitle();
@@ -3825,6 +4647,10 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             OnKeyDown(static_cast<int>(wParam));
             return 0;
         case WM_MOUSEWHEEL: {
+            // 仅在左上地图视口内滚动才缩放；右栏/日志区滚轮不改变地图
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ::ScreenToClient(hwnd_, &pt);
+            if (!PointInMapView(pt.x, pt.y)) return 0;
             const int delta = GET_WHEEL_DELTA_WPARAM(wParam);
             const int next = NextZoom(pxPerTile_, delta > 0 ? 1 : -1);
             if (next != pxPerTile_ && map_.IsOpen()) RebuildView(next);
@@ -3868,7 +4694,17 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         case WM_SIZE:
             UpdateScrollBars();
+            LayoutSceneTree();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
             return 0;
+        case WM_NOTIFY: {
+            const NMHDR* hdr = reinterpret_cast<const NMHDR*>(lParam);
+            if (hdr && hdr->hwndFrom == sceneTree_ && hdr->code == NM_DBLCLK) {
+                OnSceneTreeDblClk();
+                return 0;
+            }
+            return 0;
+        }
         case WM_CLOSE:
             if (MaybeSave()) ::DestroyWindow(hwnd_);
             return 0;
@@ -3880,6 +4716,9 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
                 view.gridEnabled = gridEnabled_;
                 view.gridCellX = gridCellX_;
                 view.gridCellY = gridCellY_;
+                view.staticGridEnabled = staticGridEnabled_;
+                view.staticGridCellX = staticGridCellX_;
+                view.staticGridCellY = staticGridCellY_;
                 view.gridColorId = gridColorCommand_;
                 view.gridColorValue = static_cast<unsigned>(gridColor_);
                 view.layer = static_cast<int>(layer_);

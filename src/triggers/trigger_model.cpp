@@ -31,13 +31,12 @@ bool LocationTable::Parse(const Buffer& mrgn) {
     for (std::size_t i = 0; i < count; i++) {
         const u8* p = mrgn.data() + i * 20;
         Location loc;
-        loc.left = ReadU16(p + 0);
-        loc.top = ReadU16(p + 2);
-        loc.right = ReadU16(p + 4);
-        loc.bottom = ReadU16(p + 6);
-        loc.stringId = ReadU16(p + 8);
-        loc.flags = ReadU16(p + 10);
-        std::memcpy(loc.reserved, p + 12, 8);
+        loc.left = ReadU32(p + 0);
+        loc.top = ReadU32(p + 4);
+        loc.right = ReadU32(p + 8);
+        loc.bottom = ReadU32(p + 12);
+        loc.stringId = ReadU16(p + 16);
+        loc.flags = ReadU16(p + 18);
         items_.push_back(loc);
     }
     return true;
@@ -47,13 +46,12 @@ Buffer LocationTable::Serialize() const {
     Buffer out(items_.size() * 20, 0);
     for (std::size_t i = 0; i < items_.size(); i++) {
         u8* p = out.data() + i * 20;
-        WriteU16(p + 0, items_[i].left);
-        WriteU16(p + 2, items_[i].top);
-        WriteU16(p + 4, items_[i].right);
-        WriteU16(p + 6, items_[i].bottom);
-        WriteU16(p + 8, items_[i].stringId);
-        WriteU16(p + 10, items_[i].flags);
-        std::memcpy(p + 12, items_[i].reserved, 8);
+        WriteU32(p + 0, items_[i].left);
+        WriteU32(p + 4, items_[i].top);
+        WriteU32(p + 8, items_[i].right);
+        WriteU32(p + 12, items_[i].bottom);
+        WriteU16(p + 16, items_[i].stringId);
+        WriteU16(p + 18, items_[i].flags);
     }
     return out;
 }

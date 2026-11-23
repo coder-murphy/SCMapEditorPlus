@@ -1,5 +1,6 @@
 ﻿#include "ui/dlg_procs.h"
 
+#include <commctrl.h>
 #include <commdlg.h>
 #include <cwchar>
 #include <string>
@@ -139,6 +140,7 @@ INT_PTR CALLBACK ProcMpqList(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
         case WM_INITDIALOG: {
             CenterDialog(dlg);
+            ::SetDlgItemTextW(dlg, IDC_D167_1056, L"");   // 资源默认文本为 "0"，清空避免误建同名条目
             RefreshMpqList(dlg);
             MapDocument* doc = DialogDocument();
             if (!doc || !doc->IsOpen()) {
@@ -288,6 +290,142 @@ const UnitData* FindUnitData(int id) {
         g_unitDataLoaded = UnitDataTable::LoadAuto(g_unitData, source);
     }
     return g_unitDataLoaded ? g_unitData.Get(id) : nullptr;
+}
+
+// 192 的 GRP 动画预览（静态控件 1132 作为画布，定时器循环解码帧）
+constexpr UINT_PTR kIscriptPreviewTimer = 1;
+constexpr UINT kIscriptPreviewIntervalMs = 90;
+
+struct IscriptPreview {
+    GrpFile grp;
+    Buffer palette;
+    std::wstring path;
+    int frames = 0;
+    int frame = 0;
+    bool active = false;
+};
+
+IscriptPreview g_preview;
+WNDPROC g_previewOldProc = nullptr;
+HWND g_previewHost = nullptr;
+IscriptSimContext g_simCtx;
+std::vector<u16> g_activeFrames;
+
+void ReadSimContext(HWND dlg, IscriptSimContext& ctx) {
+    ctx.angle = static_cast<u16>(::SendDlgItemMessageW(dlg, IDC_D192_1135, TBM_GETPOS, 0, 0));
+    ctx.enemyPos = static_cast<u16>(::SendDlgItemMessageW(dlg, IDC_D192_1136, TBM_GETPOS, 0, 0));
+    ctx.enemyInRange = ::IsDlgButtonChecked(dlg, IDC_D192_1093) == BST_CHECKED;
+    ctx.cloaked = ::IsDlgButtonChecked(dlg, IDC_D192_1138) == BST_CHECKED;
+    ctx.goliathRange = ::IsDlgButtonChecked(dlg, IDC_D192_1139) == BST_CHECKED;
+}
+
+void PaintIscriptPreview(HWND host, HDC dc) {
+    RECT rc;
+    ::GetClientRect(host, &rc);
+    const HBRUSH bg = ::CreateSolidBrush(RGB(24, 24, 24));
+    ::FillRect(dc, &rc, bg);
+    ::DeleteObject(bg);
+    ::SetBkMode(dc, TRANSPARENT);
+
+    if (!g_preview.active) {
+        ::SetTextColor(dc, RGB(170, 170, 170));
+        ::DrawTextW(dc, L"载入 GRP 后在这里预览动画", -1, &rc,
+                    DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        return;
+    }
+
+    Buffer bgra;
+    int w = 0;
+    int h = 0;
+    if (!g_preview.grp.DecodeFrame(g_preview.frame, g_preview.palette, bgra, w, h) || w <= 0 ||
+        h <= 0) {
+        return;
+    }
+    // 透明像素填背景色，避免 StretchDIBits 显示为黑块
+    for (std::size_t p = 0; p + 3 < bgra.size(); p += 4) {
+        if (bgra[p + 3] == 0) {
+            bgra[p + 0] = 24;
+            bgra[p + 1] = 24;
+            bgra[p + 2] = 24;
+            bgra[p + 3] = 0xFF;
+        }
+    }
+
+    int availW = rc.right - rc.left;
+    int availH = rc.bottom - rc.top - 18;
+    if (availW < 1) availW = 1;
+    if (availH < 1) availH = 1;
+    int dstW = availW;
+    int dstH = dstW * h / w;
+    if (dstH > availH) {
+        dstH = availH;
+        dstW = dstH * w / h;
+    }
+    if (dstW < 1) dstW = 1;
+    if (dstH < 1) dstH = 1;
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    ::SetStretchBltMode(dc, COLORONCOLOR);
+    ::StretchDIBits(dc, (availW - dstW) / 2, (availH - dstH) / 2, dstW, dstH, 0, 0, w, h,
+                    bgra.data(), &bmi, DIB_RGB_COLORS, SRCCOPY);
+
+    wchar_t line[64];
+    ::wsprintfW(line, L"帧 %d / %d", g_preview.frame + 1, g_preview.frames);
+    ::SetTextColor(dc, RGB(230, 230, 230));
+    RECT info = {4, rc.bottom - 16, rc.right - 4, rc.bottom - 2};
+    ::DrawTextW(dc, line, -1, &info, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
+
+    wchar_t ctxLine[128];
+    ::wsprintfW(ctxLine, L"角 %u  敌 %u  %s%s%s", static_cast<unsigned>(g_simCtx.angle),
+                static_cast<unsigned>(g_simCtx.enemyPos),
+                g_simCtx.enemyInRange ? L"射程 " : L"",
+                g_simCtx.cloaked ? L"隐形 " : L"",
+                g_simCtx.goliathRange ? L"G射程" : L"");
+    RECT ctxRect = {4, rc.bottom - 16, rc.right / 2, rc.bottom - 2};
+    ::SetTextColor(dc, RGB(170, 200, 170));
+    ::DrawTextW(dc, ctxLine, -1, &ctxRect, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+}
+
+LRESULT CALLBACK IscriptPreviewProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT ps;
+        const HDC dc = ::BeginPaint(hwnd, &ps);
+        PaintIscriptPreview(hwnd, dc);
+        ::EndPaint(hwnd, &ps);
+        return 0;
+    }
+    if (msg == WM_PRINT || msg == WM_PRINTCLIENT) {
+        // 供截图/打印时重绘预览
+        PaintIscriptPreview(hwnd, reinterpret_cast<HDC>(wParam));
+        return 0;
+    }
+    if (msg == WM_ERASEBKGND) return 1;
+    if (!g_previewOldProc) return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+    return ::CallWindowProcW(g_previewOldProc, hwnd, msg, wParam, lParam);
+}
+
+bool LoadIscriptPreviewGrp(HWND dlg) {
+    wchar_t path[512] = L"";
+    ::GetDlgItemTextW(dlg, IDC_D192_1086, path, 511);
+    g_preview.grp = GrpFile();
+    g_preview.palette.clear();
+    g_preview.path = path;
+    g_preview.frames = 0;
+    g_preview.frame = 0;
+    g_preview.active = false;
+    if (path[0] && g_preview.grp.Load(path) && g_preview.grp.frameCount() > 0) {
+        g_preview.frames = g_preview.grp.frameCount();
+        GrpFile::GrayPalette(g_preview.palette);
+        g_preview.active = true;
+    }
+    if (g_previewHost) ::InvalidateRect(g_previewHost, nullptr, TRUE);
+    return g_preview.active;
 }
 
 std::wstring ExeDir() {
@@ -516,7 +654,7 @@ void UpdateIscriptTest(HWND dlg, const wchar_t* extra) {
         }
         if (extra) summary += extra;
     }
-    ::SetDlgItemTextW(dlg, IDC_D192_1132, summary.c_str());
+    ::SetDlgItemTextW(dlg, IDC_D192_1095, summary.c_str());
 
     HWND edit = ::GetDlgItem(dlg, IDC_D192_1079);
     std::vector<IscriptInstruction> list;
@@ -542,7 +680,7 @@ void UpdateIscriptTest(HWND dlg, const wchar_t* extra) {
 void RefreshIscriptTest(HWND dlg) {
     if (!g_iscript.loaded() && !LoadIscriptAuto(g_iscriptLabel)) g_iscriptLabel.clear();
     if (!g_iscript.loaded()) {
-        ::SetDlgItemTextW(dlg, IDC_D192_1132,
+        ::SetDlgItemTextW(dlg, IDC_D192_1095,
                           L"未找到 iscript.bin\r\n可在 205 载入，或在 155 设置星际目录。");
         ::SetWindowTextW(::GetDlgItem(dlg, IDC_D192_1079), L"");
         return;
@@ -567,42 +705,59 @@ void RefreshIscriptTest(HWND dlg) {
 }
 
 void PlayIscriptTest(HWND dlg) {
+    wchar_t grpPath[512] = L"";
+    ::GetDlgItemTextW(dlg, IDC_D192_1086, grpPath, 511);
+    if (g_preview.path != grpPath) LoadIscriptPreviewGrp(dlg);
+
     const u16 id = IscriptTestId(dlg);
     const IscriptHeader* header = g_iscript.Find(id);
     const int anim = IscriptTestAnim(dlg);
     if (!header || anim < 0) {
-        ::SetDlgItemTextW(dlg, IDC_D192_1132, L"没有可模拟的动画。");
+        ::SetDlgItemTextW(dlg, IDC_D192_1095, L"没有可模拟的动画。");
         return;
     }
     IscriptSimResult r;
-    if (!g_iscript.Simulate(*header, anim, 1000, r)) {
-        ::SetDlgItemTextW(dlg, IDC_D192_1132, L"该动画无法模拟。");
+    g_simCtx = IscriptSimContext();
+    ReadSimContext(dlg, g_simCtx);
+    if (!g_iscript.Simulate(*header, anim, 1000, r, &g_simCtx)) {
+        ::SetDlgItemTextW(dlg, IDC_D192_1095, L"该动画无法模拟。");
         return;
     }
-    wchar_t line[320];
-    ::wsprintfW(line, L"模拟 1000 步上限\r\nops=%d frames=%d waits=%d loops=%d\r\n"
-                      L"last=%hs frame=%u\r\n%s\r\n",
-                r.ops, r.frames, r.waits, r.loops,
+    wchar_t line[512];
+    ::wsprintfW(line, L"模拟 1000 步上限\r\nops=%d frames=%d waits=%d loops=%d cond=%d\r\n"
+                      L"last=%hs frame=%u\r\n"
+                      L"角=%u 敌方位=%u 射程=%d 隐形=%d G射程=%d\r\n%s\r\n",
+                r.ops, r.frames, r.waits, r.loops, r.condJumps,
                 IscriptFile::OpcodeName(r.lastOp), static_cast<unsigned>(r.lastFrame),
+                static_cast<unsigned>(g_simCtx.angle), static_cast<unsigned>(g_simCtx.enemyPos),
+                g_simCtx.enemyInRange ? 1 : 0, g_simCtx.cloaked ? 1 : 0,
+                g_simCtx.goliathRange ? 1 : 0,
                 r.ended ? L"终止: 是" : L"终止: 否（循环或上限）");
 
+    g_activeFrames = r.frameList;
+    ::SendDlgItemMessageW(dlg, IDC_D192_1060, LB_RESETCONTENT, 0, 0);
+    for (u16 frame : g_activeFrames) {
+        wchar_t item[32];
+        ::wsprintfW(item, L"帧 %u", static_cast<unsigned>(frame));
+        ::SendDlgItemMessageW(dlg, IDC_D192_1060, LB_ADDSTRING, 0,
+                              reinterpret_cast<LPARAM>(item));
+    }
+
     std::wstring extra = line;
-    wchar_t grpPath[512] = L"";
-    ::GetDlgItemTextW(dlg, IDC_D192_1086, grpPath, 511);
     if (grpPath[0]) {
-        GrpFile grp;
-        if (grp.Load(grpPath)) {
+        if (g_preview.active) {
             wchar_t grpLine[192];
-            ::wsprintfW(grpLine, L"GRP: %d 帧 %dx%d\r\n", grp.frameCount(), grp.width(),
-                        grp.height());
+            ::wsprintfW(grpLine, L"GRP: %d 帧 %dx%d（预览中）\r\n",
+                        g_preview.grp.frameCount(), g_preview.grp.width(),
+                        g_preview.grp.height());
             extra += grpLine;
-            if (r.lastFrame < grp.frameCount()) {
-                Buffer palette;
-                GrpFile::GrayPalette(palette);
+            if (r.lastFrame < static_cast<u32>(g_preview.frames)) {
+                g_preview.frame = static_cast<int>(r.lastFrame);
+                if (g_previewHost) ::InvalidateRect(g_previewHost, nullptr, FALSE);
                 Buffer bgra;
                 int w = 0;
                 int h = 0;
-                if (grp.DecodeFrame(static_cast<int>(r.lastFrame), palette, bgra, w, h)) {
+                if (g_preview.grp.DecodeFrame(g_preview.frame, g_preview.palette, bgra, w, h)) {
                     int count = 0;
                     for (std::size_t p = 3; p < bgra.size(); p += 4) {
                         if (bgra[p]) count++;
@@ -623,12 +778,36 @@ void PlayIscriptTest(HWND dlg) {
 }  // namespace
 
 // 192：Iscript 测试
-INT_PTR CALLBACK ProcIscriptTest(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
+INT_PTR CALLBACK ProcIscriptTest(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_INITDIALOG:
             CenterDialog(dlg);
+            g_preview.grp = GrpFile();
+            g_preview.palette.clear();
+            g_preview.path.clear();
+            g_preview.frames = 0;
+            g_preview.frame = 0;
+            g_preview.active = false;
+            g_previewHost = ::GetDlgItem(dlg, IDC_D192_1132);
+            if (g_previewHost) {
+                ::SetWindowTextW(g_previewHost, L"");
+                g_previewOldProc = reinterpret_cast<WNDPROC>(::SetWindowLongPtrW(
+                    g_previewHost, GWLP_WNDPROC,
+                    reinterpret_cast<LONG_PTR>(&IscriptPreviewProc)));
+            }
+            ::SetTimer(dlg, kIscriptPreviewTimer, kIscriptPreviewIntervalMs, nullptr);
             ::SetDlgItemTextW(dlg, IDC_D192_1085, L"198");
             ::SetDlgItemTextW(dlg, IDC_D192_1086, L"");
+            ::SendDlgItemMessageW(dlg, IDC_D192_1135, TBM_SETRANGE, TRUE, MAKELPARAM(0, 255));
+            ::SendDlgItemMessageW(dlg, IDC_D192_1136, TBM_SETRANGE, TRUE, MAKELPARAM(0, 255));
+            ::SendDlgItemMessageW(dlg, IDC_D192_1135, TBM_SETPOS, TRUE, 0);
+            ::SendDlgItemMessageW(dlg, IDC_D192_1136, TBM_SETPOS, TRUE, 0);
+            ::CheckDlgButton(dlg, IDC_D192_1093, BST_UNCHECKED);
+            ::CheckDlgButton(dlg, IDC_D192_1138, BST_UNCHECKED);
+            ::CheckDlgButton(dlg, IDC_D192_1139, BST_UNCHECKED);
+            ::SendDlgItemMessageW(dlg, IDC_D192_1060, LB_RESETCONTENT, 0, 0);
+            g_simCtx = IscriptSimContext();
+            g_activeFrames.clear();
             RefreshIscriptTest(dlg);
             return TRUE;
         case WM_COMMAND:
@@ -649,16 +828,16 @@ INT_PTR CALLBACK ProcIscriptTest(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                     }
                     return TRUE;
                 case IDC_D192_1086:
-                    if (HIWORD(wParam) == EN_KILLFOCUS && g_iscript.loaded()) {
+                    if (HIWORD(wParam) == EN_KILLFOCUS) {
                         wchar_t grpPath[512] = L"";
                         ::GetDlgItemTextW(dlg, IDC_D192_1086, grpPath, 511);
                         std::wstring extra;
                         if (grpPath[0]) {
-                            GrpFile grp;
                             wchar_t line[192];
-                            if (grp.Load(grpPath)) {
-                                ::wsprintfW(line, L"GRP: %d 帧 %dx%d\r\n", grp.frameCount(),
-                                            grp.width(), grp.height());
+                            if (LoadIscriptPreviewGrp(dlg)) {
+                                ::wsprintfW(line, L"GRP: %d 帧 %dx%d（预览中）\r\n",
+                                            g_preview.grp.frameCount(), g_preview.grp.width(),
+                                            g_preview.grp.height());
                             } else {
                                 ::wsprintfW(line, L"GRP 读取失败\r\n");
                             }
@@ -673,13 +852,58 @@ INT_PTR CALLBACK ProcIscriptTest(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                 case IDC_D192_1080:                              // Restart
                     RefreshIscriptTest(dlg);
                     return TRUE;
+                case IDC_D192_1093:                              // Enemy in Range
+                case IDC_D192_1138:                              // Unit is Cloaked
+                case IDC_D192_1139:                              // Goliath Range
+                    if (HIWORD(wParam) == BN_CLICKED) {
+                        ReadSimContext(dlg, g_simCtx);
+                        if (g_previewHost) ::InvalidateRect(g_previewHost, nullptr, FALSE);
+                    }
+                    return TRUE;
+                case IDC_D192_1060:                              // Active Images
+                    if (HIWORD(wParam) == LBN_SELCHANGE) {
+                        const LRESULT sel =
+                            ::SendDlgItemMessageW(dlg, IDC_D192_1060, LB_GETCURSEL, 0, 0);
+                        if (sel != LB_ERR &&
+                            static_cast<std::size_t>(sel) < g_activeFrames.size()) {
+                            const u16 frame = g_activeFrames[static_cast<std::size_t>(sel)];
+                            if (frame < static_cast<u16>(g_preview.frames)) {
+                                g_preview.frame = frame;
+                            }
+                            if (g_previewHost) ::InvalidateRect(g_previewHost, nullptr, FALSE);
+                        }
+                    }
+                    return TRUE;
                 default:
                     break;
+            }
+            break;
+        case WM_HSCROLL:
+            if (reinterpret_cast<HWND>(lParam) == ::GetDlgItem(dlg, IDC_D192_1135) ||
+                reinterpret_cast<HWND>(lParam) == ::GetDlgItem(dlg, IDC_D192_1136)) {
+                ReadSimContext(dlg, g_simCtx);
+                if (g_previewHost) ::InvalidateRect(g_previewHost, nullptr, FALSE);
+                return TRUE;
+            }
+            break;
+        case WM_TIMER:
+            if (wParam == kIscriptPreviewTimer) {
+                if (g_preview.active && g_preview.frames > 0 && g_previewHost) {
+                    g_preview.frame = (g_preview.frame + 1) % g_preview.frames;
+                    ::InvalidateRect(g_previewHost, nullptr, FALSE);
+                }
+                return TRUE;
             }
             break;
         case WM_CLOSE:
             ::EndDialog(dlg, IDCANCEL);
             return TRUE;
+        case WM_DESTROY:
+            ::KillTimer(dlg, kIscriptPreviewTimer);
+            g_preview.active = false;
+            g_previewHost = nullptr;
+            g_previewOldProc = nullptr;
+            return FALSE;
         default:
             break;
     }

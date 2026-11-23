@@ -25,6 +25,14 @@ bool ReadWholeFile(const std::wstring& path, Buffer& out) {
     return in.good() || in.eof();
 }
 
+// 0..255 方位角的最小差值
+int AngleDelta(int a, int b) {
+    int d = (a & 0xFF) - (b & 0xFF);
+    if (d < 0) d = -d;
+    if (d > 128) d = 256 - d;
+    return d;
+}
+
 const char* const kAnimationNames[] = {
     "Init",          "Death",        "GndAttkInit",  "AirAttkInit",
     "Unused1",       "GndAttkRpt",   "AirAttkRpt",   "CastSpell",
@@ -219,7 +227,7 @@ bool IscriptFile::ReadInstruction(std::size_t offset, IscriptInstruction& out) c
 }
 
 bool IscriptFile::Simulate(const IscriptHeader& header, int animIndex, int maxOps,
-                           IscriptSimResult& out) const {
+                           IscriptSimResult& out, const IscriptSimContext* ctx) const {
     out = IscriptSimResult();
     if (!loaded_ || animIndex < 0 ||
         static_cast<std::size_t>(animIndex) >= header.animOffsets.size()) {
@@ -239,11 +247,28 @@ bool IscriptFile::Simulate(const IscriptHeader& header, int animIndex, int maxOp
                                     (ins.operands[static_cast<std::size_t>(at) + 1] << 8));
         };
         const std::size_t next = ins.offset + 1 + ins.operands.size();
+        // 条件跳转：偏移按“相对本条指令起点”的有符号 16 位解释
+        auto takeJump = [&](bool take) {
+            if (!take) {
+                pos = next;
+                return;
+            }
+            const short delta = static_cast<short>(operandU16(0));
+            const long target = static_cast<long>(ins.offset) + delta;
+            out.condJumps++;
+            if (target <= 0 || target >= static_cast<long>(data_.size())) {
+                out.ended = true;
+            } else {
+                out.loops++;
+                pos = static_cast<std::size_t>(target);
+            }
+        };
         switch (ins.opcode) {
             case 0x00:      // playfram
             case 0x01:      // playframtile
                 out.frames++;
                 out.lastFrame = operandU16(0);
+                if (out.frameList.size() < 256) out.frameList.push_back(out.lastFrame);
                 pos = next;
                 break;
             case 0x05:      // wait
@@ -266,6 +291,26 @@ bool IscriptFile::Simulate(const IscriptHeader& header, int animIndex, int maxOp
             case 0x36:      // return
                 out.ended = true;
                 pos = next;
+                break;
+            case 0x39:      // pwrupcondjmp：Goliath 射程升级
+                takeJump(ctx && ctx->goliathRange);
+                break;
+            case 0x3A:      // trgtrangecondjmp：目标在射程内
+                takeJump(ctx && ctx->enemyInRange);
+                break;
+            case 0x3B:      // trgtarccondjmp：目标在攻击弧内
+                takeJump(ctx && ctx->enemyInRange &&
+                         AngleDelta(ctx->angle, ctx->enemyPos) <= 32);
+                break;
+            case 0x3C: {    // curdirectcondjmp：与指定方向比较
+                const int dir = ins.operands.size() >= 3
+                                    ? static_cast<int>(ins.operands[2])
+                                    : static_cast<int>(ctx ? ctx->angle : 0);
+                takeJump(ctx && AngleDelta(ctx->angle, dir) <= 16);
+                break;
+            }
+            case 0x3F:      // liftoffcondjmp：无“已升空”输入，不跳
+                takeJump(false);
                 break;
             default:
                 pos = next;

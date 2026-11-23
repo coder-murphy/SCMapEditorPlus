@@ -21,15 +21,26 @@ struct IscriptHeader {
     std::vector<u16> animOffsets;
 };
 
+// iscript 线性模拟的输入条件（192 对话框的角度/敌方位置/条件开关）
+struct IscriptSimContext {
+    u16 angle = 0;          // 0..255，单位朝向
+    u16 enemyPos = 0;       // 0..255，敌方方位
+    bool enemyInRange = false;   // trgtrangecondjmp
+    bool cloaked = false;        // 仅展示，当前无对应条件跳转
+    bool goliathRange = false;   // pwrupcondjmp
+};
+
 // iscript 线性模拟结果（Play/测试用；不做图像绘制）
 struct IscriptSimResult {
     int ops = 0;
     int waits = 0;
     int frames = 0;
     int loops = 0;
+    int condJumps = 0;
     u16 lastFrame = 0;
     u8 lastOp = 0;
     bool ended = false;
+    std::vector<u16> frameList;   // playfram 命中序列（Active Images）
 };
 
 // iscript.bin：文件头为 (u16 id, u16 headerOffset) 索引表，以 headerOffset=0 结束；
@@ -48,9 +59,9 @@ public:
                      std::vector<IscriptInstruction>& out) const;
     // 读取指定文件偏移处的一条指令（供 goto 跳转模拟使用）
     bool ReadInstruction(std::size_t offset, IscriptInstruction& out) const;
-    // 线性模拟动画：处理 playfram/wait/goto/end/return/ignorerest，最多 maxOps 步
+    // 线性模拟动画：处理 playfram/wait/goto/条件跳转/end/return/ignorerest，最多 maxOps 步
     bool Simulate(const IscriptHeader& header, int animIndex, int maxOps,
-                  IscriptSimResult& out) const;
+                  IscriptSimResult& out, const IscriptSimContext* ctx = nullptr) const;
 
     // type -> 动画槽数量（0/1->2，2->4，12/13->14，14/15->16，20/21->22，
     // 23->24，24->26，26..29->28）

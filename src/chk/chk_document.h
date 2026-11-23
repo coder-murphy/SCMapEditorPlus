@@ -20,7 +20,7 @@ public:
 
     const std::vector<ChkSection>& sections() const { return sections_; }
 
-    // TODO: MRGN 置空可避免 ScmDraft2 显示游离矩形框（VERIFIED）
+    // 注意：MRGN 置空可避免 ScmDraft2 显示游离矩形框（VERIFIED）
 private:
     std::vector<ChkSection> sections_;
 };

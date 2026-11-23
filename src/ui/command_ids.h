@@ -72,6 +72,7 @@ enum CommandId : int {
     kPlaceBuildingAnywhere = 0x80EA,
     kPlaceAutoAddon = 0x80B8,
     kPlaceMineralDistance = 0x80BF,
+    kDoodadAnywhere = 0x8010,       // 选项 → 装饰物 → 允许任意放置
     kClipboardDoodads = 0x811C,
 
     // 选项 / 高级 / 帮助
@@ -90,8 +91,12 @@ enum CommandId : int {
     kFogDefaultExplored = 0x80D4,     // 战争迷雾：默认为已探索
     kLayerLocations = 0x803C,
     kLocRename = 0x8108,        // 选项 → Locations → 修改名字（打开 171）
+    kLocDrawNeat = 0x8013,      // 选项 → Locations → 整齐的描绘
+    kLocDrawGrid = 0x80EB,      // 选项 → Locations → 按照方格描绘
+    kLocDrawAnywhere = 0x80EC,  // 选项 → Locations → 任意描绘
     kLayerUnits = 0x803D,
     kLayerSpUnits = 0x803F,
+    kSpAlignGrid = 0x80B7,      // 选项 → SP单位 → 对齐方格
 
     // 选项 → 方格
     kGridTiny = 0x80AF,
@@ -132,6 +137,7 @@ enum CommandId : int {
     kDispColorCycle = 0x80D1,
     kDispDeathFx = 0x80F6,
     kDispFog = 0x8113,
+    kDispFogExplored = 0x80F4,  // 选项 → 战争迷雾 → 显示战争迷雾在探索地区（与 0x8113 同义）
     kLayerFogToggle = 0x80CE,   // 编辑层子菜单内的“显示战争迷雾”（与 0x8113 同义）
     kDispLocations = 0x8115,
 

@@ -58,11 +58,12 @@ python tools/export_res.py --exe "<星际安装目录>/[CN]ScmDraft2.exe"
 
 本工程 `res/assets.rc` 以 RCDATA 148/183/193 内嵌前三者；170 暂未使用。
 
-## 下一步（TODO）
+## 导出状态（已完成）
 
 1. 25 个 DIALOG 已并入 `src/res/dialogs.rc`，菜单/加速键/版本信息同样已并入。
 2. 已实现对话框在 `doc/05-ui/ui-map.md` 标注「对话框 ID ↔ 业务模块」。
 3. 位图与 BIN 已导出并确认用途；新建地图已使用 148/183/193 写默认 VCOD/TRIG。
+4. 170 单位/精灵名称树已确认用途，当前界面未使用（无功能依赖）。
 
 > 注意：`[CN]` 版的 `Local.dll` / `EditLocal.dll` 是加壳的汉化组件，会给动态分析添噪声；
 > 需要看运行时行为时，优先用未汉化的原版 exe。

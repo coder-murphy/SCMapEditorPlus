@@ -115,6 +115,7 @@ const wchar_t* kEraPrefix[8] = {
 bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir) {
     opened_ = false;
     path_.clear();
+    tilesetDir_ = tilesetDir;
     units_.clear();
     tiles_.clear();
     extraFiles_.clear();
@@ -233,6 +234,7 @@ bool MapDocument::CreateNew(int width, int height, u16 era, const std::wstring& 
     Close();
     if (width <= 0 || height <= 0 || width > kMaxMapSize || height > kMaxMapSize) return false;
 
+    tilesetDir_ = tilesetDir;
     width_ = width;
     height_ = height;
     era_ = era < 8 ? era : 0;
@@ -329,10 +331,29 @@ bool MapDocument::Resize(int width, int height, int offsetX, int offsetY, bool s
     return true;
 }
 
+bool MapDocument::SetEra(u16 era) {
+    if (!opened_) return false;
+    era_ = era < 8 ? era : 0;
+    Buffer eraBytes(2, 0);
+    WriteU16(eraBytes.data(), era_);
+    chk_.Set(section::kEra, std::move(eraBytes));
+
+    tileset_.Unload();
+    if (!tilesetDir_.empty()) {
+        if (!tileset_.Load(tilesetDir_, kEraPrefix[era_])) {
+            Log(L"[map] 地形集加载失败（ERA %u），地形将不显示", era_);
+        }
+    }
+    dirty_ = true;
+    Log(L"[map] era -> %u (%s)", era_, eraName());
+    return true;
+}
+
 void MapDocument::Close() {
     opened_ = false;
     dirty_ = false;
     path_.clear();
+    tilesetDir_.clear();
     width_ = height_ = 0;
     era_ = 0;
     tiles_.clear();
@@ -471,6 +492,27 @@ bool MapDocument::PlaceUnit(int tx, int ty, u16 type, u8 owner, u32 resource, bo
     units_.push_back(r);
     dirty_ = true;
     return true;
+}
+
+bool MapDocument::PlaceDoodad(int tx, int ty, u16 type, u8 owner, bool disabled, bool force) {
+    if (tx < 0 || ty < 0 || tx >= width_ || ty >= height_) return false;
+    if (!force && !IsWalkableTile(tx, ty)) return false;
+
+    Doodad d;
+    d.type = type;
+    d.x = static_cast<u16>(tx * kTilePixels + kTilePixels / 2);
+    d.y = static_cast<u16>(ty * kTilePixels + kTilePixels / 2);
+    d.owner = owner;
+    d.enabled = disabled ? 1 : 0;
+    doodads_.MutableItems().push_back(d);   // 同时标记 DD2 已修改
+    dirty_ = true;
+    return true;
+}
+
+int MapDocument::RemoveDoodadsAtTile(int tx, int ty) {
+    const int removed = doodads_.RemoveInTileRect(tx, ty, tx, ty);
+    if (removed > 0) dirty_ = true;
+    return removed;
 }
 
 int MapDocument::UnitCountAtTile(int tx, int ty) const {

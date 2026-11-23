@@ -43,6 +43,17 @@ INT_PTR CALLBACK ProcUnitProps(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
             SetPercent(dlg, IDC_D180_1081, g_unitPropsSeed.energy);
             ::SetDlgItemInt(dlg, IDC_D180_1080, static_cast<UINT>(g_unitPropsSeed.resource), FALSE);
             ::SetDlgItemInt(dlg, IDC_D180_1082, static_cast<UINT>(g_unitPropsSeed.ammo), FALSE);
+            // 状态位顺序与资源按钮一致：无敌=bit4、幻影=bit3、钻地=bit1、隐形=bit0、升起=bit2
+            ::CheckDlgButton(dlg, IDC_D180_1073,
+                             (g_unitPropsSeed.flags & 0x10u) ? BST_CHECKED : BST_UNCHECKED);
+            ::CheckDlgButton(dlg, IDC_D180_1074,
+                             (g_unitPropsSeed.flags & 0x08u) ? BST_CHECKED : BST_UNCHECKED);
+            ::CheckDlgButton(dlg, IDC_D180_1075,
+                             (g_unitPropsSeed.flags & 0x02u) ? BST_CHECKED : BST_UNCHECKED);
+            ::CheckDlgButton(dlg, IDC_D180_1076,
+                             (g_unitPropsSeed.flags & 0x01u) ? BST_CHECKED : BST_UNCHECKED);
+            ::CheckDlgButton(dlg, IDC_D180_1077,
+                             (g_unitPropsSeed.flags & 0x04u) ? BST_CHECKED : BST_UNCHECKED);
             return TRUE;
         case WM_COMMAND:
             if (LOWORD(wParam) == IDC_D180_1) {                 // 确定
@@ -52,11 +63,11 @@ INT_PTR CALLBACK ProcUnitProps(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                 g_unitProps.resource = ReadClampedInt(dlg, IDC_D180_1080, 0, 0, 0x7FFFFF);
                 g_unitProps.ammo = ReadClampedInt(dlg, IDC_D180_1082, 0, 0, 255);
                 unsigned f = 0;
-                if (::IsDlgButtonChecked(dlg, IDC_D180_1073)) f |= 1u << 0;   // 无敌
-                if (::IsDlgButtonChecked(dlg, IDC_D180_1074)) f |= 1u << 1;   // 幻影
-                if (::IsDlgButtonChecked(dlg, IDC_D180_1075)) f |= 1u << 2;   // 钻地
-                if (::IsDlgButtonChecked(dlg, IDC_D180_1076)) f |= 1u << 3;   // 隐形
-                if (::IsDlgButtonChecked(dlg, IDC_D180_1077)) f |= 1u << 4;   // 升起
+                if (::IsDlgButtonChecked(dlg, IDC_D180_1073)) f |= 1u << 4;   // 无敌
+                if (::IsDlgButtonChecked(dlg, IDC_D180_1074)) f |= 1u << 3;   // 幻影
+                if (::IsDlgButtonChecked(dlg, IDC_D180_1075)) f |= 1u << 1;   // 钻地
+                if (::IsDlgButtonChecked(dlg, IDC_D180_1076)) f |= 1u << 0;   // 隐形
+                if (::IsDlgButtonChecked(dlg, IDC_D180_1077)) f |= 1u << 2;   // 升起
                 g_unitProps.flags = f;
                 Log(L"[unit] hp=%d sh=%d en=%d res=%d ammo=%d flags=0x%X", g_unitProps.hp,
                     g_unitProps.shield, g_unitProps.energy, g_unitProps.resource, g_unitProps.ammo, f);
@@ -205,13 +216,19 @@ void PopulateUnitDataList(HWND dlg) {
 
 INT_PTR CALLBACK ProcUnitNames(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
-        case WM_INITDIALOG:
+        case WM_INITDIALOG: {
             CenterDialog(dlg);
             PopulateUnitDataList(dlg);
             SetPercent(dlg, IDC_D172_1078, 100);
             SetPercent(dlg, IDC_D172_1079, 100);
             SetPercent(dlg, IDC_D172_1081, 100);
+            // 属性来自 units.dat（游戏数据），本工程不改写：编辑控件置灰，仅作查看
+            const int kReadOnly[] = {IDC_D172_1078, IDC_D172_1081, IDC_D172_1079, IDC_D172_1080,
+                                     IDC_D172_1082, IDC_D172_1073, IDC_D172_1074, IDC_D172_1075,
+                                     IDC_D172_1076, IDC_D172_1077};
+            for (int id : kReadOnly) ::EnableWindow(::GetDlgItem(dlg, id), FALSE);
             return TRUE;
+        }
         case WM_COMMAND:
             switch (LOWORD(wParam)) {
                 case IDC_D172_1060:                              // 列表选择

@@ -376,7 +376,7 @@ EXSTYLE 0x00000000
 CAPTION "触发编辑器"
 FONT 9, "宋体", 400, 0, 0x1
 BEGIN
-    CONTROL "0", 182, "ListBox", 0x50A30121, 0, 90, 324, 222
+    CONTROL "0", 182, "ListBox", 0x50A10101, 0, 90, 324, 222
     CONTROL "0", 1022, "ListBox", 0x50A10B09, 0, 12, 324, 66
     CONTROL "新建(&N)", 1100, "Button", 0x50010000, 330, 90, 42, 20
     CONTROL "修改(&M)", 1101, "Button", 0x50010000, 330, 115, 41, 20
@@ -440,7 +440,7 @@ STYLE 0x50080048
 EXSTYLE 0x00000000
 FONT 9, "宋体", 400, 0, 0x1
 BEGIN
-    CONTROL "0", 1123, "ListBox", 0x50A10111, 0, 0, 300, 162
+    CONTROL "0", 1123, "ListBox", 0x50A10101, 0, 0, 300, 162
     CONTROL "新建(&W)", 1108, "Button", 0x50010000, 306, 0, 50, 14
     CONTROL "编辑(&E)", 1106, "Button", 0x50010000, 306, 18, 50, 14
     CONTROL "复制(&C)", 1109, "Button", 0x50010000, 306, 36, 50, 14
@@ -456,7 +456,7 @@ STYLE 0x50080048
 EXSTYLE 0x00000000
 FONT 9, "宋体", 400, 0, 0x1
 BEGIN
-    CONTROL "0", 1115, "ListBox", 0x50A10111, 0, 0, 300, 162
+    CONTROL "0", 1115, "ListBox", 0x50A10101, 0, 0, 300, 162
     CONTROL "新建(&W)", 1108, "Button", 0x50010000, 306, 0, 50, 14
     CONTROL "编辑(&E)", 1106, "Button", 0x50010000, 306, 18, 50, 14
     CONTROL "复制(&C)", 1109, "Button", 0x50010000, 306, 36, 50, 14

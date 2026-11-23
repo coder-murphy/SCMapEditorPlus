@@ -1,0 +1,617 @@
+﻿[dialog 103] Scmdraft2.0.8.0[CsgA]NaKa汉化版
+  #-1 Static enabled text="Scmdraft 2 Version 0.8.0"
+  #-1 Static enabled text="Copyright (C) 2003 - 2007\nHenrik Arlinghaus (Suicidal Insanity)"
+  #1 Button enabled check=0
+  #-1 Static enabled text="Coding: Suicidal Insanity\nAdditional Coding: DarkWizzard. \nSpecial Thanks to: \nMerlin, Veldhar Windrider (Gold Dragon..."
+  #-1 Static enabled text="Homepage: www.Stormcoast-Fortress.net                          www.nauni.cn"
+  #-1 Static enabled text="Beta testers: Ojan, Clokr, Darkness22k, General Mengsk, xxxFanta, Bolthead"
+  #-1 Static enabled text="Additional beta testers: Chuiu_os, Coko, Deathknight, Evolipel, LegacyWeapon, Mini Moose 2707, Yoshi, Beer_KeG, Kenoli, ..."
+[dialog 155] Scmdraft 2.0基本设置
+  #1 Button enabled check=0
+  #-1 Button enabled check=0
+  #1000 ListBox enabled count=0 sel=-1
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #1003 Button enabled check=0
+  #1004 Button enabled check=0
+  #1005 Button enabled check=0
+  #-1 Button enabled check=0
+  #1007 Button enabled check=0
+  #1008 Edit enabled
+  #-1 Static enabled text="SP单位"
+  #-1 Static enabled text="默认水晶"
+  #-1 Static enabled text="默认气矿"
+  #-1 Static enabled text="撤销次数"
+  #-1 Static enabled text="Location编号"
+  #1009 Edit enabled text="1700"
+  #1010 Edit enabled text="8"
+  #1011 Edit enabled text="1"
+  #1012 Edit enabled text="50"
+  #1013 Edit enabled text="500"
+  #1014 Button enabled check=0
+  #2 Button enabled check=0
+  #1016 Button enabled check=0
+  #1017 Edit enabled text="0"
+  #1018 Button enabled check=0
+  #-1 Button enabled check=0
+  #-1 Button enabled check=0
+  #1079 Edit enabled text="5"
+  #1080 Button enabled check=0
+  #1081 Edit enabled text="5"
+  #-1 Static enabled text="最大备份数量"
+  #-1 Static enabled text="时间间隔(分钟)"
+  #1082 Button enabled check=1
+  #-1 Button enabled check=0
+  #1093 Button enabled check=0
+  #1094 Edit enabled text="3400"
+  #-1 Static enabled text="最多单位"
+  #-1 Button enabled check=0
+  #1060 ListBox enabled count=0 sel=-1
+  #1115 Edit enabled text="0"
+  #1006 Button enabled check=0
+  #1019 Button enabled check=0
+  #1116 Button enabled check=0
+  #-1 Button enabled check=0
+  #-1 Static enabled text="输入全部的文件名称,用%SCPATH%来代替星际的默认安装目录，但是你的星际必须有安装目录注册表文件。"
+  #-1 Button enabled check=0
+  #1015 Button enabled check=0
+  #1020 Button enabled check=0
+  #1129 Button enabled check=1
+  #1140 Button enabled check=1
+[dialog 163] 兼容性警告
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+  #1038 ListBox enabled count=0 sel=-1
+  #-1 Static enabled text="请双击设定地图使用的高级设置"
+  #1020 ListBox enabled count=0 sel=-1
+  #1021 ListBox enabled count=0 sel=-1
+  #-1 Static enabled text="兼容的版本:"
+  #-1 Static enabled text="不兼容的版本:"
+[dialog 164] SP单位属性
+  #1 Button enabled check=0
+  #1022 ComboBox enabled count=8 sel=-1
+    [0] "Player 1"
+    [1] "Player 2"
+    [2] "Player 3"
+    [3] "Player 4"
+    [4] "Player 5"
+    [5] "Player 6"
+    [6] "Player 7"
+    [7] "Player 8"
+  #1001 Edit enabled
+  #-1 Static enabled text="玩家:"
+  #1023 Button enabled check=0
+  #1024 Button enabled check=0
+  #1025 Button enabled check=0
+  #1026 Button enabled check=0
+  #1027 Button enabled check=0
+  #1028 Button enabled check=0
+  #1029 Button enabled check=0
+  #1030 Button enabled check=0
+  #1031 Button enabled check=0
+  #1032 Button enabled check=0
+  #1033 Button enabled check=0
+  #1034 Button enabled check=0
+  #1035 Button enabled check=0
+  #1036 Button enabled check=0
+  #-1 Button enabled check=0
+  #-1 Static enabled text="未知 [BYTE]"
+  #1037 Edit enabled text="0"
+  #1019 ListBox enabled count=0 sel=-1
+  #-1 Static enabled text="请点击选择要设置的SP单位:"
+  #1039 Button enabled check=0
+  #1040 Button enabled check=0
+[dialog 166] 方格设置
+  #1 Button enabled check=0
+  #1044 Edit enabled text="32"
+  #1045 Edit enabled text="32"
+  #1046 Edit enabled text="0"
+  #1047 Edit enabled text="0"
+  #1048 Button enabled check=0
+  #-1 Static enabled text="Y"
+  #-1 Static enabled text="X"
+  #-1 Static enabled text="X"
+  #-1 Static enabled text="Y"
+  #-1 Button enabled check=0
+  #-1 Button enabled check=0
+  #2 Button enabled check=0
+  #1049 Edit enabled text="32"
+  #1050 Edit enabled text="32"
+  #1051 Edit enabled text="0"
+  #1052 Edit enabled text="0"
+  #1053 Button enabled check=0
+  #-1 Static enabled text="Y"
+  #-1 Static enabled text="X"
+  #-1 Static enabled text="X"
+  #-1 Static enabled text="Y"
+  #-1 Button enabled check=0
+  #-1 Button enabled check=0
+[dialog 167] Scmdraft 2.0.8.0 [CsgA]NaKa汉化版
+  #1 Button enabled check=0
+  #1049 ListBox disabled count=0 sel=-1
+  #1055 Static enabled text="未打开地图"
+  #1050 Button disabled check=0
+  #1051 Button disabled check=0
+  #1052 Button disabled check=0
+  #1053 Button disabled check=0
+  #1056 Edit disabled
+  #1059 Button enabled check=0
+  #1092 Button disabled check=0
+[dialog 169] 新建地图
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+  #1060 ListBox enabled count=8 sel=0
+    [0] "Badlands"
+    [1] "Space"
+    [2] "Installation"
+    [3] "Ashworld"
+    [4] "Jungle"
+    [5] "Desert"
+    [6] "Ice"
+    [7] "Twilight"
+  #1061 ListBox enabled count=5 sel=0
+    [0] "64 x 64"
+    [1] "96 x 96"
+    [2] "128 x 128"
+    [3] "192 x 192"
+    [4] "256 x 256"
+  #-1 Button enabled check=0
+  #-1 Button enabled check=0
+  #-1 Static enabled text="请输入地图大小，只有64,96,128,192,256可选,其他数值有可能造成程序崩溃."
+  #1062 Edit enabled text="64"
+  #-1 Static enabled text="宽:"
+  #1063 Edit enabled text="64"
+  #-1 Static enabled text="高:"
+  #-1 Button enabled check=0
+  #1141 ComboBox enabled count=3 sel=1
+    [0] "无默认触发"
+    [1] "3 条默认触发"
+    [2] "4 条默认触发"
+[dialog 171] 编辑Location
+  #1064 Edit enabled
+  #1065 Button enabled check=0
+  #1066 Button enabled check=0
+  #1067 Button enabled check=0
+  #1069 Button enabled check=0
+  #1068 Button enabled check=0
+  #1070 Button enabled check=0
+  #1 Button enabled check=0
+  #-1 Static enabled text="标记:"
+  #1071 Edit enabled text="0"
+  #1079 Edit enabled text="0"
+  #-1 Static enabled text="左:"
+  #1080 Edit enabled text="0"
+  #-1 Static enabled text="高:"
+  #1081 Edit enabled text="0"
+  #-1 Static enabled text="右:"
+  #1082 Edit enabled text="0"
+  #-1 Static enabled text="底:"
+[dialog 172] 单位名字
+  #1072 ComboBox enabled count=0 sel=-1
+  #1001 Edit enabled
+  #1078 Edit disabled text="100"
+  #1081 Edit disabled text="100"
+  #1079 Edit disabled text="100"
+  #1080 Edit disabled text="0"
+  #1082 Edit disabled text="0"
+  #1073 Button disabled check=0
+  #1074 Button disabled check=0
+  #1075 Button disabled check=0
+  #1076 Button disabled check=0
+  #1077 Button disabled check=0
+  #1060 ListBox enabled count=228 sel=0
+    [0] "#0  HP 40  SH 0  A 0  矿 50 气 0  时 360  8x25"
+    [1] "#1  HP 45  SH 0  A 0  矿 25 气 75  时 750  9x25"
+    [2] "#10  HP 160  SH 0  A 3  矿 100 气 50  时 720  15x15"
+    [3] "#100  HP 250  SH 0  A 3  矿 200 气 75  时 1500  16x32"
+    [4] "#101  HP 1  SH 0  A 0  矿 0 气 0  时 1  16x32"
+    [5] "#102  HP 700  SH 0  A 4  矿 800 气 600  时 4800  15x31"
+    [6] "#103  HP 125  SH 0  A 1  矿 50 气 100  时 600  15x31"
+    [7] "#104  HP 300  SH 0  A 3  矿 200 气 75  时 1500  1x16"
+    [8] "#105  HP 800  SH 0  A 0  矿 250 气 250  时 2400  1x16"
+    [9] "#106  HP 1500  SH 0  A 1  矿 400 气 0  时 1800  1x15"
+    [10] "#107  HP 500  SH 0  A 1  矿 50 气 50  时 600  1x15"
+    [11] "#108  HP 600  SH 0  A 1  矿 100 气 100  时 1200  37x16"
+    [12] "#109  HP 500  SH 0  A 1  矿 100 气 0  时 600  29x16"
+    [13] "#11  HP 150  SH 0  A 1  矿 100 气 100  时 750  15x15"
+    [14] "#110  HP 750  SH 0  A 1  矿 100 气 0  时 600  37x15"
+    [15] "#111  HP 1000  SH 0  A 1  矿 150 气 0  时 1200  29x15"
+    [16] "#112  HP 600  SH 0  A 1  矿 200 气 0  时 1200  37x2"
+    [17] "#113  HP 1250  SH 0  A 1  矿 200 气 100  时 1200  29x2"
+    [18] "#114  HP 1300  SH 0  A 1  矿 150 气 100  时 1050  37x2"
+    [19] "#115  HP 500  SH 0  A 1  矿 50 气 50  时 600  29x2"
+    ...
+  #-1 Static enabled text="生命{%}:"
+  #-1 Static enabled text="护盾[%}:"
+  #-1 Static enabled text="魔法{%}:"
+  #-1 Static enabled text="资源:"
+  #-1 Static enabled text="子弹:"
+[dialog 173] 查看备份数据
+  #1060 ListBox enabled count=0 sel=-1
+  #1083 ListBox enabled count=0 sel=-1
+  #-1 Button enabled check=0
+  #-1 Button enabled check=0
+  #1084 Button enabled check=0
+  #1085 Button enabled check=0
+  #1059 Button enabled check=0
+  #1086 Button enabled check=0
+[dialog 174] 在线升级
+  #1 Button enabled check=0
+  #1087 msctls_progress32 enabled text="0"
+  #1090 Button disabled check=0
+  #1091 Static enabled text="未配置更新源"
+  #1089 Edit enabled text="SCMD Plus 3.0.0.0\r\n更新源：未配置\r\n\r\n当前构建不含在线升级服务器，本对话框仅展示版本与状态。\r\n如需升级，请手动替换 SCMDPlus.exe。"
+[dialog 175] 重设地图大小
+  #1062 Edit enabled text="64"
+  #1063 Edit enabled text="64"
+  #1060 ListBox enabled count=8 sel=0
+    [0] "Badlands"
+    [1] "Space"
+    [2] "Installation"
+    [3] "Ashworld"
+    [4] "Jungle"
+    [5] "Desert"
+    [6] "Ice"
+    [7] "Twilight"
+  #1095 ListBox enabled count=8 sel=0
+    [0] "Badlands"
+    [1] "Space"
+    [2] "Installation"
+    [3] "Ashworld"
+    [4] "Jungle"
+    [5] "Desert"
+    [6] "Ice"
+    [7] "Twilight"
+  #1044 Edit disabled text="0"
+  #1045 Edit disabled text="0"
+  #1099 Button enabled check=0
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+  #-1 Button enabled check=0
+  #-1 Static enabled text="宽度"
+  #-1 Static enabled text="高度"
+  #-1 Button enabled check=0
+  #-1 Button enabled check=0
+  #-1 Static enabled text="左"
+  #-1 Static enabled text="顶"
+  #-1 Button enabled check=0
+[dialog 179] 重命名开关
+  #1060 ListBox enabled count=0 sel=-1
+  #1079 Edit enabled text="0"
+  #1110 Button enabled check=0
+  #1111 Button enabled check=0
+[dialog 180] 设置单位属性
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+  #-1 Button enabled check=0
+  #1078 Edit enabled text="100"
+  #-1 Static enabled text="生命 (%)"
+  #-1 Static enabled text="魔法 (%)"
+  #1081 Edit enabled text="100"
+  #-1 Static enabled text="护盾 (%)"
+  #1079 Edit enabled text="100"
+  #1080 Edit enabled text="0"
+  #-1 Static enabled text="资源"
+  #-1 Static enabled text="弹药"
+  #1082 Edit enabled text="0"
+  #1073 Button enabled check=0
+  #1074 Button enabled check=0
+  #1075 Button enabled check=0
+  #1076 Button enabled check=0
+  #1077 Button enabled check=0
+[dialog 181] 触发编辑器
+  #182 ListBox enabled count=0 sel=-1
+  #1022 ListBox enabled count=0 sel=0
+  #1100 Button enabled check=0
+  #1101 Button enabled check=0
+  #1104 Button enabled check=0
+  #1105 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #1102 Button enabled check=0
+  #1 Button enabled check=0
+  #1110 SysTreeView32 enabled text="0"
+  #-1 Static enabled text="玩家触发列表:"
+  #1113 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1022 SysListView32 enabled text="0"
+  #0 SysHeader32 enabled
+  #0 #32770 enabled hidden
+  #1123 ListBox enabled count=0 sel=-1
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+  #0 #32770 enabled hidden
+  #1115 ListBox enabled count=0 sel=-1
+  #1108 Button enabled check=0
+  #1106 Button enabled check=0
+  #1109 Button enabled check=0
+  #1107 Button enabled check=0
+  #1001 Button enabled check=0
+  #1002 Button enabled check=0
+[dialog 182] 自定义刷子
+  #1126 ComboBox enabled count=3 sel=0
+    [0] "单格刷"
+    [1] "多格刷"
+    [2] "全部刷子"
+  #1120 ComboBox enabled count=2 sel=0
+    [0] "按尺寸"
+    [1] "按名称"
+  #1060 ListBox enabled count=0 sel=-1
+  #1124 Button enabled check=0
+  #1059 Button enabled check=0
+  #1125 Button enabled check=0
+  #1079 Edit enabled
+  #1006 Button enabled check=0
+[dialog 183] 对话框
+  #1112 SysTabControl32 enabled text="0"
+  #1114 Static enabled text="0"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[dialog 187] 对话框
+  #1116 ComboBox enabled count=0 sel=-1
+  #1117 RichEdit20A enabled text="0"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+  #1134 Static enabled
+[dialog 188] 输入数量
+  #1118 Edit enabled text="1"
+  #1119 Button enabled check=0
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+  #-1 Static enabled text="数量(1...255)"
+[dialog 189] 编辑字符串
+  #1120 Edit enabled
+  #1122 Button enabled check=1
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+  #1121 Edit disabled text="1"
+  #1079 Edit enabled
+[dialog 191] 重叠单位
+  #1 Button enabled check=0
+  #1079 Edit enabled text="2"
+  #-1 Static enabled text="重叠数量:"
+[dialog 192] Iscript测试
+  #1132 Static enabled
+  #1130 Button enabled check=0
+  #1133 ComboBox enabled count=4 sel=0
+    [0] "Death"
+    [1] "Init"
+    [2] "Walking"
+    [3] "WalkingToIdle"
+  #1001 Edit enabled text="Death"
+  #1079 Edit enabled text="1D2B  playsnd            35 00\r\n1D2E  setfldirect        00\r\n1D30  playfram           99 00\r\n1D33  wait           ..."
+  #1081 Edit enabled text="0"
+  #-1 Static enabled text="=>"
+  #1082 Edit enabled text="0"
+  #-1 Static enabled text="=>"
+  #1083 Edit enabled text="78"
+  #-1 Static enabled text="UnitID"
+  #-1 Static enabled text="SpriteID"
+  #-1 Static enabled text="ImageID"
+  #-1 Static enabled text="=>"
+  #1084 Edit enabled text="0"
+  #-1 Static enabled text="FlingyID"
+  #-1 Static enabled text="=>"
+  #1085 Edit enabled text="198"
+  #-1 Static enabled text="IscriptID"
+  #-1 Static enabled text="=>"
+  #1086 Edit enabled
+  #-1 Static enabled text="Grp filename"
+  #-1 Static enabled text="=>"
+  #1087 Edit enabled text="iscript 198 (type 12)"
+  #-1 Static enabled text="<= Unit Name"
+  #1080 Button enabled check=0
+  #1135 msctls_trackbar32 enabled text="0"
+  #-1 Static enabled text="Angle"
+  #1060 ListBox enabled count=0 sel=-1
+  #-1 Static enabled text="Active Images:"
+  #1093 Button enabled check=0
+  #1136 msctls_trackbar32 enabled text="0"
+  #-1 Static enabled text="Enemy position:"
+  #1131 ComboBox enabled count=0 sel=-1
+  #1001 Edit enabled
+  #1094 Edit enabled text="0"
+  #1134 ComboBox enabled count=0 sel=-1
+  #1001 Edit enabled
+  #1137 ComboBox enabled count=0 sel=-1
+  #1001 Edit enabled
+  #1095 Edit enabled text="Iscript 198  type 12\r\n动画槽 14\r\n动画 1: Death\r\n单位 0: HP 40  SH 0  A 0  矿 50 气 0 时 360  8x25\r\n"
+  #1096 Edit enabled text="0"
+  #1138 Button enabled check=0
+  #1139 Button enabled check=0
+[dialog 195] 单位放置参数
+  #-1 Static enabled text="单位类型 ID:"
+  #1201 Edit enabled text="176"
+  #-1 Static enabled text="常用类型:"
+  #1202 ComboBox enabled count=5 sel=0
+    [0] "出生点 214"
+    [1] "矿物 176"
+    [2] "矿物 177"
+    [3] "矿物 178"
+    [4] "气矿 188"
+  #1001 Edit enabled text="出生点 214"
+  #-1 Static enabled text="玩家:"
+  #1203 ComboBox enabled count=9 sel=8
+    [0] "Player 1"
+    [1] "Player 2"
+    [2] "Player 3"
+    [3] "Player 4"
+    [4] "Player 5"
+    [5] "Player 6"
+    [6] "Player 7"
+    [7] "Player 8"
+    [8] "中立 (11)"
+  #1001 Edit enabled text="中立 (11)"
+  #-1 Static enabled text="资源:"
+  #1204 Edit enabled text="1500"
+  #-1 Static enabled text="176/177/178 矿物，188 气矿，214 出生点"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[dialog 196] 玩家 / 势力设定
+  #-1 Static enabled text="玩家槽位"
+  #1300 ListBox enabled count=12 sel=0
+    [0] "P1  未启用 / 虫族 / F1 / 红"
+    [1] "P2  未启用 / 虫族 / F1 / 红"
+    [2] "P3  未启用 / 虫族 / F1 / 红"
+    [3] "P4  未启用 / 虫族 / F1 / 红"
+    [4] "P5  未启用 / 虫族 / F1 / 红"
+    [5] "P6  未启用 / 虫族 / F1 / 红"
+    [6] "P7  未启用 / 虫族 / F1 / 红"
+    [7] "P8  未启用 / 虫族 / F1 / 红"
+    [8] "槽 10  未启用 / 虫族"
+    [9] "槽 11  未启用 / 虫族"
+    [10] "槽 12  未启用 / 虫族"
+    [11] "槽 9  未启用 / 虫族"
+  #-1 Static enabled text="控制者:"
+  #1301 ComboBox enabled count=9 sel=0
+    [0] "Rescue Passive"
+    [1] "电脑"
+    [2] "电脑(游戏)"
+    [3] "关闭槽"
+    [4] "人类(开放槽)"
+    [5] "人类玩家"
+    [6] "未启用"
+    [7] "未使用"
+    [8] "中立"
+  #1001 Edit enabled text="Rescue Passive"
+  #-1 Static enabled text="种族:"
+  #1302 ComboBox enabled count=8 sel=0
+    [0] "不活动"
+    [1] "虫族"
+    [2] "人族"
+    [3] "神族"
+    [4] "随机"
+    [5] "未知(独立)"
+    [6] "未知(中立)"
+    [7] "用户选择"
+  #1001 Edit enabled text="不活动"
+  #-1 Static enabled text="队伍:"
+  #1303 ComboBox enabled count=4 sel=0
+    [0] "Force 1"
+    [1] "Force 2"
+    [2] "Force 3"
+    [3] "Force 4"
+  #1001 Edit enabled text="Force 1"
+  #-1 Static enabled text="颜色:"
+  #1304 ComboBox enabled count=16 sel=0
+    [0] "白"
+    [1] "橙"
+    [2] "淡黄"
+    [3] "淡绿"
+    [4] "粉"
+    [5] "红"
+    [6] "黄"
+    [7] "蓝"
+    [8] "蓝紫"
+    [9] "绿"
+    [10] "青"
+    [11] "深青"
+    [12] "水蓝"
+    [13] "紫"
+    [14] "棕"
+    [15] "棕褐"
+  #1001 Edit enabled text="白"
+  #-1 Static enabled text="队伍(Force)"
+  #1310 ListBox enabled count=4 sel=0
+    [0] "Force 1  #0  #0"
+    [1] "Force 2  #0  #0"
+    [2] "Force 3  #0  #0"
+    [3] "Force 4  #0  #0"
+  #-1 Static enabled text="名称 STR ID:"
+  #1311 Edit enabled text="0"
+  #-1 Static enabled text="名称:"
+  #1313 Static enabled text="#0"
+  #-1 Static enabled text="标志位(0-255):"
+  #1312 Edit enabled text="0"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[dialog 197] 升级 / 科技限制
+  #-1 Static enabled text="数据版本:"
+  #1400 ComboBox enabled count=2 sel=0
+    [0] "原版 (UPGR / PTEC)"
+    [1] "资料片 (PUPx / PTEx)"
+  #1001 Edit enabled text="原版 (UPGR / PTEC)"
+  #-1 Static enabled text="玩家:"
+  #1401 ComboBox enabled count=13 sel=0
+    [0] "Player 1"
+    [1] "Player 10"
+    [2] "Player 11"
+    [3] "Player 12"
+    [4] "Player 2"
+    [5] "Player 3"
+    [6] "Player 4"
+    [7] "Player 5"
+    [8] "Player 6"
+    [9] "Player 7"
+    [10] "Player 8"
+    [11] "Player 9"
+    [12] "全局默认"
+  #1001 Edit enabled text="Player 1"
+  #-1 Static enabled text="升级"
+  #-1 Static enabled text="科技"
+  #1402 ListBox enabled count=0 sel=-1
+  #1403 ListBox enabled count=0 sel=-1
+  #-1 Static enabled text="最大/可用:"
+  #1404 Edit enabled text="0"
+  #-1 Static enabled text="初始:"
+  #1405 Edit enabled text="0"
+  #1406 Button enabled check=0
+  #1407 Button enabled check=0
+  #1408 Button enabled check=0
+  #1409 Button enabled check=0
+  #-1 Static enabled text="升级：最大等级/初始等级；科技：可用/初始拥有。玩家=全局默认时编辑全局值。"
+  #1 Button enabled check=0
+  #2 Button enabled check=0
+[dialog 198] 编辑声音
+  #1500 ListBox enabled count=0 sel=-1
+  #1501 Edit enabled text="0"
+  #1502 Button enabled check=0
+  #1503 Button enabled check=0
+  #1504 Button enabled check=0
+  #-1 Static enabled text="选择槽位后输入 WAV 路径（写入 STR 表）。"
+[dialog 199] 任务简报
+  #1510 ListBox enabled count=0 sel=-1
+  #1511 Edit enabled
+  #1512 Button enabled check=0
+  #1513 Button enabled check=0
+  #-1 Static enabled text="仅编辑已有的文本/目标/传输行动；更新写入 STR。"
+[dialog 205] Iscript / Grp 调试
+  #-1 Static enabled text="iscript 来源:"
+  #1600 Edit enabled text="<exe>\..\..\..\mpq\StarDat.mpq  (scripts\iscript.bin)"
+  #1601 Button enabled check=0
+  #-1 Static enabled text="Iscript ID:"
+  #1602 Edit enabled text="198"
+  #-1 Static enabled text="动画:"
+  #1603 ComboBox enabled count=4 sel=0
+    [0] "Death"
+    [1] "Init"
+    [2] "Walking"
+    [3] "WalkingToIdle"
+  #1001 Edit enabled text="Death"
+  #1604 Button enabled check=0
+  #1605 ListBox enabled count=19 sel=18
+    [0] "1D2B  playsnd            35 00"
+    [1] "1D2E  setfldirect        00"
+    [2] "1D30  playfram           99 00"
+    [3] "1D33  wait               01"
+    [4] "1D35  playfram           9A 00"
+    [5] "1D38  wait               01"
+    [6] "1D3A  playfram           9B 00"
+    [7] "1D3D  wait               01"
+    [8] "1D3F  playfram           9C 00"
+    [9] "1D42  wait               01"
+    [10] "1D44  playfram           9D 00"
+    [11] "1D47  wait               01"
+    [12] "1D49  playfram           9E 00"
+    [13] "1D4C  wait               01"
+    [14] "1D4E  playfram           9F 00"
+    [15] "1D51  wait               01"
+    [16] "1D53  playfram           A0 00"
+    [17] "1D56  wait               01"
+    [18] "1D58  end               "
+  #1606 Edit enabled text="文件: <exe>\..\..\..\mpq\StarDat.mpq  (scripts\iscript.bin)\r\n大小: 34880 字节\r\n条目: 342\r\nID: 198\r\n类型: 12\r\n动画槽: 14（可用 "
+  #2 Button enabled check=0

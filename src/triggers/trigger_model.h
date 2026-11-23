@@ -7,17 +7,17 @@
 namespace scmd {
 
 // ── MRGN（地点）──
-// VERIFIED: 20 字节/条；1268 张地图按本结构重建后与原始字节完全一致。
-// 字段：left / top / right / bottom / stringId / flags，其后 8 字节为保留区
-//（实测存在非零内容，必须原样保留，否则重建不等）。
+// VERIFIED（实图 Enslavers01 / Fasttest Big Game Hunter）：
+//   20 字节/条 = u32 left / u32 top / u32 right / u32 bottom / u16 stringId / u16 flags
+// 坐标单位是地图像素（0..宽高×32），right/bottom 为**开区间**（任意位置地点为 0,0,4096,4096）。
+// 旧文档把高 16 位当成“8 字节保留区”是误读。
 struct Location {
-    u16 left = 0;
-    u16 top = 0;
-    u16 right = 0;
-    u16 bottom = 0;
+    u32 left = 0;
+    u32 top = 0;
+    u32 right = 0;
+    u32 bottom = 0;
     u16 stringId = 0;
     u16 flags = 0;
-    u8 reserved[8] = {0};
 };
 
 class LocationTable {
