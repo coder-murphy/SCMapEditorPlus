@@ -5,6 +5,7 @@
 #include "res/control_ids.h"
 #include "ui/dlg_common.h"
 #include "ui/dlg_types.h"
+#include "units/unit_data.h"
 
 #include <cwchar>
 #include <vector>
@@ -178,12 +179,35 @@ INT_PTR CALLBACK ProcUnitPlacement(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
 }
 
 // 172：单位名字表。选中条目回填各字段。
+namespace {
+
+void PopulateUnitDataList(HWND dlg) {
+    UnitDataTable table;
+    std::wstring source;
+    if (!UnitDataTable::LoadAuto(table, source)) return;
+    HWND list = ::GetDlgItem(dlg, IDC_D172_1060);
+    ::SendMessageW(list, LB_RESETCONTENT, 0, 0);
+    for (const UnitData& u : table.items()) {
+        wchar_t line[192];
+        ::wsprintfW(line, L"#%d  HP %d  SH %d  A %d  矿 %d 气 %d  时 %d  %dx%d", u.id,
+                    u.hp, u.shields, u.armor, u.minerals, u.gas, u.buildTime, u.width,
+                    u.height);
+        const LRESULT idx = ::SendMessageW(list, LB_ADDSTRING, 0,
+                                           reinterpret_cast<LPARAM>(line));
+        if (idx != CB_ERR) {
+            ::SendMessageW(list, LB_SETITEMDATA, static_cast<WPARAM>(idx),
+                           static_cast<LPARAM>(u.id));
+        }
+    }
+}
+
+}  // namespace
+
 INT_PTR CALLBACK ProcUnitNames(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
         case WM_INITDIALOG:
             CenterDialog(dlg);
-            ListAddString(dlg, IDC_D172_1060, L"Marine");
-            ListAddString(dlg, IDC_D172_1060, L"Zergling");
+            PopulateUnitDataList(dlg);
             SetPercent(dlg, IDC_D172_1078, 100);
             SetPercent(dlg, IDC_D172_1079, 100);
             SetPercent(dlg, IDC_D172_1081, 100);
@@ -193,10 +217,13 @@ INT_PTR CALLBACK ProcUnitNames(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                 case IDC_D172_1060:                              // 列表选择
                     if (HIWORD(wParam) == LBN_SELCHANGE) {
                         const int sel = ListSelectedIndex(dlg, IDC_D172_1060);
-                        wchar_t name[128] = L"";
                         if (sel >= 0) {
-                            ::SendDlgItemMessageW(dlg, IDC_D172_1060, LB_GETTEXT, static_cast<WPARAM>(sel),
-                                                  reinterpret_cast<LPARAM>(name));
+                            const LRESULT id = ::SendDlgItemMessageW(
+                                dlg, IDC_D172_1060, LB_GETITEMDATA,
+                                static_cast<WPARAM>(sel), 0);
+                            wchar_t name[64];
+                            ::wsprintfW(name, L"Unit %d",
+                                        id == CB_ERR ? -1 : static_cast<int>(id));
                             ::SetDlgItemTextW(dlg, IDC_D172_1072, name);
                         }
                     }

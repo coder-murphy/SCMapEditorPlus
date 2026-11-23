@@ -43,6 +43,8 @@ public:
         u32 compressedSize = 0;
         u32 fileSize = 0;
         u32 flags = 0;
+        // 每个扇区解密后的首个字节（压缩类型）；-1 表示该扇区按原样存储
+        std::vector<int> sectorTypes;
     };
     bool DebugEntryInfo(const std::string& entryName, EntryInfo& out) const;
 

@@ -82,3 +82,39 @@ painted=1 repaint=3/3 blockedRejected=1 saved=1 reopened=1 countOk=1
 SFmpq.dll 读取 PASS。
 
 GUI 实测：切到单位工具后在中心枢纽点击，标题从 `144 个单位` 变为 `145 个单位，已修改`。
+
+## units.dat 属性表（VERIFIED）
+
+`arr\units.dat` 是**列式存储**（同一字段的 228 个值连续排列），不是记录数组。
+标准 BrooDat 版本 19 876 B / 228 项，`mpq/BrooDat.mpq` 单块 implode（类型 0x08）
+解出。各列偏移：
+
+| 偏移 | 类型 | 字段 | 示例校验 |
+|---|---|---|---|
+| 0x0000 | u8 | Graphic（图像 ID） | Marine = 78 |
+| 0x09A8 | u8 | ShieldEnable | Marine 0、Probe 1 |
+| 0x0A8C | u16 | ShieldAmount | Probe 20、Archon 350 |
+| 0x0C54 | u32 | HP（低 24 位 / 256） | Marine 40、Goliath 125 |
+| 0x10C8 | u8 | MovementType | |
+| 0x1704 | u16 | WeaponGround | |
+| 0x18CC | u16 | WeaponAir | |
+| 0x1B78 | u32 | SpecialFlags | |
+| 0x1FEC | u16 | Sight | |
+| 0x21B4 | u8 | Size | |
+| 0x2298 | u8 | Armor | Goliath 1 |
+| 0x3124 | u16 | Width（像素） | Marine 8 |
+| 0x32EC | u16 | Height（像素） | Marine 25 |
+| 0x34B4 | u16 | CircleWidth | |
+| 0x367C | u16 | CircleHeight | |
+| 0x3844 | u16 | Portrait | |
+| 0x3A0C | u16 | Minerals | Marine 50 |
+| 0x3BD4 | u16 | Gas | |
+| 0x3D9C | u16 | BuildTime | Marine 360 |
+| 0x4AF8 | u8 | BroodWar | |
+
+护盾值只在 `ShieldEnable` 置位时有效；未启用的单位该列是垃圾数据。
+
+实现：`UnitDataTable`（`src/units/unit_data.*`）按上表解析，`LoadAuto` 依次尝试
+星际目录 / exe 目录 / 工程根的 `arr\units.dat`，再退到 `mpq/BrooDat.mpq`。
+无头回归 `--unit-data-test`：`units=228 marine=40/0/0 8x25 goliath=125/0/1
+probe=20/20 reaver=100/80 archon=10/350`。

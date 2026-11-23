@@ -9,6 +9,8 @@ namespace mpq {
 
 namespace {
 u8 g_lastCompressType = 0xFF;
+int g_explodeLit = -1;
+int g_explodeDict = -1;
 }  // namespace
 
 // ───────────────────────── 加密表 ─────────────────────────
@@ -445,8 +447,7 @@ bool InflateRaw(const u8* in, std::size_t inLen, Buffer& out, std::size_t expect
 // ───────────────────────── PKWARE DCL implode ─────────────────────────
 namespace {
 
-const int kMaxBits = 13;
-const u8 kLitLen[] = {
+const int kMaxBits = 13;const u8 kLitLen[] = {
     11, 124, 8, 7, 28, 7, 188, 13, 76, 4, 10, 8, 12, 10, 12, 10, 8, 23, 8,
     9, 7, 6, 7, 8, 7, 6, 55, 8, 23, 24, 12, 11, 7, 9, 11, 12, 6, 7, 22, 5,
     7, 24, 6, 11, 9, 6, 7, 22, 7, 11, 38, 7, 9, 8, 25, 11, 8, 11, 9, 12,
@@ -502,8 +503,7 @@ int PkDecode(BitReader& br, const PkHuffman& h) {
 
 }  // namespace
 
-bool Explode(const u8* in, std::size_t inLen, Buffer& out, std::size_t expected) {
-    static const PkHuffman kLit = PkConstruct(kLitLen, sizeof(kLitLen));
+bool Explode(const u8* in, std::size_t inLen, Buffer& out, std::size_t expected) {    static const PkHuffman kLit = PkConstruct(kLitLen, sizeof(kLitLen));
     static const PkHuffman kLen = PkConstruct(kLenLen, sizeof(kLenLen));
     static const PkHuffman kDist = PkConstruct(kDistLen, sizeof(kDistLen));
 
@@ -513,6 +513,8 @@ bool Explode(const u8* in, std::size_t inLen, Buffer& out, std::size_t expected)
 
     u32 lit = 0, dictBits = 0;
     if (!br.Bits(8, lit) || !br.Bits(8, dictBits)) { g_lastCompressType = 0xE1; return false; }
+    g_explodeLit = static_cast<int>(lit);
+    g_explodeDict = static_cast<int>(dictBits);
 
     while (!expected || out.size() < expected) {
         u32 flag = 0;
@@ -557,6 +559,8 @@ bool Explode(const u8* in, std::size_t inLen, Buffer& out, std::size_t expected)
 }
 
 u8 LastCompressType() { return g_lastCompressType; }
+int LastExplodeLiteralMode() { return g_explodeLit; }
+int LastExplodeDictBits() { return g_explodeDict; }
 
 bool DecompressSector(const u8* in, std::size_t inLen, std::size_t expected, Buffer& out) {
     if (inLen == 0) { out.clear(); return true; }

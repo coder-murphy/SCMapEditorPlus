@@ -19,10 +19,12 @@
 #include "ui/dialogs.h"
 
 #include "archive/mpq_archive.h"
+#include "archive/mpq_codec.h"
 #include "map/edit_history.h"
 #include "map/map_document.h"
 #include "map/map_switches.h"
 #include "units/iscript.h"
+#include "units/unit_data.h"
 #include "terrain/terrain_renderer.h"
 #include "terrain/edge_placer.h"
 #include "terrain/tileset_export.h"
@@ -1581,6 +1583,46 @@ int RunGrpTest(const std::wstring& grpPath, const std::wstring& palPath,
 
     const bool ok = decoded == grp.frameCount() && grp.frameCount() > 0 && maxOpaque > 0 &&
                     palOk && bmpOk;
+    return ok ? 0 : 2;
+}
+
+// --unit-data-test：units.dat 列式属性表回归
+int RunUnitDataTest() {
+    UnitDataTable table;
+    std::wstring source;
+    if (!UnitDataTable::LoadAuto(table, source)) {
+        WriteDiag(L"load=FAIL\n");
+        return 2;
+    }
+    const UnitData* marine = table.Get(0);
+    const UnitData* goliath = table.Get(3);
+    const UnitData* probe = table.Get(64);
+    const UnitData* reaver = table.Get(83);
+    const UnitData* archon = table.Get(68);
+    const bool samples = marine && goliath && probe && reaver && archon;
+    const bool ok = samples && table.count() == 228 && marine->hp == 40 &&
+                    marine->shields == 0 && goliath->hp == 125 && goliath->armor == 1 &&
+                    probe->hp == 20 && probe->shields == 20 && reaver->hp == 100 &&
+                    reaver->shields == 80 && archon->hp == 10 && archon->shields == 350 &&
+                    marine->width > 0 && marine->height > 0;
+
+    wchar_t msg[640];
+    ::wsprintfW(msg,
+                L"units=%d\nsource=%ls\n"
+                L"marine=%d/%d/%d %dx%d\n"
+                L"goliath=%d/%d/%d\n"
+                L"probe=%d/%d\n"
+                L"reaver=%d/%d\n"
+                L"archon=%d/%d\n",
+                table.count(), source.c_str(), marine ? marine->hp : -1,
+                marine ? marine->shields : -1, marine ? marine->armor : -1,
+                marine ? marine->width : 0, marine ? marine->height : 0,
+                goliath ? goliath->hp : -1, goliath ? goliath->shields : -1,
+                goliath ? goliath->armor : -1, probe ? probe->hp : -1,
+                probe ? probe->shields : -1, reaver ? reaver->hp : -1,
+                reaver ? reaver->shields : -1, archon ? archon->hp : -1,
+                archon ? archon->shields : -1);
+    WriteDiag(msg);
     return ok ? 0 : 2;
 }
 
@@ -3548,6 +3590,17 @@ int RunMpqExtract(const std::wstring& archivePath, const std::wstring& entryWide
             ::wsprintfW(infoMsg, L"flags=0x%08X pos=%u csize=%u size=%u\n", info.flags,
                         info.blockPos, info.compressedSize, info.fileSize);
             diag += infoMsg;
+            if (!info.sectorTypes.empty()) {
+                std::wstring types = L"types=";
+                for (std::size_t i = 0; i < info.sectorTypes.size() && i < 12; i++) {
+                    wchar_t one[16];
+                    ::wsprintfW(one, L"%s%02X", i == 0 ? L"" : L",",
+                                info.sectorTypes[i] < 0 ? 0xFF : info.sectorTypes[i]);
+                    types += one;
+                }
+                types += L"\n";
+                diag += types;
+            }
         }
         wchar_t head[96];
         ::wsprintfW(head, L"head=%02X %02X %02X %02X %02X %02X %02X %02X\n",
@@ -3556,7 +3609,10 @@ int RunMpqExtract(const std::wstring& archivePath, const std::wstring& entryWide
                     data.size() > 4 ? data[4] : 0, data.size() > 5 ? data[5] : 0,
                     data.size() > 6 ? data[6] : 0, data.size() > 7 ? data[7] : 0);
         diag += head;
-        wchar_t sizeMsg[64];
+        wchar_t sizeMsg[96];
+        ::wsprintfW(sizeMsg, L"explode=lit%d/dict%d\n", mpq::LastExplodeLiteralMode(),
+                    mpq::LastExplodeDictBits());
+        diag += sizeMsg;
         ::wsprintfW(sizeMsg, L"extract=OK size=%u\n", static_cast<unsigned>(data.size()));
         diag += sizeMsg;
         WriteDiag(diag);
@@ -3682,6 +3738,11 @@ int App::Run(HINSTANCE hInstance) {
     // GRP 帧解码回归（无窗口）
     if (const std::wstring grpTest = ParseGrpTestArg(); !grpTest.empty()) {
         return RunGrpTest(grpTest, ParsePalArg(), ParseGrpBmpArg());
+    }
+
+    // units.dat 属性表回归（无窗口）
+    if (HasSwitchArg(L"--unit-data-test")) {
+        return RunUnitDataTest();
     }
 
     ::InitCommonControls();

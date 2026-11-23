@@ -12,6 +12,7 @@
 #include "res/control_ids.h"
 #include "ui/dlg_common.h"
 #include "units/iscript.h"
+#include "units/unit_data.h"
 
 namespace scmd {
 
@@ -276,6 +277,18 @@ namespace {
 
 IscriptFile g_iscript;
 std::wstring g_iscriptLabel;
+UnitDataTable g_unitData;
+bool g_unitDataTried = false;
+bool g_unitDataLoaded = false;
+
+const UnitData* FindUnitData(int id) {
+    if (!g_unitDataTried) {
+        g_unitDataTried = true;
+        std::wstring source;
+        g_unitDataLoaded = UnitDataTable::LoadAuto(g_unitData, source);
+    }
+    return g_unitDataLoaded ? g_unitData.Get(id) : nullptr;
+}
 
 std::wstring ExeDir() {
     wchar_t path[MAX_PATH] = L"";
@@ -492,6 +505,15 @@ void UpdateIscriptTest(HWND dlg, const wchar_t* extra) {
             ::wsprintfW(animMsg, L"动画 %d: %hs\r\n", anim, IscriptFile::AnimationName(anim));
             summary += animMsg;
         }
+        const int unitId = ReadClampedInt(dlg, IDC_D192_1081, 0, 0, 65535);
+        if (const UnitData* unit = FindUnitData(unitId)) {
+            wchar_t unitMsg[192];
+            ::wsprintfW(unitMsg,
+                        L"单位 %d: HP %d  SH %d  A %d  矿 %d 气 %d 时 %d  %dx%d\r\n",
+                        unit->id, unit->hp, unit->shields, unit->armor, unit->minerals,
+                        unit->gas, unit->buildTime, unit->width, unit->height);
+            summary += unitMsg;
+        }
         if (extra) summary += extra;
     }
     ::SetDlgItemTextW(dlg, IDC_D192_1132, summary.c_str());
@@ -536,6 +558,11 @@ void RefreshIscriptTest(HWND dlg) {
         ::wsprintfW(name, L"iscript %u 未找到", static_cast<unsigned>(id));
     }
     ::SetDlgItemTextW(dlg, IDC_D192_1087, name);
+    // 单位 → 图像 ID（units.dat 的 Graphic 列）
+    const int unitId = ReadClampedInt(dlg, IDC_D192_1081, 0, 0, 65535);
+    if (const UnitData* unit = FindUnitData(unitId)) {
+        ::SetDlgItemInt(dlg, IDC_D192_1083, unit->graphic, FALSE);
+    }
     UpdateIscriptTest(dlg, nullptr);
 }
 
@@ -609,6 +636,11 @@ INT_PTR CALLBACK ProcIscriptTest(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                 case IDC_D192_1133:
                     if (HIWORD(wParam) == CBN_SELCHANGE) {
                         UpdateIscriptTest(dlg, nullptr);
+                    }
+                    return TRUE;
+                case IDC_D192_1081:
+                    if (HIWORD(wParam) == EN_KILLFOCUS) {
+                        RefreshIscriptTest(dlg);
                     }
                     return TRUE;
                 case IDC_D192_1085:

@@ -23,7 +23,7 @@
 | 167 | `IDD_DLG_167` | Scmdraft 2.0.8.0 [CsgA]NaKa汉化版 | MPQ 附加文件管理：列出/导入/导出/改名/添加/删除 | `src/map/` |
 | 169 | `IDD_DLG_169` | 新建地图 | 新建：尺寸/地形集/玩家数 | `src/map/` |
 | 171 | `IDD_DLG_171` | 编辑Location | 地点（区域）编辑：双击矩形 / 0x8108 | `src/triggers/` |
-| 172 | `IDD_DLG_172` | 单位名字 | 单位名称表 | `src/units/` |
+| 172 | `IDD_DLG_172` | 单位名字 | units.dat 属性表（228 项） | `src/units/` |
 | 173 | `IDD_DLG_173` | 查看备份数据 | 备份数据查看 | `src/tools/` |
 | 174 | `IDD_DLG_174` | 在线升级 | 更新检查 | `src/tools/` |
 | 175 | `IDD_DLG_175` | 重设地图大小 | 重设地图尺寸 | `src/map/` |
@@ -450,6 +450,11 @@ minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1 output=1 cache=1 windo
   显示 ops/frames/waits/loops 与终止状态；GRP 文件名显示帧数/尺寸，并按模拟帧号解码
   统计不透明像素（灰度；调色板解码走 `--grp-test --pal`）。
   本工程新增的 205 提供按条目浏览与共享头/别名解析。
+  单位 ID（1081）会叠加 units.dat 属性行（HP/SH/A/矿/气/时/尺寸），并把 Graphic 列
+  自动填入图像 ID（1083）。
+- 单位名字（172）：列表填充 units.dat 全部 228 项属性
+  （`#id HP SH A 矿 气 时 WxH`），选中项回填单位编号。数据由 `UnitDataTable`
+  从星际目录/exe/工程根的 `arr\units.dat` 或 `mpq/BrooDat.mpq` 自动读取。
 
 ## 重设地图大小（175）
 

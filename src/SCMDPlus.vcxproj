@@ -97,6 +97,7 @@
     <ClCompile Include="players\restriction_model.cpp" />
     <ClCompile Include="map\map_document.cpp" />
     <ClCompile Include="units\iscript.cpp" />
+    <ClCompile Include="units\unit_data.cpp" />
     <ClCompile Include="map\decor_model.cpp" />
     <ClCompile Include="map\map_switches.cpp" />
     <ClCompile Include="map\scenario_tables.cpp" />
@@ -118,6 +119,7 @@
     <ClInclude Include="chk\chk_section.h" />
     <ClInclude Include="chk\chk_document.h" />
     <ClInclude Include="units\iscript.h" />
+    <ClInclude Include="units\unit_data.h" />
     <ClInclude Include="terrain\tileset.h" />
     <ClInclude Include="terrain\brush.h" />
     <ClInclude Include="terrain\terrain_renderer.h" />

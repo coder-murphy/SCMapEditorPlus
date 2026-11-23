@@ -279,6 +279,44 @@ bool MpqArchive::DebugEntryInfo(const std::string& entryName, EntryInfo& out) co
     out.compressedSize = be.compressedSize;
     out.fileSize = be.fileSize;
     out.flags = be.flags;
+    out.sectorTypes.clear();
+
+    u32 key = mpq::HashString(BaseName(NormalizeName(entryName)).c_str(), 3);
+    if (be.flags & kFlagAdjusted) key = (key + be.pos) ^ be.fileSize;
+    const bool compressed = (be.flags & (kFlagCompress | kFlagImplode)) != 0;
+    if (be.flags & kFlagSingleUnit) {
+        Buffer blob(impl_->raw.begin() + be.pos,
+                    impl_->raw.begin() + be.pos + be.compressedSize);
+        if (be.flags & kFlagEncrypted) blob = DecryptPadded(blob.data(), blob.size(), key);
+        if (!blob.empty()) out.sectorTypes.push_back(blob[0]);
+        return true;
+    }
+    if (!compressed) return true;
+
+    const std::size_t sectorCount =
+        std::max<std::size_t>(1, (be.fileSize + impl_->sectorSize - 1) / impl_->sectorSize);
+    const std::size_t tableBytes = (sectorCount + 1) * 4;
+    if (static_cast<std::size_t>(be.pos) + tableBytes > impl_->raw.size()) return false;
+    Buffer table(impl_->raw.begin() + be.pos, impl_->raw.begin() + be.pos + tableBytes);
+    if (be.flags & kFlagEncrypted) table = DecryptPadded(table.data(), table.size(), key - 1);
+    for (std::size_t i = 0; i < sectorCount; i++) {
+        const u32 start = ReadU32(table.data() + i * 4) & 0x7FFFFFFF;
+        const u32 end = ReadU32(table.data() + (i + 1) * 4) & 0x7FFFFFFF;
+        const std::size_t from = be.pos + start;
+        const std::size_t to = be.pos + end;
+        if (to < from || to > impl_->raw.size()) return false;
+        Buffer sector(impl_->raw.begin() + from, impl_->raw.begin() + to);
+        if (be.flags & kFlagEncrypted) {
+            sector = DecryptPadded(sector.data(), sector.size(), key + static_cast<u32>(i));
+        }
+        const std::size_t want = std::min<std::size_t>(
+            impl_->sectorSize, be.fileSize - i * impl_->sectorSize);
+        if (sector.size() < want && !sector.empty()) {
+            out.sectorTypes.push_back(sector[0]);
+        } else {
+            out.sectorTypes.push_back(-1);
+        }
+    }
     return true;
 }
 

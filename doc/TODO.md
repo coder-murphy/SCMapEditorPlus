@@ -230,6 +230,16 @@
   - 148/183/193 以 RCDATA 内嵌到 `SCMDPlus.exe`；新建地图写 VCOD，并按
     169「默认触发组」选择不写 / 3 条 / 4 条 TRIG。
   - 回归：`--file-test` 新增 `vcod=1040 trig3=7200/3 preset0=1 trig4=9600/4`。
+- [x] **单位属性表（units.dat）**
+  - 新增 `UnitDataTable`（`src/units/unit_data.*`）：按列式布局解析 228 项、19 876 B
+    的标准 BrooDat 版本，字段含 HP/护盾/护甲/矿/气/建造时间/视野/尺寸/碰撞圈/
+    头像/移动类型/对地武器/对空武器/特殊标志/BroodWar。
+  - 自动加载顺序：星际目录、exe 目录、工程根的 `arr\units.dat` → 同名 MPQ 中的
+    `arr\units.dat`（实测取自 `mpq/BrooDat.mpq`，单块 implode 类型 0x08）。
+  - 护盾仅在该单位 `ShieldEnable` 置位时读取，Marine 显示 SH 0、Goliath 护甲 1。
+  - 172「单位名字」列表改为填充全部单位属性（`#id HP SH A 矿 气 时 WxH`），
+    192「Iscript 测试」按单位 ID 显示属性并把 units.dat 的 Graphic 自动填入图像 ID。
+  - 回归：`--unit-data-test`（units=228 与 Marine/Goliath/Probe/Reaver/Archon 抽样）。
 - [x] 文档旧设备路径与游戏目录引用已改为「可选逆向来源」，常规构建不依赖游戏
 - [x] `accel.rc` 中 `.` 加速键的 RC4204 警告确认与处理
   - 原条目 `"."` 无法映射到虚拟键，RC 会忽略并报警；改为 `0xBE`（VK_OEM_PERIOD），
@@ -239,5 +249,4 @@
 
 TODO 中列出的功能项均已处理。可选增强：
 1. GRP 动画预览（192 用定时器播放解码帧）
-2. 单位属性表（units.dat 压缩类型仍需确认）
-3. 更多原版对话框行为对齐
+2. 更多原版对话框行为对齐

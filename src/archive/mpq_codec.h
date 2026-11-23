@@ -29,6 +29,9 @@ bool DecompressSector(const u8* in, std::size_t inLen, std::size_t expected, Buf
 // 最近一次 DecompressSector 的状态：0xFF 未调用；0x00/0x02/0x08 为压缩类型；
 // 0xE1..0xE4 表示 PKWARE implode 内部失败点（便于定位损坏数据）
 u8 LastCompressType();
+// 最近一次 PKWARE implode 流的头部：字面量编码模式（0/1）与字典位数（4..6）
+int LastExplodeLiteralMode();
+int LastExplodeDictBits();
 
 }  // namespace mpq
 }  // namespace scmd
