@@ -2,12 +2,16 @@
 
 #include "common/log.h"
 #include "map/decor_model.h"
+#include "map/map_document.h"
 #include "res/control_ids.h"
 #include "ui/dlg_common.h"
 #include "ui/dlg_types.h"
 #include "units/unit_data.h"
+#include "units/stat_txt.h"
 
+#include <algorithm>
 #include <cwchar>
+#include <map>
 #include <vector>
 
 namespace scmd {
@@ -189,27 +193,186 @@ INT_PTR CALLBACK ProcUnitPlacement(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     return FALSE;
 }
 
-// 172：单位名字表。选中条目回填各字段。
+// 172：单位名字 / 属性表。地图打开时按单位类型列出实例，修改后立即写回 UNIT；
+// 未打开地图时退回 units.dat 只读预览。
 namespace {
 
-void PopulateUnitDataList(HWND dlg) {
-    UnitDataTable table;
-    std::wstring source;
-    if (!UnitDataTable::LoadAuto(table, source)) return;
+struct UnitNamesState {
+    int type = -1;         // 当前下拉选中的单位类型
+    int unitIndex = -1;    // 当前列表选中单位在 map.units() 中的下标
+    bool filling = false;  // 回填字段期间抑制写回
+};
+UnitNamesState g_names;
+
+// stat_txt.tbl 的 228 个单位名（懒加载，失败则退回 "Unit N"）
+const StatTextTable& UnitNameTable() {
+    static StatTextTable table;
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        std::wstring source;
+        StatTextTable::LoadAuto(table, source);
+    }
+    return table;
+}
+
+std::wstring UnitLabel(int type) {
+    const std::wstring& name = UnitNameTable().Name(type);
+    if (!name.empty()) return name;
+    return L"Unit " + std::to_wstring(type);
+}
+
+// 5 个状态位 → UNIT +26 激活状态位（与 180 的位序一致）
+struct UnitStateBit {
+    int controlId;
+    u16 bit;
+};
+const UnitStateBit kUnitStateBits[] = {
+    {IDC_D172_1073, 0x0010},   // 无敌 bit4
+    {IDC_D172_1074, 0x0008},   // 幻影 bit3
+    {IDC_D172_1075, 0x0002},   // 钻地 bit1
+    {IDC_D172_1076, 0x0001},   // 隐形 bit0
+    {IDC_D172_1077, 0x0004},   // 升起 bit2
+};
+
+void EnableUnitFields(HWND dlg, bool enable) {
+    const int kFields[] = {IDC_D172_1078, IDC_D172_1079, IDC_D172_1081,
+                           IDC_D172_1080, IDC_D172_1082,
+                           IDC_D172_1073, IDC_D172_1074, IDC_D172_1075,
+                           IDC_D172_1076, IDC_D172_1077};
+    for (int id : kFields) ::EnableWindow(::GetDlgItem(dlg, id), enable ? TRUE : FALSE);
+}
+
+void FillTypeCombo(HWND dlg, MapDocument* doc) {
+    HWND combo = ::GetDlgItem(dlg, IDC_D172_1072);
+    ::SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+    if (doc) {
+        std::map<int, int> counts;
+        for (const UnitRecord& u : doc->units()) counts[static_cast<int>(u.type)]++;
+        for (const auto& entry : counts) {
+            std::wstring label = UnitLabel(entry.first) + L"  (" +
+                                 std::to_wstring(entry.second) + L" 个)";
+            const LRESULT at = ::SendMessageW(combo, CB_ADDSTRING, 0,
+                                              reinterpret_cast<LPARAM>(label.c_str()));
+            if (at != CB_ERR) {
+                ::SendMessageW(combo, CB_SETITEMDATA, static_cast<WPARAM>(at),
+                               static_cast<LPARAM>(entry.first));
+            }
+        }
+        if (::SendMessageW(combo, CB_GETCOUNT, 0, 0) > 0) {
+            ::SendMessageW(combo, CB_SETCURSEL, 0, 0);
+        }
+        return;
+    }
+    // 无地图：下拉保持为空，1060 仍显示 units.dat 只读预览
+}
+
+void FillUnitList(HWND dlg, MapDocument* doc) {
     HWND list = ::GetDlgItem(dlg, IDC_D172_1060);
     ::SendMessageW(list, LB_RESETCONTENT, 0, 0);
-    for (const UnitData& u : table.items()) {
-        wchar_t line[192];
-        ::wsprintfW(line, L"#%d  HP %d  SH %d  A %d  矿 %d 气 %d  时 %d  %dx%d", u.id,
-                    u.hp, u.shields, u.armor, u.minerals, u.gas, u.buildTime, u.width,
-                    u.height);
-        const LRESULT idx = ::SendMessageW(list, LB_ADDSTRING, 0,
-                                           reinterpret_cast<LPARAM>(line));
-        if (idx != CB_ERR) {
-            ::SendMessageW(list, LB_SETITEMDATA, static_cast<WPARAM>(idx),
-                           static_cast<LPARAM>(u.id));
+    g_names.unitIndex = -1;
+    if (!doc || g_names.type < 0) {
+        // 无地图：退回 units.dat 属性列表
+        UnitDataTable table;
+        std::wstring source;
+        if (!UnitDataTable::LoadAuto(table, source)) return;
+        for (const UnitData& u : table.items()) {
+            wchar_t line[192];
+            ::wsprintfW(line, L"#%d  HP %d  SH %d  A %d  矿 %d 气 %d  时 %d  %dx%d", u.id,
+                        u.hp, u.shields, u.armor, u.minerals, u.gas, u.buildTime, u.width,
+                        u.height);
+            const LRESULT at = ::SendMessageW(list, LB_ADDSTRING, 0,
+                                              reinterpret_cast<LPARAM>(line));
+            if (at != CB_ERR) {
+                ::SendMessageW(list, LB_SETITEMDATA, static_cast<WPARAM>(at),
+                               static_cast<LPARAM>(u.id));
+            }
+        }
+        return;
+    }
+    const auto& units = doc->units();
+    for (std::size_t i = 0; i < units.size(); i++) {
+        const UnitRecord& u = units[i];
+        if (static_cast<int>(u.type) != g_names.type) continue;
+        std::wstring label = L"#" + std::to_wstring(u.serial) + L"  " +
+                             UnitLabel(g_names.type) + L"  格 " +
+                             std::to_wstring(static_cast<int>(u.x) / kTilePixels) + L"," +
+                             std::to_wstring(static_cast<int>(u.y) / kTilePixels) +
+                             L"  玩家 " + std::to_wstring(u.owner) + L"  生命 " +
+                             std::to_wstring(u.hpPercent) + L"%";
+        const LRESULT at = ::SendMessageW(list, LB_ADDSTRING, 0,
+                                          reinterpret_cast<LPARAM>(label.c_str()));
+        if (at != CB_ERR) {
+            ::SendMessageW(list, LB_SETITEMDATA, static_cast<WPARAM>(at),
+                           static_cast<LPARAM>(i));
         }
     }
+    if (::SendMessageW(list, LB_GETCOUNT, 0, 0) > 0) {
+        ::SendMessageW(list, LB_SETCURSEL, 0, 0);
+        ::SendMessageW(dlg, WM_COMMAND, MAKEWPARAM(IDC_D172_1060, LBN_SELCHANGE),
+                       reinterpret_cast<LPARAM>(list));
+    }
+}
+
+UnitRecord* SelectedUnit(MapDocument* doc) {
+    if (!doc || g_names.unitIndex < 0) return nullptr;
+    auto& units = doc->mutableUnits();
+    if (static_cast<std::size_t>(g_names.unitIndex) >= units.size()) return nullptr;
+    return &units[static_cast<std::size_t>(g_names.unitIndex)];
+}
+
+void LoadUnitFields(HWND dlg, const UnitRecord& u) {
+    g_names.filling = true;
+    ::SetDlgItemInt(dlg, IDC_D172_1078, u.hpPercent, FALSE);
+    ::SetDlgItemInt(dlg, IDC_D172_1079, u.shieldPercent, FALSE);
+    ::SetDlgItemInt(dlg, IDC_D172_1081, u.energyPercent, FALSE);
+    ::SetDlgItemInt(dlg, IDC_D172_1080, u.resource, FALSE);
+    ::SetDlgItemInt(dlg, IDC_D172_1082, u.stackCount, FALSE);
+    const u16 flags = static_cast<u16>(u.queueCount & 0x001Fu);
+    for (const UnitStateBit& state : kUnitStateBits) {
+        ::CheckDlgButton(dlg, state.controlId,
+                         (flags & state.bit) ? BST_CHECKED : BST_UNCHECKED);
+    }
+    g_names.filling = false;
+}
+
+// 把当前控件值写回选中单位（失焦、勾选状态与关闭对话框时调用）
+void StoreUnitFields(HWND dlg) {
+    if (g_names.filling) return;
+    MapDocument* doc = DialogDocument();
+    UnitRecord* u = SelectedUnit(doc);
+    if (!doc || !u) return;
+
+    const u8 oldHp = u->hpPercent;
+    const u8 oldShield = u->shieldPercent;
+    const u8 oldEnergy = u->energyPercent;
+    const u32 oldResource = u->resource;
+    const u16 oldStack = u->stackCount;
+    const u16 oldQueue = u->queueCount;
+    const u16 oldValid = u->validState;
+
+    u->hpPercent = static_cast<u8>(ReadClampedInt(dlg, IDC_D172_1078, u->hpPercent, 0, 100));
+    u->shieldPercent =
+        static_cast<u8>(ReadClampedInt(dlg, IDC_D172_1079, u->shieldPercent, 0, 100));
+    u->energyPercent =
+        static_cast<u8>(ReadClampedInt(dlg, IDC_D172_1081, u->energyPercent, 0, 100));
+    u->resource = static_cast<u32>(ReadClampedInt(dlg, IDC_D172_1080,
+                                                  static_cast<int>(u->resource), 0, 0x7FFFFF));
+    u->stackCount =
+        static_cast<u16>(ReadClampedInt(dlg, IDC_D172_1082, u->stackCount, 0, 65535));
+    u16 state = 0;
+    for (const UnitStateBit& bit : kUnitStateBits) {
+        if (::IsDlgButtonChecked(dlg, bit.controlId) == BST_CHECKED) state |= bit.bit;
+    }
+    u->queueCount = static_cast<u16>((u->queueCount & ~0x001Fu) | state);
+    // 勾选的状态同时标记为“可应用”，否则隐形/钻地等在该单位上会被游戏忽略
+    u->validState = static_cast<u16>(u->validState | state);
+
+    const bool changed = oldHp != u->hpPercent || oldShield != u->shieldPercent ||
+                         oldEnergy != u->energyPercent || oldResource != u->resource ||
+                         oldStack != u->stackCount || oldQueue != u->queueCount ||
+                         oldValid != u->validState;
+    if (changed) doc->MarkDirty();
 }
 
 }  // namespace
@@ -218,46 +381,72 @@ INT_PTR CALLBACK ProcUnitNames(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
         case WM_INITDIALOG: {
             CenterDialog(dlg);
-            PopulateUnitDataList(dlg);
-            SetPercent(dlg, IDC_D172_1078, 100);
-            SetPercent(dlg, IDC_D172_1079, 100);
-            SetPercent(dlg, IDC_D172_1081, 100);
-            // 属性来自 units.dat（游戏数据），本工程不改写：编辑控件置灰，仅作查看
-            const int kReadOnly[] = {IDC_D172_1078, IDC_D172_1081, IDC_D172_1079, IDC_D172_1080,
-                                     IDC_D172_1082, IDC_D172_1073, IDC_D172_1074, IDC_D172_1075,
-                                     IDC_D172_1076, IDC_D172_1077};
-            for (int id : kReadOnly) ::EnableWindow(::GetDlgItem(dlg, id), FALSE);
+            MapDocument* doc = DialogDocument();
+            g_names.type = -1;
+            g_names.unitIndex = -1;
+            FillTypeCombo(dlg, doc);
+            EnableUnitFields(dlg, doc != nullptr);
+            if (doc) {
+                HWND combo = ::GetDlgItem(dlg, IDC_D172_1072);
+                const LRESULT sel = ::SendMessageW(combo, CB_GETCURSEL, 0, 0);
+                if (sel != CB_ERR) {
+                    g_names.type = static_cast<int>(
+                        ::SendMessageW(combo, CB_GETITEMDATA, static_cast<WPARAM>(sel), 0));
+                }
+            }
+            FillUnitList(dlg, doc);
+            if (!doc) {
+                // 只读预览：与旧版一致显示 100%
+                SetPercent(dlg, IDC_D172_1078, 100);
+                SetPercent(dlg, IDC_D172_1079, 100);
+                SetPercent(dlg, IDC_D172_1081, 100);
+            }
             return TRUE;
         }
-        case WM_COMMAND:
-            switch (LOWORD(wParam)) {
-                case IDC_D172_1060:                              // 列表选择
-                    if (HIWORD(wParam) == LBN_SELCHANGE) {
-                        const int sel = ListSelectedIndex(dlg, IDC_D172_1060);
-                        if (sel >= 0) {
-                            const LRESULT id = ::SendDlgItemMessageW(
-                                dlg, IDC_D172_1060, LB_GETITEMDATA,
-                                static_cast<WPARAM>(sel), 0);
-                            wchar_t name[64];
-                            ::wsprintfW(name, L"Unit %d",
-                                        id == CB_ERR ? -1 : static_cast<int>(id));
-                            ::SetDlgItemTextW(dlg, IDC_D172_1072, name);
-                        }
-                    }
+        case WM_COMMAND: {
+            const int id = LOWORD(wParam);
+            const int code = HIWORD(wParam);
+            MapDocument* doc = DialogDocument();
+            if (id == IDC_D172_1072 && code == CBN_SELCHANGE) {
+                HWND combo = ::GetDlgItem(dlg, IDC_D172_1072);
+                const LRESULT sel = ::SendMessageW(combo, CB_GETCURSEL, 0, 0);
+                g_names.type =
+                    sel == CB_ERR
+                        ? -1
+                        : static_cast<int>(::SendMessageW(combo, CB_GETITEMDATA,
+                                                          static_cast<WPARAM>(sel), 0));
+                g_names.unitIndex = -1;
+                FillUnitList(dlg, doc);
+                return TRUE;
+            }
+            if (id == IDC_D172_1060 && code == LBN_SELCHANGE) {
+                HWND list = ::GetDlgItem(dlg, IDC_D172_1060);
+                const int sel = static_cast<int>(::SendMessageW(list, LB_GETCURSEL, 0, 0));
+                if (!doc || sel == LB_ERR) return TRUE;
+                const LRESULT data =
+                    ::SendMessageW(list, LB_GETITEMDATA, static_cast<WPARAM>(sel), 0);
+                if (data == LB_ERR ||
+                    static_cast<std::size_t>(data) >= doc->units().size()) {
+                    g_names.unitIndex = -1;
                     return TRUE;
-                case IDC_D172_1073:                              // 无敌
-                case IDC_D172_1074:                              // 幻影
-                case IDC_D172_1075:                              // 钻地
-                case IDC_D172_1076:                              // 隐形
-                case IDC_D172_1077:                              // 升起
-                    // BS_AUTOCHECKBOX 由系统自动切换，这里只记日志
-                    Log(L"[unitname] flag button %d toggled", LOWORD(wParam));
-                    return TRUE;
-                default:
-                    break;
+                }
+                g_names.unitIndex = static_cast<int>(data);
+                LoadUnitFields(dlg, doc->units()[static_cast<std::size_t>(data)]);
+                return TRUE;
+            }
+            if (id == IDC_D172_1078 || id == IDC_D172_1079 || id == IDC_D172_1081 ||
+                id == IDC_D172_1080 || id == IDC_D172_1082) {
+                if (code == EN_KILLFOCUS) StoreUnitFields(dlg);
+                return TRUE;
+            }
+            if (id >= IDC_D172_1073 && id <= IDC_D172_1077) {   // 5 个状态位
+                StoreUnitFields(dlg);
+                return TRUE;
             }
             break;
+        }
         case WM_CLOSE:
+            StoreUnitFields(dlg);
             ::EndDialog(dlg, IDCANCEL);
             return TRUE;
         default:

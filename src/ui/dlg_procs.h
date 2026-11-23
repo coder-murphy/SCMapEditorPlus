@@ -90,5 +90,7 @@ const UpgradeTechRestrictions& LastRestrictions();
 void SeedEditedString(const std::wstring& text);
 void SeedRichText(const std::wstring& text);
 const wchar_t* LastRichText();
+// 163 兼容性警告：打开前写入检测到的问题列表（空 = 无问题）
+void SeedCompatIssues(const std::vector<std::wstring>& issues);
 
 }  // namespace scmd

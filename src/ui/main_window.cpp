@@ -8,6 +8,7 @@
 #include <cwchar>
 #include <functional>
 #include <objbase.h>
+#include <shellapi.h>
 #include <shlobj.h>
 #include <unordered_map>
 #include <utility>
@@ -970,8 +971,7 @@ bool MainWindow::PointInMapView(int mx, int my) const {
     return mx >= view.left && my >= view.top && mx < view.right && my < view.bottom;
 }
 
-bool MainWindow::OpenMap(const std::wstring& path) {
-    if (!map_.Open(path, tilesetDir_)) {
+bool MainWindow::OpenMap(const std::wstring& path) {    if (!map_.Open(path, tilesetDir_)) {
         Output(0, L"打开地图失败: " + FileNameOf(path));
         ::MessageBoxW(hwnd_, L"无法打开该地图文件。", kWindowTitle, MB_ICONWARNING);
         return false;
@@ -994,7 +994,159 @@ bool MainWindow::OpenMap(const std::wstring& path) {
     RefreshBrushPalette();
     RefreshDoodadPalette();
     RefreshSceneTree();
+    CheckCompatibility();
     return true;
+}
+
+// 帮助菜单外链：交给系统默认浏览器；失败时写入输出面板
+void MainWindow::OpenHelpUrl(const wchar_t* url) {
+    const HINSTANCE r =
+        ::ShellExecuteW(hwnd_, L"open", url, nullptr, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(r) <= 32) {
+        Output(1, std::wstring(L"无法打开链接: ") + url);
+    } else {
+        Output(2, std::wstring(L"已打开链接: ") + url);
+    }
+}
+
+// 163：开图后检测兼容性问题；有问题才弹列表，「保存」自动修复可修复项
+void MainWindow::CheckCompatibility() {    if (!map_.IsOpen()) return;
+    const int w = map_.width();
+    const int h = map_.height();
+    if (w <= 0 || h <= 0) return;
+    const u32 mapPxW = static_cast<u32>(w) * kTilePixels;
+    const u32 mapPxH = static_cast<u32>(h) * kTilePixels;
+
+    int outUnits = 0;
+    int badTypeUnits = 0;
+    for (const UnitRecord& u : map_.units()) {
+        if (u.x >= mapPxW || u.y >= mapPxH) outUnits++;
+        if (u.type >= 228) badTypeUnits++;
+    }
+    int badLocations = 0;
+    for (const Location& l : map_.locations().Items()) {
+        if (l.right <= l.left || l.bottom <= l.top || l.right > mapPxW || l.bottom > mapPxH) {
+            badLocations++;
+        }
+    }
+    int badDoodads = 0;
+    for (const Doodad& d : map_.doodads().Items()) {
+        if (d.x >= mapPxW || d.y >= mapPxH) badDoodads++;
+    }
+    int badSprites = 0;
+    for (const SpriteRecord& s : map_.sprites().Items()) {
+        if (s.x >= mapPxW || s.y >= mapPxH) badSprites++;
+    }
+
+    std::vector<std::wstring> issues;
+    wchar_t line[192];
+    if (outUnits > 0) {
+        ::wsprintfW(line, L"单位坐标越界 %d 个（点「保存」删除）", outUnits);
+        issues.push_back(line);
+    }
+    if (badTypeUnits > 0) {
+        ::wsprintfW(line, L"单位类型超出 units.dat 范围（>=228）%d 个（点「保存」删除）",
+                    badTypeUnits);
+        issues.push_back(line);
+    }
+    if (badLocations > 0) {
+        ::wsprintfW(line, L"地点范围异常 %d 个（点「保存」修正为 1 格）", badLocations);
+        issues.push_back(line);
+    }
+    if (badDoodads > 0) {
+        ::wsprintfW(line, L"装饰物坐标越界 %d 个（点「保存」纠正）", badDoodads);
+        issues.push_back(line);
+    }
+    if (badSprites > 0) {
+        ::wsprintfW(line, L"SP单位坐标越界 %d 个（点「保存」删除）", badSprites);
+        issues.push_back(line);
+    }
+    const Buffer& tiles = map_.tiles();
+    const std::size_t expectTiles =
+        static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 2u;
+    if (tiles.size() < expectTiles) {
+        ::wsprintfW(line, L"地形数据不足：%u B（应为 %u B）",
+                    static_cast<unsigned>(tiles.size()),
+                    static_cast<unsigned>(expectTiles));
+        issues.push_back(line);
+    }
+    const AppSettings& settings = AppSettings::Instance();
+    if (settings.maxUnits() > 0 &&
+        map_.units().size() > static_cast<std::size_t>(settings.maxUnits())) {
+        ::wsprintfW(line, L"单位数量 %u 超过「最多单位」上限 %d（仅提示）",
+                    static_cast<unsigned>(map_.units().size()), settings.maxUnits());
+        issues.push_back(line);
+    }
+    if (settings.maxLocations() > 0 &&
+        map_.locations().Count() > static_cast<std::size_t>(settings.maxLocations())) {
+        ::wsprintfW(line, L"地点数量 %u 超过「Location编号」上限 %d（仅提示）",
+                    static_cast<unsigned>(map_.locations().Count()),
+                    settings.maxLocations());
+        issues.push_back(line);
+    }
+
+    if (issues.empty()) {
+        Log(L"[compat] no issues");
+        return;
+    }
+    for (const std::wstring& issue : issues) Output(1, L"[兼容性] " + issue);
+    if (suppressDialogs_) return;
+
+    SeedCompatIssues(issues);
+    ShowRecoveredDialog(IDD_DLG_163, hwnd_);
+    if (LastDialogResult() != IDOK) {
+        Output(2, L"[兼容性] 已忽略，未修改地图");
+        return;
+    }
+
+    // 自动修复：删除越界/类型非法单位与 SP 单位、纠正装饰物、修正地点矩形
+    BeginEdit();
+    int fixed = map_.RemoveInvalidUnits();
+    fixed += map_.mutableDoodads().FixErrors(w, h);
+    {
+        auto& units = map_.mutableUnits();
+        const std::size_t before = units.size();
+        units.erase(std::remove_if(units.begin(), units.end(),
+                                   [&](const UnitRecord& u) {
+                                       return u.x >= mapPxW || u.y >= mapPxH || u.type >= 228;
+                                   }),
+                    units.end());
+        fixed += static_cast<int>(before - units.size());
+    }
+    {
+        auto& locs = map_.mutableLocations().MutableItems();
+        for (Location& l : locs) {
+            if (l.right > l.left && l.bottom > l.top && l.right <= mapPxW &&
+                l.bottom <= mapPxH) {
+                continue;
+            }
+            if (l.left >= mapPxW) l.left = mapPxW > 32 ? mapPxW - 32 : 0;
+            if (l.top >= mapPxH) l.top = mapPxH > 32 ? mapPxH - 32 : 0;
+            if (l.right <= l.left) l.right = std::min<u32>(l.left + 32, mapPxW);
+            if (l.bottom <= l.top) l.bottom = std::min<u32>(l.top + 32, mapPxH);
+            fixed++;
+        }
+    }
+    {
+        auto& sprites = map_.mutableSprites().MutableItems();
+        const std::size_t before = sprites.size();
+        sprites.erase(std::remove_if(sprites.begin(), sprites.end(),
+                                     [&](const SpriteRecord& s) {
+                                         return s.x >= mapPxW || s.y >= mapPxH;
+                                     }),
+                      sprites.end());
+        fixed += static_cast<int>(before - sprites.size());
+    }
+    if (fixed > 0) {
+        map_.MarkDirty();
+        CommitEdit(L"兼容性修复");
+    } else {
+        editOpen_ = false;
+    }
+    UpdateTitle();
+    RefreshSceneTree();
+    ::InvalidateRect(hwnd_, nullptr, TRUE);
+    Output(2, L"[兼容性] 已修复 " + std::to_wstring(fixed) + L" 项");
 }
 
 void MainWindow::NewMap() {
@@ -4073,7 +4225,17 @@ void MainWindow::OnCommand(int id) {
             OpenPlayerRoster();
             break;
         case kScenarioUnits:
+            if (!map_.IsOpen()) {
+                BeepWarning();
+                break;
+            }
+            BeginEdit();
+            SetDialogDocument(&map_);
             ShowRecoveredDialog(IDD_DLG_172, hwnd_);
+            SetDialogDocument(nullptr);
+            CommitEdit(L"编辑单位属性");
+            UpdateTitle();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         case kScenarioUpgrades:
             OpenRestrictions();
@@ -4534,6 +4696,23 @@ void MainWindow::OnCommand(int id) {
             break;
         case kHelpAbout:
             ShowRecoveredDialog(IDD_DLG_103, hwnd_);
+            break;
+        case kHelpHomepage:
+            OpenHelpUrl(L"http://www.stormcoast-fortress.net/");
+            break;
+        case kHelpOnlineHelp:
+            OpenHelpUrl(L"http://www.stormcoast-fortress.net/");
+            break;
+        case kHelpForum:
+            OpenHelpUrl(L"http://www.stormcoast-fortress.net/");
+            break;
+        case kHelpReportBug:
+            // 原版指向作者邮箱；本工程改为项目仓库的 issue 页
+            OpenHelpUrl(L"https://github.com/coder-murphy/SCMapEditorPlus/issues");
+            break;
+        case kHelpDonate:
+            ::MessageBoxW(hwnd_, L"本工程为免费开源工具，不接受捐款。", kWindowTitle,
+                          MB_ICONINFORMATION);
             break;
         default:
             Log(L"[ui] command %d not implemented", id);

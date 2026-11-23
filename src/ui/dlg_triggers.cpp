@@ -749,6 +749,98 @@ void SyncActionTypeCombo(HWND dlg) {
     }
 }
 
+// 193：按条件类型启用有意义的字段（掩码为本工程解释，见 doc/05-ui/ui-map.md）
+void ApplyConditionFields(HWND dlg, u32 type) {
+    enum : unsigned {
+        kLoc = 1u, kPlayer = 2u, kAmount = 4u, kUnit = 8u,
+        kParam = 16u, kCompare = 32u,
+    };
+    unsigned mask = kLoc | kPlayer | kAmount | kUnit | kParam | kCompare;   // 自定义/未知：全开
+    switch (type) {
+        case 1:                                     // 倒计时
+        case 12:                                    // 经过时间
+            mask = kAmount | kCompare;
+            break;
+        case 2: case 3: case 5: case 6: case 15: case 16:   // 命令/带来/击杀/死亡
+            mask = kPlayer | kAmount | kUnit;
+            break;
+        case 4: case 10: case 20:                   // 积累/最多资源/最少资源
+            mask = kPlayer | kAmount | kParam;
+            break;
+        case 7: case 17:                            // 命令最多/最少在位置
+            mask = kPlayer | kAmount | kUnit | kLoc;
+            break;
+        case 8: case 18:                            // 最多击杀/最少击杀
+        case 14:                                    // 对手
+            mask = kPlayer | kAmount;
+            break;
+        case 9: case 19: case 21:                   // 最高分数/最低分数/分数
+            mask = kPlayer | kAmount | kCompare;
+            break;
+        case 11:                                    // 开关
+            mask = kParam | kCompare;
+            break;
+        case 13: case 22: case 23:                  // 任务简报/总是/从不：无参数
+            mask = 0;
+            break;
+        default:
+            break;
+    }
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D193_LOCATION), (mask & kLoc) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D193_PLAYER), (mask & kPlayer) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D193_AMOUNT), (mask & kAmount) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D193_UNIT), (mask & kUnit) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D193_PARAM), (mask & kParam) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D193_COMPARE), (mask & kCompare) ? TRUE : FALSE);
+}
+
+u32 CurrentConditionType(HWND dlg) {
+    const int sel = static_cast<int>(
+        ::SendDlgItemMessageW(dlg, IDC_D193_TYPE, CB_GETCURSEL, 0, 0));
+    if (sel >= 0 && sel < 23) return static_cast<u32>(sel + 1);
+    return 0;   // 自定义：类型号可手填，字段全部开放
+}
+
+// 194：仅对参数含义完全明确的行动收窄字段；其余保持全开
+void ApplyActionFields(HWND dlg, u32 type) {
+    enum : unsigned {
+        kLoc = 1u, kStr = 2u, kWav = 4u, kTime = 8u,
+        kPlayer = 16u, kTarget = 32u, kUnit = 64u, kAmount = 128u,
+    };
+    unsigned mask = kLoc | kStr | kWav | kTime | kPlayer | kTarget | kUnit | kAmount;
+    switch (type) {
+        case 4:                                     // 等待：只用到时间
+            mask = kTime;
+            break;
+        case 49:                                    // 注释：只有文本
+            mask = kStr;
+            break;
+        case 9:                                     // 显示文本
+            mask = kStr;
+            break;
+        case 8:                                     // 播放 WAV
+            mask = kWav;
+            break;
+        default:
+            break;
+    }
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D194_LOCATION), (mask & kLoc) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D194_STRING), (mask & kStr) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D194_WAV), (mask & kWav) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D194_TIME), (mask & kTime) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D194_PLAYER), (mask & kPlayer) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D194_TARGET), (mask & kTarget) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D194_UNIT), (mask & kUnit) ? TRUE : FALSE);
+    ::EnableWindow(::GetDlgItem(dlg, IDC_D194_AMOUNT), (mask & kAmount) ? TRUE : FALSE);
+}
+
+u32 CurrentActionType(HWND dlg) {
+    const int sel = static_cast<int>(
+        ::SendDlgItemMessageW(dlg, IDC_D194_TYPE, CB_GETCURSEL, 0, 0));
+    if (sel >= 0 && sel < 57) return static_cast<u32>(sel + 1);
+    return 0;   // 自定义：类型号可手填，字段全部开放
+}
+
 // 193：编辑条件
 INT_PTR CALLBACK ProcTriggerCondition(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
@@ -777,15 +869,18 @@ INT_PTR CALLBACK ProcTriggerCondition(HWND dlg, UINT msg, WPARAM wParam, LPARAM)
             ::SendMessageW(cmp, CB_SETCURSEL,
                            static_cast<WPARAM>(g_condSeed.comparison < 3 ? g_condSeed.comparison : 0),
                            0);
+            ApplyConditionFields(dlg, CurrentConditionType(dlg));
             return TRUE;
         }
         case WM_COMMAND:
             if (LOWORD(wParam) == IDC_D193_TYPE && HIWORD(wParam) == CBN_SELCHANGE) {
                 SyncConditionTypeId(dlg);
+                ApplyConditionFields(dlg, CurrentConditionType(dlg));
                 return TRUE;
             }
             if (LOWORD(wParam) == IDC_D193_TYPE_ID && HIWORD(wParam) == EN_CHANGE) {
                 SyncConditionTypeCombo(dlg);
+                ApplyConditionFields(dlg, CurrentConditionType(dlg));
                 return TRUE;
             }
             if (LOWORD(wParam) == IDC_D193_1) {
@@ -849,15 +944,18 @@ INT_PTR CALLBACK ProcTriggerAction(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
             ::SetDlgItemInt(dlg, IDC_D194_UNIT, g_actSeed.setting, FALSE);
             ::SetDlgItemInt(dlg, IDC_D194_AMOUNT, g_actSeed.amount, FALSE);
             ::SetDlgItemInt(dlg, IDC_D194_PROP, g_actSeed.property, FALSE);
+            ApplyActionFields(dlg, CurrentActionType(dlg));
             return TRUE;
         }
         case WM_COMMAND:
             if (LOWORD(wParam) == IDC_D194_TYPE && HIWORD(wParam) == CBN_SELCHANGE) {
                 SyncActionTypeId(dlg);
+                ApplyActionFields(dlg, CurrentActionType(dlg));
                 return TRUE;
             }
             if (LOWORD(wParam) == IDC_D194_TYPE_ID && HIWORD(wParam) == EN_CHANGE) {
                 SyncActionTypeCombo(dlg);
+                ApplyActionFields(dlg, CurrentActionType(dlg));
                 return TRUE;
             }
             if (LOWORD(wParam) == IDC_D194_1) {

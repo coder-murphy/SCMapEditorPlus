@@ -31,6 +31,7 @@
 #include "map/map_document.h"
 #include "map/map_switches.h"
 #include "units/iscript.h"
+#include "units/stat_txt.h"
 #include "units/unit_data.h"
 #include "terrain/terrain_renderer.h"
 #include "terrain/edge_placer.h"
@@ -1830,7 +1831,20 @@ int RunUnitDataTest() {
                 reaver ? reaver->shields : -1, archon ? archon->hp : -1,
                 archon ? archon->shields : -1);
     WriteDiag(msg);
-    return ok ? 0 : 2;
+
+    // stat_txt.tbl 抽样：验证 172 单位名字能解析出真实文本
+    StatTextTable names;
+    std::wstring nameSource;
+    const bool namesLoaded = StatTextTable::LoadAuto(names, nameSource);
+    const std::wstring& n0 = names.Name(0);
+    const std::wstring& n64 = names.Name(64);
+    const bool namesOk = namesLoaded && !n0.empty() && !n64.empty();
+    wchar_t nameMsg[768];
+    ::wsprintfW(nameMsg, L"names=%d\nnameCount=%d\nnameSource=%ls\nname0=%ls\nname64=%ls\n",
+                namesOk ? 1 : 0, static_cast<int>(names.Count()),
+                namesLoaded ? nameSource.c_str() : L"(none)", n0.c_str(), n64.c_str());
+    WriteDiag(nameMsg);
+    return (ok && namesOk) ? 0 : 2;
 }
 
 // --menu-cmd-test：检验编辑层/方格/显示选项菜单命令与勾选回显
@@ -4611,7 +4625,7 @@ int RunDialogAuditTest(HWND owner) {
         record(L"grid166", ok);
     }
 
-    // 4) 172：units.dat 属性编辑控件只读
+    // 4) 172：units.dat 属性编辑控件只读（无地图文档时的只读预览）
     {
         HWND dlg = open(172);
         bool ok = dlg != nullptr;
@@ -4620,6 +4634,18 @@ int RunDialogAuditTest(HWND owner) {
         for (int id : kDisabled) ok = ok && !enabled(dlg, id);
         if (dlg) ::DestroyWindow(dlg);
         record(L"unitNames172", ok);
+    }
+
+    // 4a) 163：兼容性问题列表可填充（问题由主窗口开图后检测）
+    {
+        SeedCompatIssues({L"单位坐标越界 2 个（点「保存」删除）",
+                          L"地点范围异常 1 个（点「保存」修正为 1 格）",
+                          L"装饰物坐标越界 3 个（点「保存」纠正）"});
+        HWND dlg = open(163);
+        bool ok = dlg != nullptr;
+        ok = ok && listCount(dlg, IDC_D163_1038) == 3;
+        if (dlg) ::DestroyWindow(dlg);
+        record(L"compat163", ok);
     }
 
     // 4b) 180：状态位回填 + 位序映射（无敌=bit4 / 幻影=bit3 / 钻地=bit1 / 隐形=bit0 / 升起=bit2）
@@ -4937,6 +4963,21 @@ int RunDialogAuditTest(HWND owner) {
                 condOk = condOk && comboIndex(dlg, IDC_D193_TYPE) == 21;
                 ::SetDlgItemInt(dlg, IDC_D193_TYPE_ID, 99, FALSE);   // 越界 -> 自定义(23)
                 condOk = condOk && comboIndex(dlg, IDC_D193_TYPE) == 23;
+                // 类型 → 字段启用矩阵
+                selectCombo(dlg, IDC_D193_TYPE, 0);              // 类型 1 倒计时
+                condOk = condOk && enabled(dlg, IDC_D193_AMOUNT) &&
+                         enabled(dlg, IDC_D193_COMPARE) &&
+                         !enabled(dlg, IDC_D193_LOCATION) &&
+                         !enabled(dlg, IDC_D193_PLAYER) &&
+                         !enabled(dlg, IDC_D193_UNIT);
+                selectCombo(dlg, IDC_D193_TYPE, 21);             // 类型 22 总是
+                condOk = condOk && !enabled(dlg, IDC_D193_AMOUNT) &&
+                         !enabled(dlg, IDC_D193_COMPARE) &&
+                         !enabled(dlg, IDC_D193_LOCATION);
+                selectCombo(dlg, IDC_D193_TYPE, 23);             // 自定义：全开
+                condOk = condOk && enabled(dlg, IDC_D193_AMOUNT) &&
+                         enabled(dlg, IDC_D193_LOCATION) &&
+                         enabled(dlg, IDC_D193_PLAYER);
                 ::SetDlgItemInt(dlg, IDC_D193_TYPE_ID, 22, FALSE);
                 command(dlg, IDC_D193_1);
                 condOk = condOk && LastTriggerConditionAccepted() &&
@@ -4962,6 +5003,14 @@ int RunDialogAuditTest(HWND owner) {
                 actOk = actOk && comboIndex(dlg, IDC_D194_TYPE) == 56;
                 ::SetDlgItemInt(dlg, IDC_D194_TYPE_ID, 99, FALSE);   // 越界 -> 自定义(57)
                 actOk = actOk && comboIndex(dlg, IDC_D194_TYPE) == 57;
+                // 类型 → 字段启用矩阵
+                selectCombo(dlg, IDC_D194_TYPE, 48);             // 类型 49 注释：仅文本
+                actOk = actOk && enabled(dlg, IDC_D194_STRING) &&
+                        !enabled(dlg, IDC_D194_TIME) &&
+                        !enabled(dlg, IDC_D194_LOCATION);
+                selectCombo(dlg, IDC_D194_TYPE, 3);              // 类型 4 等待：仅时间
+                actOk = actOk && enabled(dlg, IDC_D194_TIME) &&
+                        !enabled(dlg, IDC_D194_STRING);
                 ::SetDlgItemInt(dlg, IDC_D194_TYPE_ID, 1, FALSE);
                 command(dlg, IDC_D194_1);
                 actOk = actOk && LastTriggerActionAccepted() &&
@@ -5041,6 +5090,36 @@ int RunDialogAuditTest(HWND owner) {
         }
         record(L"backup173", backupOk);
 
+        // 172（有文档）：按单位类型列出实例并写回 UNIT 字段
+        {
+            UnitRecord probe;
+            probe.serial = 9001;
+            probe.type = 64;
+            probe.x = 96;
+            probe.y = 96;
+            probe.owner = 1;
+            probe.hpPercent = 100;
+            probe.shieldPercent = 100;
+            probe.energyPercent = 100;
+            doc.mutableUnits().push_back(probe);
+
+            HWND dlg = open(172);
+            bool ok = dlg != nullptr;
+            ok = ok && enabled(dlg, IDC_D172_1078) && enabled(dlg, IDC_D172_1076);
+            if (dlg) {
+                ::SetDlgItemInt(dlg, IDC_D172_1078, 55, FALSE);
+                ::SendMessageW(dlg, WM_COMMAND,
+                               MAKEWPARAM(IDC_D172_1078, EN_KILLFOCUS),
+                               reinterpret_cast<LPARAM>(::GetDlgItem(dlg, IDC_D172_1078)));
+                press(dlg, IDC_D172_1076);   // 隐形
+                const UnitRecord& back = doc.units().back();
+                ok = ok && back.hpPercent == 55 && (back.queueCount & 0x0001) != 0 &&
+                     (back.validState & 0x0001) != 0;
+                ::DestroyWindow(dlg);
+            }
+            record(L"unitNames172Edit", ok);
+        }
+
         const bool interactionWritten =
             WriteTempTextFile(L"scmdplus_dialog_interaction.txt", interactionText);
         report += L"interactionPairs=" + std::to_wstring(interactionPairs) + L"\n";
@@ -5101,7 +5180,11 @@ int RunMpqExtract(const std::wstring& archivePath, const std::wstring& entryWide
     MpqArchive mpq;
     Buffer data;
     if (!mpq.Open(archivePath) || !mpq.ReadFile(entry, data)) {
-        WriteDiag(L"extract=FAIL read\n");
+        const bool exists = mpq.IsOpen() && mpq.FileExists(entry);
+        wchar_t failMsg[320];
+        ::wsprintfW(failMsg, L"extract=FAIL read\nexists=%d\nerr=%ls\n", exists ? 1 : 0,
+                    mpq.LastError());
+        WriteDiag(failMsg);
         return 2;
     }
     {
@@ -5272,8 +5355,9 @@ int App::Run(HINSTANCE hInstance) {
     if (!::LoadLibraryW(L"riched20.dll")) {
         Log(L"[app] riched20.dll 加载失败，富文本控件不可用");
     }
-    if (!mainWindow_.Create(hInstance)) {
-        ::MessageBoxW(nullptr, L"创建主窗口失败。", L"SCMD Plus 3.0", MB_ICONERROR);
+    // 无头回归/工具模式：不弹开图兼容性提示（163），避免自动化被模态框阻塞
+    mainWindow_.SetSuppressDialogs(IsHeadlessRun());
+    if (!mainWindow_.Create(hInstance)) {        ::MessageBoxW(nullptr, L"创建主窗口失败。", L"SCMD Plus 3.0", MB_ICONERROR);
         return 1;
     }
     Log(L"[app] started");

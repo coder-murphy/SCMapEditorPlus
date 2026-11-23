@@ -259,15 +259,32 @@ INT_PTR CALLBACK ProcSettings(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     return FALSE;
 }
 
-// 163：兼容性警告。列表内容待接入版本检测。
+// 163：兼容性警告。打开地图后由主窗口检测并填入问题列表；
+// 「保存」= 自动修复可修复项（主窗口执行），「关闭」= 忽略。
+namespace {
+std::vector<std::wstring> g_compatIssues;
+}
+
+void SeedCompatIssues(const std::vector<std::wstring>& issues) { g_compatIssues = issues; }
+
 INT_PTR CALLBACK ProcCompatWarning(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
-        case WM_INITDIALOG:
+        case WM_INITDIALOG: {
             CenterDialog(dlg);
-            Log(L"[compat] warning shown");
+            HWND list = ::GetDlgItem(dlg, IDC_D163_1038);
+            if (list) {
+                ::SendMessageW(list, LB_RESETCONTENT, 0, 0);
+                for (const std::wstring& issue : g_compatIssues) {
+                    ::SendMessageW(list, LB_ADDSTRING, 0,
+                                   reinterpret_cast<LPARAM>(issue.c_str()));
+                }
+            }
+            Log(L"[compat] warning shown, issues=%u",
+                static_cast<unsigned>(g_compatIssues.size()));
             return TRUE;
+        }
         case WM_COMMAND:
-            if (LOWORD(wParam) == IDC_D163_1) {   // 保存
+            if (LOWORD(wParam) == IDC_D163_1) {   // 保存：返回 IDOK 由主窗口执行修复
                 ::EndDialog(dlg, IDOK);
                 return TRUE;
             }

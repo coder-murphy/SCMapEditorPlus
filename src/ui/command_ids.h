@@ -175,6 +175,12 @@ enum CommandId : int {
     kOutputClear = 0x8068,      // 清除当前信息
 
     kHelpAbout = 0x0068,        // 帮助 → 关于...
+    // 帮助菜单外链（原版 5 项）
+    kHelpHomepage = 0x8070,     // 主页
+    kHelpOnlineHelp = 0x811F,   // 在线帮助
+    kHelpForum = 0x806D,        // 论坛
+    kHelpReportBug = 0x806F,    // 错误与建议
+    kHelpDonate = 0x8120,       // 捐款
 
     // 本工程自有的调试入口（原程序无此菜单项，运行时追加）
     kMpqFileManager = 0x8FFC,   // 文件 → MPQ 文件管理（167）

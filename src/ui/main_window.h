@@ -67,6 +67,8 @@ public:
     bool TranslateAccel(MSG& msg) const;
     // 从 AppSettings 重新应用视图状态（无头回归重置用）
     void ReloadViewState();
+    // 无头回归/工具模式：抑制打开地图后自动弹出的提示框（163）
+    void SetSuppressDialogs(bool suppress) { suppressDialogs_ = suppress; }
 
     // 撤销 / 重做
     bool Undo();
@@ -185,6 +187,8 @@ private:
     void RefreshSceneTree();
     void DrawSidebar(HDC dc) const;
     void OnSceneTreeDblClk();
+    void CheckCompatibility();   // 163：开图后检测并提示（有问题才弹）
+    void OpenHelpUrl(const wchar_t* url);   // 帮助菜单外链（默认浏览器）
     void OnLButtonDown(int mx, int my);
     void OnLButtonDblClk(int mx, int my);
     void OnMouseMove(int mx, int my, bool leftDown);
@@ -224,6 +228,7 @@ private:
     HINSTANCE hInstance_ = nullptr;
     HWND hwnd_ = nullptr;
     HWND sceneTree_ = nullptr;   // 右侧栏下方场景树（TreeView 子窗口）
+    bool suppressDialogs_ = false;   // 无头运行：不弹开图兼容性提示
     HACCEL hAccel_ = nullptr;
     MapDocument map_;
     std::wstring tilesetDir_;

@@ -1,0 +1,32 @@
+name: dialog-ui
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  dialog-ui:
+    name: dialog-ui (${{ matrix.platform }}/${{ matrix.config }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+        platform: [Win32, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build
+        run: msbuild SCMDPlus.sln /t:Build /p:Configuration=${{ matrix.config }} /p:Platform=${{ matrix.platform }} /m /v:m /nologo
+      - name: Dialog UI snapshot
+        shell: pwsh
+        run: ./tools/dialog-ui-check.ps1 -Exe "bin/${{ matrix.platform }}/${{ matrix.config }}/SCMDPlus.exe"
+      - name: Upload snapshot diff
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialog-snapshot-diff-${{ matrix.platform }}-${{ matrix.config }}
+          path: |
+            ${{ runner.temp }}\scmdplus_dialog_snapshot.diff.txt
+            ${{ runner.temp }}\scmdplus_dialog_interaction.diff.txt
+          if-no-files-found: ignore
