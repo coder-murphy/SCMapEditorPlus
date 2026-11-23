@@ -620,6 +620,21 @@ int RunUnitParamTest(MainWindow& win, const std::wstring& outPath) {
     win.SetUnitPlacement(115, 1, 0);
     const bool placedTower = win.PlaceUnitAtTile(16, 22);
 
+    // 地面重叠：默认拒绝同格，开启“允许地面单位重叠”后接受
+    win.SetUnitPlacement(0, 1, 0);                // Marine
+    const bool placedMarine = win.PlaceUnitAtTile(25, 5);
+    const bool stackRejected = !win.PlaceUnitAtTile(25, 5);
+    ::SendMessageW(win.hwnd(), WM_COMMAND, MAKEWPARAM(0x8015, 0), 0);
+    const bool stackAllowed = win.PlaceUnitAtTile(25, 5);
+    ::SendMessageW(win.hwnd(), WM_COMMAND, MAKEWPARAM(0x8015, 0), 0);
+
+    // 空中重叠：默认拒绝空中同格；地面单位可与空中单位同格
+    win.SetUnitPlacement(8, 1, 0);                // Wraith
+    const bool placedWraith = win.PlaceUnitAtTile(25, 10);
+    const bool airStackRejected = !win.PlaceUnitAtTile(25, 10);
+    win.SetUnitPlacement(0, 1, 0);                // Marine
+    const bool groundUnderAir = win.PlaceUnitAtTile(25, 10);
+
     // 矿物与基地距离限制：开启后远处矿物拒绝、近处允许
     ::SendMessageW(win.hwnd(), WM_COMMAND, MAKEWPARAM(0x80BF, 0), 0);
     win.SetUnitPlacement(176, 0, 0);
@@ -651,19 +666,23 @@ int RunUnitParamTest(MainWindow& win, const std::wstring& outPath) {
     ::wsprintfW(msg,
         L"create=OK\nplaced=%d/%d\nrejected=%d\nsaved=%d\nreopened=%d\nunits=%u\n"
         L"startOk=%d\ngeyserOk=%d\ncc=%d\naddon=%d\nfarRejected=%d\nnearMineral=%d\n"
-        L"addonOk=%d\ntower=%d/%d\ntowerOk=%d\nmineralOk=%d\noverlapRejected=%d\n",
+        L"addonOk=%d\ntower=%d/%d\ntowerOk=%d\nmineralOk=%d\noverlapRejected=%d\n"
+        L"stack=%d/%d/%d\nair=%d/%d/%d\n",
         placedStart ? 1 : 0, placedGeyser ? 1 : 0, rejected ? 1 : 0, saved ? 1 : 0,
         reopened ? 1 : 0, static_cast<unsigned>(check.unitCount()),
         startOk ? 1 : 0, geyserOk ? 1 : 0, placedCC ? 1 : 0, placedAddon ? 1 : 0,
         rejectedFar ? 1 : 0, placedNearMineral ? 1 : 0, addonOk ? 1 : 0,
         placedStarport ? 1 : 0, placedTower ? 1 : 0, towerOk ? 1 : 0, mineralOk ? 1 : 0,
-        rejectedOverlap ? 1 : 0);
+        rejectedOverlap ? 1 : 0, placedMarine ? 1 : 0, stackRejected ? 1 : 0,
+        stackAllowed ? 1 : 0, placedWraith ? 1 : 0, airStackRejected ? 1 : 0,
+        groundUnderAir ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = placedStart && placedGeyser && placedCC && placedAddon && placedStarport &&
                     placedTower && rejectedFar && placedNearMineral && rejected && saved &&
-                    reopened && check.unitCount() == 7 && startOk && geyserOk && addonOk &&
-                    towerOk && mineralOk && rejectedOverlap;
+                    reopened && check.unitCount() == 11 && startOk && geyserOk && addonOk &&
+                    towerOk && mineralOk && rejectedOverlap && placedMarine && stackRejected &&
+                    stackAllowed && placedWraith && airStackRejected && groundUnderAir;
     return ok ? 0 : 2;
 }
 
