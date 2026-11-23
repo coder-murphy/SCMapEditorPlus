@@ -153,32 +153,4 @@ INT_PTR CALLBACK ProcUpdater(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     return FALSE;
 }
 
-// 192：Iscript 测试（动画调试工具，仅接播放/重启）
-INT_PTR CALLBACK ProcIscriptTest(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
-    switch (msg) {
-        case WM_INITDIALOG:
-            CenterDialog(dlg);
-            ::SetDlgItemTextW(dlg, IDC_D192_1132, L"未载入单位");
-            return TRUE;
-        case WM_COMMAND:
-            switch (LOWORD(wParam)) {
-                case IDC_D192_1130:                              // Play
-                    Log(L"[iscript] play");
-                    return TRUE;
-                case IDC_D192_1080:                              // Restart
-                    Log(L"[iscript] restart");
-                    return TRUE;
-                default:
-                    break;
-            }
-            break;
-        case WM_CLOSE:
-            ::EndDialog(dlg, IDCANCEL);
-            return TRUE;
-        default:
-            break;
-    }
-    return FALSE;
-}
-
 }  // namespace scmd

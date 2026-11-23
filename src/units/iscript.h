@@ -21,6 +21,17 @@ struct IscriptHeader {
     std::vector<u16> animOffsets;
 };
 
+// iscript 线性模拟结果（Play/测试用；不做图像绘制）
+struct IscriptSimResult {
+    int ops = 0;
+    int waits = 0;
+    int frames = 0;
+    int loops = 0;
+    u16 lastFrame = 0;
+    u8 lastOp = 0;
+    bool ended = false;
+};
+
 // iscript.bin：文件头为 (u16 id, u16 headerOffset) 索引表，以 headerOffset=0 结束；
 // 每个头为 "SCPE" + u32 type + u16 动画偏移[动画数]，偏移是绝对文件位置。
 class IscriptFile {
@@ -35,6 +46,11 @@ public:
     // 反汇编一个动画；遇到 end/return/goto/ignorerest 停止
     bool Disassemble(const IscriptHeader& header, int animIndex,
                      std::vector<IscriptInstruction>& out) const;
+    // 读取指定文件偏移处的一条指令（供 goto 跳转模拟使用）
+    bool ReadInstruction(std::size_t offset, IscriptInstruction& out) const;
+    // 线性模拟动画：处理 playfram/wait/goto/end/return/ignorerest，最多 maxOps 步
+    bool Simulate(const IscriptHeader& header, int animIndex, int maxOps,
+                  IscriptSimResult& out) const;
 
     // type -> 动画槽数量（0/1->2，2->4，12/13->14，14/15->16，20/21->22，
     // 23->24，24->26，26..29->28）

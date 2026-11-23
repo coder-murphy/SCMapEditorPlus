@@ -438,6 +438,205 @@ INT_PTR CALLBACK ProcIscriptGrpDebug(HWND dlg, UINT msg, WPARAM wParam, LPARAM) 
     return FALSE;
 }
 
+// 192：Iscript 测试（浏览动画操作码 + 线性模拟 Play）
+namespace {
+
+u16 IscriptTestId(HWND dlg) {
+    return static_cast<u16>(ReadClampedInt(dlg, IDC_D192_1085, 198, 0, 65535));
+}
+
+int IscriptTestAnim(HWND dlg) {
+    HWND combo = ::GetDlgItem(dlg, IDC_D192_1133);
+    const int sel = static_cast<int>(::SendMessageW(combo, CB_GETCURSEL, 0, 0));
+    if (sel == CB_ERR) return -1;
+    const LRESULT data = ::SendMessageW(combo, CB_GETITEMDATA, static_cast<WPARAM>(sel), 0);
+    return data == CB_ERR ? -1 : static_cast<int>(data);
+}
+
+void FillIscriptTestCombo(HWND dlg, const IscriptHeader* header) {
+    HWND combo = ::GetDlgItem(dlg, IDC_D192_1133);
+    ::SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+    if (!header) return;
+    int first = -1;
+    for (int i = 0; i < static_cast<int>(header->animOffsets.size()); i++) {
+        if (header->animOffsets[static_cast<std::size_t>(i)] == 0) continue;
+        const std::wstring name = WidenName(IscriptFile::AnimationName(i));
+        const LRESULT idx = ::SendMessageW(combo, CB_ADDSTRING, 0,
+                                           reinterpret_cast<LPARAM>(name.c_str()));
+        if (idx == CB_ERR) continue;
+        ::SendMessageW(combo, CB_SETITEMDATA, static_cast<WPARAM>(idx),
+                       static_cast<LPARAM>(i));
+        if (first < 0) first = static_cast<int>(idx);
+    }
+    if (first >= 0) ::SendMessageW(combo, CB_SETCURSEL, static_cast<WPARAM>(first), 0);
+}
+
+void UpdateIscriptTest(HWND dlg, const wchar_t* extra) {
+    const u16 id = IscriptTestId(dlg);
+    const IscriptHeader* header = g_iscript.Find(id);
+    const int anim = IscriptTestAnim(dlg);
+
+    std::wstring summary;
+    if (!header) {
+        wchar_t msg[96];
+        ::wsprintfW(msg, L"未找到 Iscript ID %u\r\n", static_cast<unsigned>(id));
+        summary = msg;
+    } else {
+        wchar_t msg[256];
+        ::wsprintfW(msg, L"Iscript %u  type %u\r\n动画槽 %u\r\n",
+                    static_cast<unsigned>(header->id), static_cast<unsigned>(header->type),
+                    static_cast<unsigned>(header->animOffsets.size()));
+        summary = msg;
+        if (anim >= 0) {
+            wchar_t animMsg[128];
+            ::wsprintfW(animMsg, L"动画 %d: %hs\r\n", anim, IscriptFile::AnimationName(anim));
+            summary += animMsg;
+        }
+        if (extra) summary += extra;
+    }
+    ::SetDlgItemTextW(dlg, IDC_D192_1132, summary.c_str());
+
+    HWND edit = ::GetDlgItem(dlg, IDC_D192_1079);
+    std::vector<IscriptInstruction> list;
+    if (!header || anim < 0 || !g_iscript.Disassemble(*header, anim, list)) {
+        ::SetWindowTextW(edit, L"该动画没有可解析的操作码。");
+        return;
+    }
+    std::wstring text;
+    for (const IscriptInstruction& ins : list) {
+        wchar_t line[256];
+        int used = ::wsprintfW(line, L"%04X  %-18hs", static_cast<unsigned>(ins.offset),
+                               IscriptFile::OpcodeName(ins.opcode));
+        for (u8 b : ins.operands) {
+            if (used > 200) break;
+            used += ::wsprintfW(line + used, L" %02X", b);
+        }
+        text += line;
+        text += L"\r\n";
+    }
+    ::SetWindowTextW(edit, text.c_str());
+}
+
+void RefreshIscriptTest(HWND dlg) {
+    if (!g_iscript.loaded() && !LoadIscriptAuto(g_iscriptLabel)) g_iscriptLabel.clear();
+    if (!g_iscript.loaded()) {
+        ::SetDlgItemTextW(dlg, IDC_D192_1132,
+                          L"未找到 iscript.bin\r\n可在 205 载入，或在 155 设置星际目录。");
+        ::SetWindowTextW(::GetDlgItem(dlg, IDC_D192_1079), L"");
+        return;
+    }
+    const u16 id = IscriptTestId(dlg);
+    const IscriptHeader* header = g_iscript.Find(id);
+    FillIscriptTestCombo(dlg, header);
+    wchar_t name[128];
+    if (header) {
+        ::wsprintfW(name, L"iscript %u (type %u)", static_cast<unsigned>(id),
+                    static_cast<unsigned>(header->type));
+    } else {
+        ::wsprintfW(name, L"iscript %u 未找到", static_cast<unsigned>(id));
+    }
+    ::SetDlgItemTextW(dlg, IDC_D192_1087, name);
+    UpdateIscriptTest(dlg, nullptr);
+}
+
+void PlayIscriptTest(HWND dlg) {
+    const u16 id = IscriptTestId(dlg);
+    const IscriptHeader* header = g_iscript.Find(id);
+    const int anim = IscriptTestAnim(dlg);
+    if (!header || anim < 0) {
+        ::SetDlgItemTextW(dlg, IDC_D192_1132, L"没有可模拟的动画。");
+        return;
+    }
+    IscriptSimResult r;
+    if (!g_iscript.Simulate(*header, anim, 1000, r)) {
+        ::SetDlgItemTextW(dlg, IDC_D192_1132, L"该动画无法模拟。");
+        return;
+    }
+    wchar_t line[320];
+    ::wsprintfW(line, L"模拟 1000 步上限\r\nops=%d frames=%d waits=%d loops=%d\r\n"
+                      L"last=%hs frame=%u\r\n%s\r\n",
+                r.ops, r.frames, r.waits, r.loops,
+                IscriptFile::OpcodeName(r.lastOp), static_cast<unsigned>(r.lastFrame),
+                r.ended ? L"终止: 是" : L"终止: 否（循环或上限）");
+
+    std::wstring extra = line;
+    wchar_t grpPath[512] = L"";
+    ::GetDlgItemTextW(dlg, IDC_D192_1086, grpPath, 511);
+    if (grpPath[0]) {
+        GrpFile grp;
+        if (grp.Load(grpPath)) {
+            wchar_t grpLine[192];
+            ::wsprintfW(grpLine, L"GRP: %d 帧 %dx%d\r\n", grp.frameCount(), grp.width(),
+                        grp.height());
+            extra += grpLine;
+        } else {
+            extra += L"GRP 读取失败\r\n";
+        }
+    }
+    UpdateIscriptTest(dlg, extra.c_str());
+}
+
+}  // namespace
+
+// 192：Iscript 测试
+INT_PTR CALLBACK ProcIscriptTest(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
+    switch (msg) {
+        case WM_INITDIALOG:
+            CenterDialog(dlg);
+            ::SetDlgItemTextW(dlg, IDC_D192_1085, L"198");
+            ::SetDlgItemTextW(dlg, IDC_D192_1086, L"");
+            RefreshIscriptTest(dlg);
+            return TRUE;
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDC_D192_1133:
+                    if (HIWORD(wParam) == CBN_SELCHANGE) {
+                        UpdateIscriptTest(dlg, nullptr);
+                    }
+                    return TRUE;
+                case IDC_D192_1085:
+                    if (HIWORD(wParam) == EN_KILLFOCUS) {
+                        RefreshIscriptTest(dlg);
+                    }
+                    return TRUE;
+                case IDC_D192_1086:
+                    if (HIWORD(wParam) == EN_KILLFOCUS && g_iscript.loaded()) {
+                        wchar_t grpPath[512] = L"";
+                        ::GetDlgItemTextW(dlg, IDC_D192_1086, grpPath, 511);
+                        std::wstring extra;
+                        if (grpPath[0]) {
+                            GrpFile grp;
+                            wchar_t line[192];
+                            if (grp.Load(grpPath)) {
+                                ::wsprintfW(line, L"GRP: %d 帧 %dx%d\r\n", grp.frameCount(),
+                                            grp.width(), grp.height());
+                            } else {
+                                ::wsprintfW(line, L"GRP 读取失败\r\n");
+                            }
+                            extra = line;
+                        }
+                        UpdateIscriptTest(dlg, extra.c_str());
+                    }
+                    return TRUE;
+                case IDC_D192_1130:                              // Play
+                    PlayIscriptTest(dlg);
+                    return TRUE;
+                case IDC_D192_1080:                              // Restart
+                    RefreshIscriptTest(dlg);
+                    return TRUE;
+                default:
+                    break;
+            }
+            break;
+        case WM_CLOSE:
+            ::EndDialog(dlg, IDCANCEL);
+            return TRUE;
+        default:
+            break;
+    }
+    return FALSE;
+}
+
 // 183：标签容器
 INT_PTR CALLBACK ProcTabHost(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {

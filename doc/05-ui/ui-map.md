@@ -39,7 +39,7 @@
 | 188 | `IDD_DLG_188` | 输入数量 | 数值输入 | `src/ui/` |
 | 189 | `IDD_DLG_189` | 编辑字符串 | 字符串表编辑 | `src/triggers/` |
 | 191 | `IDD_DLG_191` | 重叠单位 | 重叠单位处理 | `src/units/` |
-| 192 | `IDD_DLG_192` | Iscript测试 | Iscript 测试工具 | `src/tools/` |
+| 192 | `IDD_DLG_192` | Iscript测试 | 动画/操作码查看 + 线性模拟 Play | `src/units/` |
 | 205 | `IDD_ISCRIPT` | Iscript / Grp 调试 | 解析 iscript.bin 并按 ID/动画反汇编；GRP 头校验 | `src/units/` |
 | 195 | `IDD_UNIT_PLACE` | 单位放置参数 | 单位面板：类型/玩家/资源 | `src/units/` |
 | 196 | `IDD_PLAYER_ROSTER` | 玩家 / 势力设定 | OWNR/SIDE/FORC/COLR 编辑 | `src/players/` |
@@ -69,8 +69,8 @@
 | `ui/dlg_players.cpp` | 196 玩家 / 势力设定 |
 | `ui/dlg_restrictions.cpp` | 197 升级 / 科技限制 |
 | `ui/dlg_terrain.cpp` | 166 方格设置、182 自定义刷子 |
-| `ui/dlg_tools.cpp` | 173 备份、174 升级、192 Iscript |
-| `ui/dlg_misc.cpp` | 167 MPQ 附加文件管理、205 Iscript / Grp 调试、183 标签容器、184 列表容器、185/186 列表编辑、187 富文本 |
+| `ui/dlg_tools.cpp` | 173 备份、174 升级 |
+| `ui/dlg_misc.cpp` | 167 MPQ 附加文件管理、192 Iscript 测试、205 Iscript / Grp 调试、183 标签容器、184 列表容器、185/186 列表编辑、187 富文本 |
 
 返回值通过 `dlg_types.h` 的结构体与 `LastInputValue()` / `LastEditedString()` 取回。
 
@@ -444,7 +444,10 @@ minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1 output=1 cache=1 windo
     按严重度过滤（错误 / 警告 / 普通 / 详细 / 调试）。
   - 清除当前信息（0x8068）。打开/新建/保存/关闭地图会写入摘要。
   - 面板区域拦截鼠标，避免误操作底层地图；回归 `--menu-cmd-test` 的 `output`。
-- 其余项（Iscript）仍为占位。
+- Iscript 测试（192）：自动加载 `scripts\iscript.bin`；IscriptID 驱动动画下拉与反汇编；
+  Play 用 `IscriptFile::Simulate` 线性模拟 1000 步（playfram/wait/goto/end），
+  显示 ops/frames/waits/loops 与终止状态；GRP 文件名仅显示帧数/尺寸（不做像素解码）。
+  本工程新增的 205 提供按条目浏览与共享头/别名解析。
 
 ## 重设地图大小（175）
 

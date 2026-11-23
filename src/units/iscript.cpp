@@ -209,6 +209,73 @@ bool IscriptFile::ReadOperands(std::size_t& pos, u8 opcode, std::vector<u8>& out
     return true;
 }
 
+bool IscriptFile::ReadInstruction(std::size_t offset, IscriptInstruction& out) const {
+    out = IscriptInstruction();
+    if (!loaded_ || offset >= data_.size()) return false;
+    std::size_t pos = offset;
+    out.offset = pos;
+    out.opcode = data_[pos++];
+    return ReadOperands(pos, out.opcode, out.operands);
+}
+
+bool IscriptFile::Simulate(const IscriptHeader& header, int animIndex, int maxOps,
+                           IscriptSimResult& out) const {
+    out = IscriptSimResult();
+    if (!loaded_ || animIndex < 0 ||
+        static_cast<std::size_t>(animIndex) >= header.animOffsets.size()) {
+        return false;
+    }
+    std::size_t pos = header.animOffsets[static_cast<std::size_t>(animIndex)];
+    if (pos == 0 || pos >= data_.size()) return false;
+
+    for (int step = 0; step < maxOps && pos < data_.size(); step++) {
+        IscriptInstruction ins;
+        if (!ReadInstruction(pos, ins)) break;
+        out.ops++;
+        out.lastOp = ins.opcode;
+        auto operandU16 = [&ins](int at) -> u16 {
+            if (at + 1 >= static_cast<int>(ins.operands.size())) return 0;
+            return static_cast<u16>(ins.operands[static_cast<std::size_t>(at)] |
+                                    (ins.operands[static_cast<std::size_t>(at) + 1] << 8));
+        };
+        const std::size_t next = ins.offset + 1 + ins.operands.size();
+        switch (ins.opcode) {
+            case 0x00:      // playfram
+            case 0x01:      // playframtile
+                out.frames++;
+                out.lastFrame = operandU16(0);
+                pos = next;
+                break;
+            case 0x05:      // wait
+            case 0x06:      // waitrand
+                out.waits++;
+                pos = next;
+                break;
+            case 0x07: {    // goto
+                const u16 target = operandU16(0);
+                if (target == 0 || target >= data_.size()) {
+                    out.ended = true;
+                } else {
+                    out.loops++;
+                    pos = target;
+                }
+                break;
+            }
+            case 0x16:      // end
+            case 0x30:      // ignorerest
+            case 0x36:      // return
+                out.ended = true;
+                pos = next;
+                break;
+            default:
+                pos = next;
+                break;
+        }
+        if (out.ended) break;
+    }
+    return out.ops > 0;
+}
+
 bool IscriptFile::Disassemble(const IscriptHeader& header, int animIndex,
                               std::vector<IscriptInstruction>& out) const {
     out.clear();

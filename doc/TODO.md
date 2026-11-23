@@ -171,7 +171,13 @@
   - 无头回归：`--backup-test`（4 次备份裁剪到 3、破坏后恢复逐字节一致、清理）。
 - [x] 系统集成：设置默认地图编辑器（0x806B，HKCU 关联 .scx/.scm）、
   创建开始菜单快捷方式（0x806C，IShellLink 写入当前用户 Programs）。
-- [ ] 在线升级（174）；Iscript 测试（192）。
+- [ ] 在线升级（174）：无更新源，保留信息展示。
+- [x] **Iscript 测试（192）**
+  - 自动加载 `scripts\iscript.bin`（星际目录 / exe / 仓库 `mpq/StarDat.mpq`）。
+  - IscriptID（1085）驱动动画下拉与操作码反汇编；GRP 文件名（1086）显示帧数/尺寸。
+  - Play 调用 `IscriptFile::Simulate` 线性模拟 1000 步（playfram/wait/goto/end），
+    显示 ops/frames/waits/loops 与终止状态。
+  - 回归：`--iscript-test` 增加 `sim/simOps/simFrames/simWaits/simEnded`。
 - [x] 启用声音（0x8072）：开关持久化；关闭后编辑器不再通过 MessageBeep 提示。
 - [ ] 自动检查更新（0x80A8）：仅保留占位（无更新源）。
 - [x] 小地图渲染（右下角，显示地形缩略图、单位点与当前视口）
@@ -220,6 +226,6 @@
 
 ## 建议顺序
 
-1. 在线升级（174）、Iscript 测试（192）、自动检查更新（0x80A8）
+1. 在线升级（174）、自动检查更新（0x80A8）：无更新源，完善占位说明
 2. BIN 183/193 与 bin_170 用途确认
 3. GRP 像素解码与动画预览（可选扩展）

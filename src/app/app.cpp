@@ -1392,6 +1392,24 @@ int RunIscriptTest(const std::wstring& iscriptPath, const std::wstring& grpPath)
     const IscriptHeader* sample = file.Find(198);
     const bool sampleOk = sample && sample->type == 12 && sample->animOffsets.size() == 14;
 
+    // 模拟示例：优先 Death 动画（一般会 end），否则第一个可用动画
+    IscriptSimResult sim;
+    bool simOk = false;
+    if (sample) {
+        int simAnim = -1;
+        if (sample->animOffsets.size() > 1 && sample->animOffsets[1] != 0) {
+            simAnim = 1;
+        } else {
+            for (int i = 0; i < static_cast<int>(sample->animOffsets.size()); i++) {
+                if (sample->animOffsets[static_cast<std::size_t>(i)] != 0) {
+                    simAnim = i;
+                    break;
+                }
+            }
+        }
+        simOk = simAnim >= 0 && file.Simulate(*sample, simAnim, 1000, sim) && sim.ops > 0;
+    }
+
     bool grpOk = true;
     GrpFile grp;
     if (!grpPath.empty()) {
@@ -1402,10 +1420,12 @@ int RunIscriptTest(const std::wstring& iscriptPath, const std::wstring& grpPath)
     wchar_t msg[512];
     ::wsprintfW(msg,
                 L"load=1\nentries=%u\nsize=%u\nanims=%d\ninstructions=%d\n"
-                L"empty=%d\nunknown=%d\nmax=%d\nsample=%d\n",
+                L"empty=%d\nunknown=%d\nmax=%d\nsample=%d\n"
+                L"sim=%d\nsimOps=%d\nsimFrames=%d\nsimWaits=%d\nsimEnded=%d\n",
                 static_cast<unsigned>(file.entries().size()),
                 static_cast<unsigned>(file.size()), anims, instructions, emptyAnims,
-                unknownOps, maxInstructions, sampleOk ? 1 : 0);
+                unknownOps, maxInstructions, sampleOk ? 1 : 0,
+                simOk ? 1 : 0, sim.ops, sim.frames, sim.waits, sim.ended ? 1 : 0);
     std::wstring text = msg;
     if (!unknownList.empty()) {
         text += L"unknownOps=";
@@ -1424,7 +1444,7 @@ int RunIscriptTest(const std::wstring& iscriptPath, const std::wstring& grpPath)
     WriteDiag(text);
 
     const bool ok = file.entries().size() >= 300 && emptyAnims == 0 && unknownOps == 0 &&
-                    sampleOk && grpOk;
+                    sampleOk && simOk && grpOk;
     return ok ? 0 : 2;
 }
 
