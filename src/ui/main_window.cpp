@@ -2031,6 +2031,17 @@ void MainWindow::OnKeyDown(int vk) {
 
 void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
     if (!map_.IsOpen()) return;
+
+    // 显示选项 → 特殊状态：非默认 validState 的单位加黄色圆环
+    HPEN specialPen = nullptr;
+    HGDIOBJ oldPen = nullptr;
+    HGDIOBJ oldBrush = nullptr;
+    if (showSpecialStates_) {
+        specialPen = ::CreatePen(PS_SOLID, 1, RGB(255, 230, 0));
+        oldPen = ::SelectObject(dc, specialPen);
+        oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
+    }
+
     for (const auto& u : map_.units()) {
         const int tx = static_cast<int>(u.x) / 32;
         const int ty = static_cast<int>(u.y) / 32;
@@ -2049,6 +2060,16 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
         r.bottom = r.top + size;
         ::FillRect(dc, &r, brush);
         ::DeleteObject(brush);
+
+        if (specialPen && u.validState != 0x0018) {
+            ::Ellipse(dc, sx + 1, sy + 1, sx + pxPerTile_ - 1, sy + pxPerTile_ - 1);
+        }
+    }
+
+    if (specialPen) {
+        ::SelectObject(dc, oldBrush);
+        ::SelectObject(dc, oldPen);
+        ::DeleteObject(specialPen);
     }
 }
 

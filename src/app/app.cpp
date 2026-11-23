@@ -1344,7 +1344,12 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     cmd(0x80F6);
     const bool deathFxOn = ItemChecked(hwnd, 0x80F6);
     cmd(0x80F6);
-    const bool effectsOk = colorCycleOn && colorCycleOff && deathFxOn;
+    // 特殊状态（0x80B3）默认勾选：关→开
+    cmd(0x80B3);
+    const bool specialOff = !ItemChecked(hwnd, 0x80B3);
+    cmd(0x80B3);
+    const bool specialOn = ItemChecked(hwnd, 0x80B3);
+    const bool effectsOk = colorCycleOn && colorCycleOff && deathFxOn && specialOff && specialOn;
 
     // 调试菜单（本轮启用）
     cmd(0x80DE);   // 允许调试
