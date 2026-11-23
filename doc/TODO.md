@@ -35,8 +35,8 @@
     并与其它已知建筑做矩形相交检测（数据来源：staredit wiki List of units）。
   - [x] 地面/空中重叠（0x8015/0x8109）：按碰撞盒做同层相交检测；空中单位清单见代码，
     默认都拒绝同层重叠，勾选后放行；地面与空中可同格。
-    碰撞盒覆盖 UNIT 0..132（staredit wiki 数据），未知类型不做额外限制。
-  - [ ] 仍缺 Protoss/Zerg 建筑（133+）碰撞盒与更完整的空中标记，后续按同一数据源补齐。
+    碰撞盒覆盖 UNIT 0..227（staredit wiki 数据），出生点 214 作为标记不参与碰撞；
+    建筑正常规则覆盖 106..175（不含 128/129 水晶）。
   - 回归：`--unit-param-test` 新增 `cc/addon/tower/farRejected/nearMineral/addonOk/towerOk/mineralOk/overlapRejected/stack/air`。
   - 代码：`src/ui/main_window.cpp`、`src/units/`
 - [x] **选择与剪贴板**

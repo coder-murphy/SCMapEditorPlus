@@ -639,7 +639,7 @@ int RunUnitParamTest(MainWindow& win, const std::wstring& outPath) {
     ::SendMessageW(win.hwnd(), WM_COMMAND, MAKEWPARAM(0x80BF, 0), 0);
     win.SetUnitPlacement(176, 0, 0);
     const bool rejectedFar = !win.PlaceUnitAtTile(30, 30);
-    const bool placedNearMineral = win.PlaceUnitAtTile(8, 5);
+    const bool placedNearMineral = win.PlaceUnitAtTile(10, 5);
     ::SendMessageW(win.hwnd(), WM_COMMAND, MAKEWPARAM(0x80BF, 0), 0);
 
     const bool rejected = !win.PlaceUnitAtTile(-1, 0);
@@ -658,7 +658,7 @@ int RunUnitParamTest(MainWindow& win, const std::wstring& outPath) {
             if (u.type == 188 && u.owner == 11 && u.resource == 5000) geyserOk = true;
             if (u.type == 107 && u.x == 16 * 32 && u.y == 13 * 32 + 16) addonOk = true;
             if (u.type == 115 && u.x == 15 * 32 && u.y == 21 * 32 + 16) towerOk = true;
-            if (u.type == 176 && u.x == 8 * 32 && u.y == 5 * 32 + 16) mineralOk = true;
+            if (u.type == 176 && u.x == 10 * 32 && u.y == 5 * 32 + 16) mineralOk = true;
         }
     }
 
