@@ -576,6 +576,20 @@ int RunUnitParamTest(MainWindow& win, const std::wstring& outPath) {
     const bool placedStart = win.PlaceUnitAtTile(5, 5);
     win.SetUnitPlacement(188, 11, 5000);          // 气矿，中立，资源 5000
     const bool placedGeyser = win.PlaceUnitAtTile(6, 6);
+
+    // 附属单位自动连接：CC(106) 在 12,12，附属槽为 (16,13)-(17,14)
+    win.SetUnitPlacement(106, 1, 0);
+    const bool placedCC = win.PlaceUnitAtTile(12, 12);
+    win.SetUnitPlacement(107, 1, 0);              // Comsat Station
+    const bool placedAddon = win.PlaceUnitAtTile(17, 14);
+
+    // 矿物与基地距离限制：开启后远处矿物拒绝、近处允许
+    ::SendMessageW(win.hwnd(), WM_COMMAND, MAKEWPARAM(0x80BF, 0), 0);
+    win.SetUnitPlacement(176, 0, 0);
+    const bool rejectedFar = !win.PlaceUnitAtTile(30, 30);
+    const bool placedNearMineral = win.PlaceUnitAtTile(8, 5);
+    ::SendMessageW(win.hwnd(), WM_COMMAND, MAKEWPARAM(0x80BF, 0), 0);
+
     const bool rejected = !win.PlaceUnitAtTile(-1, 0);
     const bool saved = doc.Save(outPath);
 
@@ -583,24 +597,31 @@ int RunUnitParamTest(MainWindow& win, const std::wstring& outPath) {
     const bool reopened = check.Open(outPath, std::wstring());
     bool startOk = false;
     bool geyserOk = false;
+    bool addonOk = false;
+    bool mineralOk = false;
     if (reopened) {
         for (const UnitRecord& u : check.units()) {
             if (u.type == 214 && u.owner == 3) startOk = true;
             if (u.type == 188 && u.owner == 11 && u.resource == 5000) geyserOk = true;
+            if (u.type == 107 && u.x == 16 * 32 && u.y == 13 * 32 + 16) addonOk = true;
+            if (u.type == 176 && u.x == 8 * 32 && u.y == 5 * 32 + 16) mineralOk = true;
         }
     }
 
     wchar_t msg[512];
     ::wsprintfW(msg,
         L"create=OK\nplaced=%d/%d\nrejected=%d\nsaved=%d\nreopened=%d\nunits=%u\n"
-        L"startOk=%d\ngeyserOk=%d\n",
+        L"startOk=%d\ngeyserOk=%d\ncc=%d\naddon=%d\nfarRejected=%d\nnearMineral=%d\n"
+        L"addonOk=%d\nmineralOk=%d\n",
         placedStart ? 1 : 0, placedGeyser ? 1 : 0, rejected ? 1 : 0, saved ? 1 : 0,
         reopened ? 1 : 0, static_cast<unsigned>(check.unitCount()),
-        startOk ? 1 : 0, geyserOk ? 1 : 0);
+        startOk ? 1 : 0, geyserOk ? 1 : 0, placedCC ? 1 : 0, placedAddon ? 1 : 0,
+        rejectedFar ? 1 : 0, placedNearMineral ? 1 : 0, addonOk ? 1 : 0, mineralOk ? 1 : 0);
     WriteDiag(msg);
 
-    const bool ok = placedStart && placedGeyser && rejected && saved && reopened &&
-                    check.unitCount() == 2 && startOk && geyserOk;
+    const bool ok = placedStart && placedGeyser && placedCC && placedAddon && rejectedFar &&
+                    placedNearMineral && rejected && saved && reopened &&
+                    check.unitCount() == 5 && startOk && geyserOk && addonOk && mineralOk;
     return ok ? 0 : 2;
 }
 

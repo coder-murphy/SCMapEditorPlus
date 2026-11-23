@@ -106,6 +106,61 @@ COLORREF CycleColor(COLORREF color, bool enabled) {
     return RotateHue(color, static_cast<int>((::GetTickCount64() / 40ull) % 360ull));
 }
 
+// 附属建筑 → 宿主与附属槽偏移（瓦片；宿主左上角为原点）
+struct AddonRule {
+    u16 addon;
+    u16 parent;
+    int dx;
+    int dy;
+};
+const AddonRule kAddonRules[] = {
+    {107, 106, 4, 1},   // Comsat Station → Command Center
+    {108, 106, 4, 1},   // Nuclear Silo → Command Center
+    {119, 113, 3, 1},   // Machine Shop → Factory
+    {116, 114, 3, 1},   // Control Tower → Starport
+    {117, 115, 3, 1},   // Physics Lab → Science Facility
+    {118, 115, 3, 1},   // Covert Ops → Science Facility
+};
+constexpr int kMineralBaseMaxDistance = 12;
+
+const AddonRule* FindAddonRule(u16 type) {
+    for (const AddonRule& rule : kAddonRules) {
+        if (rule.addon == type) return &rule;
+    }
+    return nullptr;
+}
+
+bool IsResourceType(u16 type) {
+    return (type >= 176 && type <= 178) || type == 188;
+}
+
+// 光标落在某个兼容宿主的附属槽 2×2 内时，吸附到槽左上角
+bool SnapAddonToParent(const MapDocument& map, u16 type, int& tx, int& ty) {
+    const AddonRule* rule = FindAddonRule(type);
+    if (!rule) return false;
+    for (const UnitRecord& u : map.units()) {
+        if (u.type != rule->parent) continue;
+        const int sx = static_cast<int>(u.x) / kTilePixels + rule->dx;
+        const int sy = static_cast<int>(u.y) / kTilePixels + rule->dy;
+        if (tx >= sx && tx <= sx + 1 && ty >= sy && ty <= sy + 1) {
+            tx = sx;
+            ty = sy;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ResourceNearBase(const MapDocument& map, int tx, int ty, int maxDistance) {
+    for (const UnitRecord& u : map.units()) {
+        if (u.type != 214) continue;   // 出生点视作基地
+        const int sx = static_cast<int>(u.x) / kTilePixels;
+        const int sy = static_cast<int>(u.y) / kTilePixels;
+        if (std::max(std::abs(tx - sx), std::abs(ty - sy)) <= maxDistance) return true;
+    }
+    return false;
+}
+
 // 递归找到直接包含命令 ID 的子菜单（用于按命令 ID 勾选/启用）
 HMENU FindMenuContaining(HMENU menu, int id) {
     if (!menu) return nullptr;
@@ -993,8 +1048,15 @@ void MainWindow::TogglePlacementRule(int commandId) {
 bool MainWindow::PlaceUnitAtTile(int tx, int ty) {
     if (!map_.IsOpen()) return false;
 
-    BeginEdit();
     const bool force = placeUnitsAnywhere_ || placeBuildingsAnywhere_;
+    if (autoConnectAddon_ && !force) SnapAddonToParent(map_, unitType_, tx, ty);
+    if (mineralBaseDistance_ && !force && IsResourceType(unitType_) &&
+        !ResourceNearBase(map_, tx, ty, kMineralBaseMaxDistance)) {
+        Output(1, L"矿物/气矿距出生点超过 12 格，已拒绝放置");
+        return false;
+    }
+
+    BeginEdit();
     u32 resource = unitResource_;
     if (resource == 0) {
         if (unitType_ >= 176 && unitType_ <= 178) {

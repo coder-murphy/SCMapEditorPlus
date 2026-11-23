@@ -25,8 +25,12 @@
     “任意放置”已影响可行走校验。
   - 回归：`--unit-param-test`。
 - [ ] **放置规则细化**
-  - 地面/空中重叠、附属单位自动连接、矿基距离需要单位属性表（尺寸/空陆/建筑类型）。
-  - 已实现：单位任意放置/建筑任意放置（绕过可行走校验）、单位层按方格显示（0x80B5）。
+  - [x] 附属单位自动连接（0x80B8）：Comsat/Silo→Command Center、Machine Shop→Factory、
+    Control Tower→Starport、Physics Lab/Covert Ops→Science Facility；
+    光标落在宿主右侧 2×2 附属槽内时吸附到槽左上角。
+  - [x] 矿物与基地距离限制（0x80BF）：开启后矿物/气矿必须距出生点 ≤12 格，否则拒绝并写入输出面板。
+  - [ ] 地面/空中重叠、建筑正常规则：仍需完整单位属性表（尺寸/空陆/建筑类型）。
+  - 回归：`--unit-param-test` 新增 `cc/addon/farRejected/nearMineral/addonOk/mineralOk`。
   - 代码：`src/ui/main_window.cpp`、`src/units/`
 - [x] **选择与剪贴板**
   - 框选工具（0x8FFB / 数字键 4）、全选/取消、复制/剪切/粘贴（0x80E6/80E7/80E8/809A）。
