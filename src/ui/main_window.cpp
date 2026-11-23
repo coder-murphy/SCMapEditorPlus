@@ -658,6 +658,11 @@ bool MainWindow::Create(HINSTANCE hInstance) {
                 ::EnableMenuItem(menu, id, MF_BYCOMMAND | MF_ENABLED);
             }
         }
+        // 原程序没有 MPQ 文件管理入口（167 标题是版本信息），追加到「文件」子菜单
+        if (HMENU file = ::GetSubMenu(bar, 0)) {
+            ::AppendMenuW(file, MF_SEPARATOR, 0, nullptr);
+            ::AppendMenuW(file, MF_STRING, kMpqFileManager, L"MPQ 文件管理...");
+        }
         // 「调试」菜单追加本工程的崖壁自动铺设
         if (HMENU debug = ::GetSubMenu(bar, 9)) {
             ::AppendMenuW(debug, MF_SEPARATOR, 0, nullptr);
@@ -3124,6 +3129,20 @@ void MainWindow::OnCommand(int id) {
                 break;
             }
             if (MaybeSave()) OpenMap(path);
+            break;
+        }
+        case kMpqFileManager: {
+            if (!map_.IsOpen()) {
+                BeepWarning();
+                break;
+            }
+            SetDialogDocument(&map_);
+            ShowRecoveredDialog(IDD_DLG_167, hwnd_);
+            SetDialogDocument(nullptr);
+            if (map_.IsDirty()) {
+                UpdateTitle();
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+            }
             break;
         }
         case kFileClose:

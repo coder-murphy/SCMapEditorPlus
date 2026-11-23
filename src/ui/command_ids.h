@@ -169,6 +169,7 @@ enum CommandId : int {
     kHelpAbout = 0x0068,        // 帮助 → 关于...
 
     // 本工程自有的调试入口（原程序无此菜单项，运行时追加）
+    kMpqFileManager = 0x8FFC,   // 文件 → MPQ 文件管理（167）
     kDebugDialogs = 0x8FFF,
     kAutoEdgeCliffs = 0x8FFE,   // 调试 → 自动铺设崖壁（向虚空外侧压印 1..3 圈）
 };

@@ -46,6 +46,12 @@ public:
 
     // MPQ 中除 scenario.chk 外的文件（自定义 BIN / 瓦片 / 音频等），保存时原样带回
     std::size_t ExtraFileCount() const { return extraFiles_.size(); }
+    const std::vector<MpqFileEntry>& extraFiles() const { return extraFiles_; }
+    // 附加文件管理（167 对话框使用）：名称按不区分大小写匹配
+    bool ReadExtraFile(const std::string& name, Buffer& out) const;
+    // 添加或替换；内部文件名（(listfile) 等）与 scenario.chk 一律拒绝
+    bool SetExtraFile(const std::string& name, Buffer data);
+    bool RemoveExtraFile(const std::string& name);
 
     const TriggerSection& triggers() const { return triggers_; }
     TriggerSection& mutableTriggers() { return triggers_; }

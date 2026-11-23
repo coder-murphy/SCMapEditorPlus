@@ -100,6 +100,7 @@ bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir)
     path_.clear();
     units_.clear();
     tiles_.clear();
+    extraFiles_.clear();
     width_ = height_ = 0;
     era_ = 0;
 
@@ -318,6 +319,42 @@ void MapDocument::Close() {
     extraFiles_.clear();
     chk_.Parse(Buffer());
     tileset_.Unload();
+}
+
+bool MapDocument::ReadExtraFile(const std::string& name, Buffer& out) const {
+    for (const auto& f : extraFiles_) {
+        if (_stricmp(f.name.c_str(), name.c_str()) == 0) {
+            out = f.data;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MapDocument::SetExtraFile(const std::string& name, Buffer data) {
+    if (name.empty() || IsInternalMpqFile(name) || IsScenarioChk(name)) return false;
+    for (auto& f : extraFiles_) {
+        if (_stricmp(f.name.c_str(), name.c_str()) == 0) {
+            f.name = name;
+            f.data = std::move(data);
+            dirty_ = true;
+            return true;
+        }
+    }
+    extraFiles_.push_back({name, std::move(data)});
+    dirty_ = true;
+    return true;
+}
+
+bool MapDocument::RemoveExtraFile(const std::string& name) {
+    for (auto it = extraFiles_.begin(); it != extraFiles_.end(); ++it) {
+        if (_stricmp(it->name.c_str(), name.c_str()) == 0) {
+            extraFiles_.erase(it);
+            dirty_ = true;
+            return true;
+        }
+    }
+    return false;
 }
 
 namespace {

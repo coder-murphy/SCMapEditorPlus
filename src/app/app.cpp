@@ -1283,6 +1283,25 @@ int RunExtraFileTest(const std::wstring& mapPath, const std::wstring& outPath) {
     MapDocument doc;
     const bool opened = doc.Open(seed);
     const std::size_t extras = doc.ExtraFileCount();
+
+    // 附加文件管理 API：新增 / 读取 / 替换 / 拒绝内部名 / 删除
+    Buffer probe2(64);
+    for (std::size_t i = 0; i < probe2.size(); i++) probe2[i] = static_cast<u8>((i * 53 + 7) & 0xFF);
+    Buffer readAdded;
+    const bool added = opened && doc.SetExtraFile("custom\\added.bin", probe2);
+    const bool addRead = doc.ReadExtraFile("custom\\added.bin", readAdded) &&
+                         readAdded.size() == probe2.size() &&
+                         std::memcmp(readAdded.data(), probe2.data(), probe2.size()) == 0;
+    probe2[0] = static_cast<u8>(probe2[0] ^ 0xFF);
+    const bool replaced = doc.SetExtraFile("custom\\added.bin", probe2);
+    const bool replaceRead = doc.ReadExtraFile("custom\\added.bin", readAdded) &&
+                             readAdded.size() == probe2.size() && readAdded[0] == probe2[0];
+    const bool rejected = !doc.SetExtraFile("(listfile)", Buffer(1, 0)) &&
+                          !doc.SetExtraFile("staredit\\scenario.chk", Buffer(1, 0));
+    const bool removed = doc.RemoveExtraFile("custom\\added.bin") &&
+                         !doc.ReadExtraFile("custom\\added.bin", readAdded);
+    const bool extrasStill = doc.ExtraFileCount() == extras;
+
     const bool saved = opened && doc.Save(outPath);
 
     Buffer back;
@@ -1292,12 +1311,18 @@ int RunExtraFileTest(const std::wstring& mapPath, const std::wstring& outPath) {
                       std::memcmp(back.data(), probe.data(), probe.size()) == 0;
     ::DeleteFileW(seed.c_str());
 
-    wchar_t msg[256];
-    ::wsprintfW(msg, L"opened=%d extras=%u saved=%d readBack=%d same=%d bytes=%u\n",
+    wchar_t msg[320];
+    ::wsprintfW(msg, L"opened=%d extras=%u saved=%d readBack=%d same=%d bytes=%u "
+                     L"add=%d/%d replace=%d/%d reject=%d remove=%d count=%d\n",
                 opened ? 1 : 0, static_cast<unsigned>(extras), saved ? 1 : 0,
-                readBack ? 1 : 0, same ? 1 : 0, static_cast<unsigned>(back.size()));
+                readBack ? 1 : 0, same ? 1 : 0, static_cast<unsigned>(back.size()),
+                added ? 1 : 0, addRead ? 1 : 0, replaced ? 1 : 0, replaceRead ? 1 : 0,
+                rejected ? 1 : 0, removed ? 1 : 0, extrasStill ? 1 : 0);
     WriteDiag(msg);
-    return (opened && extras == 1 && saved && same) ? 0 : 2;
+    return (opened && extras == 1 && saved && same && added && addRead && replaced &&
+            replaceRead && rejected && removed && extrasStill)
+               ? 0
+               : 2;
 }
 
 // --menu-cmd-test：检验编辑层/方格/显示选项菜单命令与勾选回显

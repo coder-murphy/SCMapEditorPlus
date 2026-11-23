@@ -96,6 +96,9 @@ header(32) | 文件数据（16 字节对齐） | 哈希表(1024 × 16) | 块表(
 - 哈希槽位 `hash(name, 0) & 1023`，冲突线性探测；`locale` 与 `platform` 写 0；
 - 两张表分别用 `hash("(hash table)", 3)` / `hash("(block table)", 3)` 加密；
 - 必须包含 `(listfile)` 条目。
+- 编辑器保留原图的附加文件（`(listfile)` 中除 CHK/内部条目外的全部条目），保存时原样写回；
+  文件 →「MPQ 文件管理...」（167）可列出/导入/导出/改名/添加/删除，改动随保存写入。
+  名称匹配不区分大小写，`(listfile)` 与 `scenario.chk` 不允许被覆盖。
 
 验证（`SCMDPlus.exe --open="<src>" --save-to="<dst>"`）：
 
