@@ -70,6 +70,9 @@ public:
     ViewState& mutableView() { return view_; }
     bool soundEnabled() const { return soundEnabled_; }
     void SetSoundEnabled(bool enabled) { soundEnabled_ = enabled; }
+    // 高级 → 自动检查更新（当前无更新源，仅记录用户选择）
+    bool autoCheckUpdate() const { return autoCheckUpdate_; }
+    void SetAutoCheckUpdate(bool enabled) { autoCheckUpdate_ = enabled; }
     // 无头回归时关闭退出保存，避免污染用户设置
     void SetPersistViewOnExit(bool persist) { persistViewOnExit_ = persist; }
     bool persistViewOnExit() const { return persistViewOnExit_; }
@@ -93,6 +96,7 @@ private:
     int autoBackupMinutes_ = 5;
     ViewState view_;
     bool soundEnabled_ = true;
+    bool autoCheckUpdate_ = false;
     bool persistViewOnExit_ = true;
 };
 

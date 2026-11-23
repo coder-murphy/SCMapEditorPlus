@@ -77,6 +77,7 @@ enum CommandId : int {
     // 选项 / 高级 / 帮助
     kOptionsEditorSettings = 0x80C4,
     kAdvancedCheckUpdate = 0x8071,
+    kAutoCheckUpdate = 0x80A8,       // 高级 → 自动检查更新（无更新源，仅记录开关）
     kAdvancedBackup = 0x80F9,
     kAdvancedDefaultEditor = 0x806B, // 设置为默认地图编辑器
     kAdvancedShortcut = 0x806C,      // 创建开始菜单快捷方式

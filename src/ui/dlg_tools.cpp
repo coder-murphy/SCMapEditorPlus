@@ -132,11 +132,18 @@ INT_PTR CALLBACK ProcUpdater(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
             CenterDialog(dlg);
             ::SendDlgItemMessageW(dlg, IDC_D174_1087, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
             ::SendDlgItemMessageW(dlg, IDC_D174_1087, PBM_SETPOS, 0, 0);
+            ::SetDlgItemTextW(dlg, IDC_D174_1091, L"未配置更新源");
+            ::SetDlgItemTextW(dlg, IDC_D174_1089,
+                              L"SCMD Plus 3.0.0.0\r\n"
+                              L"更新源：未配置\r\n\r\n"
+                              L"当前构建不含在线升级服务器，本对话框仅展示版本与状态。\r\n"
+                              L"如需升级，请手动替换 SCMDPlus.exe。");
             return TRUE;
         case WM_COMMAND:
             if (LOWORD(wParam) == IDC_D174_1090) {              // 下载升级文件
-                ::SetDlgItemTextW(dlg, IDC_D174_1091, L"升级服务尚未接入");
-                Log(L"[update] download requested (TODO)");
+                ::SetDlgItemTextW(dlg, IDC_D174_1091, L"未配置更新源，无法下载");
+                ::SendDlgItemMessageW(dlg, IDC_D174_1087, PBM_SETPOS, 0, 0);
+                Log(L"[update] download requested: no update source configured");
                 return TRUE;
             }
             if (LOWORD(wParam) == IDC_D174_1) {

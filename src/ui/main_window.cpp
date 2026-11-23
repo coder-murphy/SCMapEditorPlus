@@ -685,6 +685,10 @@ bool MainWindow::Create(HINSTANCE hInstance) {
     ::UpdateWindow(hwnd_);
     ::SetTimer(hwnd_, 1, 60000, nullptr);   // 每分钟检查一次自动备份
     ::SetTimer(hwnd_, 2, 120, nullptr);     // 颜色循环 / 死亡效果动画
+
+    if (AppSettings::Instance().autoCheckUpdate()) {
+        Output(2, L"自动检查更新：未配置更新源（当前版本 SCMD Plus 3.0.0.0）");
+    }
     return true;
 }
 
@@ -1972,6 +1976,7 @@ void MainWindow::SyncMenuChecks() {
         {kDebugImageSizeAlways, showImageSizeAlways_},
         {kDebugCompare, showCompareData_}, {kDebugUnitConflict, showUnitConflict_},
         {kEnableSound, soundEnabled_},
+        {kAutoCheckUpdate, AppSettings::Instance().autoCheckUpdate()},
     };
     for (const Toggle& t : toggles) {
         if (HMENU menu = FindMenuContaining(bar, t.id)) {
@@ -3344,6 +3349,15 @@ void MainWindow::OnCommand(int id) {
         case kAdvancedCheckUpdate:
             ShowRecoveredDialog(IDD_DLG_174, hwnd_);
             break;
+        case kAutoCheckUpdate: {
+            const bool enabled = !AppSettings::Instance().autoCheckUpdate();
+            AppSettings::Instance().SetAutoCheckUpdate(enabled);
+            AppSettings::Instance().Save();
+            Output(2, enabled ? L"自动检查更新：已开启（当前无更新源）"
+                              : L"自动检查更新：已关闭");
+            SyncMenuChecks();
+            break;
+        }
         case kAdvancedBackup:
             ShowRecoveredDialog(IDD_DLG_173, hwnd_);
             break;

@@ -143,6 +143,7 @@ bool AppSettings::Load() {
     autoBackupMinutes_ = 5;
     view_ = ViewState{};
     soundEnabled_ = true;
+    autoCheckUpdate_ = false;
     const std::wstring path = filePath();
     if (path.empty()) return false;
     std::string text;
@@ -191,6 +192,8 @@ bool AppSettings::Load() {
             gameDir_ = value;
         } else if (key == "sound") {
             soundEnabled_ = std::atoi(line.c_str() + eq + 1) != 0;
+        } else if (key == "autoCheckUpdate") {
+            autoCheckUpdate_ = std::atoi(line.c_str() + eq + 1) != 0;
         } else if (key == "backup") {
             backupEnabled_ = std::atoi(line.c_str() + eq + 1) != 0;
         } else if (key == "backupCount") {
@@ -250,6 +253,7 @@ bool AppSettings::Save() {
     out += "defaultGas=" + std::to_string(defaultGas_) + "\n";
     out += "gameDir=" + WideToUtf8(gameDir_) + "\n";
     out += "sound=" + std::to_string(soundEnabled_ ? 1 : 0) + "\n";
+    out += "autoCheckUpdate=" + std::to_string(autoCheckUpdate_ ? 1 : 0) + "\n";
     out += "backup=" + std::to_string(backupEnabled_ ? 1 : 0) + "\n";
     out += "backupCount=" + std::to_string(backupCount_) + "\n";
     out += "autoBackup=" + std::to_string(autoBackupEnabled_ ? 1 : 0) + "\n";

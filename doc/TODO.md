@@ -171,7 +171,12 @@
   - 无头回归：`--backup-test`（4 次备份裁剪到 3、破坏后恢复逐字节一致、清理）。
 - [x] 系统集成：设置默认地图编辑器（0x806B，HKCU 关联 .scx/.scm）、
   创建开始菜单快捷方式（0x806C，IShellLink 写入当前用户 Programs）。
-- [ ] 在线升级（174）：无更新源，保留信息展示。
+- [x] **在线升级（174）与自动检查更新（0x80A8）**
+  - 174 显示版本 3.0.0.0 与更新源状态；无更新源时明确提示“无法下载”，不再写占位 TODO。
+  - 0x80A8 为持久化开关（`settings.ini` 的 `autoCheckUpdate`）；启动时若开启，
+    向输出面板写入“未配置更新源”的提示。
+  - 回归：`--recent-test` 新增 `autoUpdate`；`--menu-cmd-test` 新增 `autoUpdate` 勾选回显。
+- [x] 启用声音（0x8072）：开关持久化；关闭后编辑器不再通过 MessageBeep 提示。
 - [x] **Iscript 测试（192）**
   - 自动加载 `scripts\iscript.bin`（星际目录 / exe / 仓库 `mpq/StarDat.mpq`）。
   - IscriptID（1085）驱动动画下拉与操作码反汇编；GRP 文件名（1086）显示帧数/尺寸，
@@ -179,8 +184,6 @@
   - Play 调用 `IscriptFile::Simulate` 线性模拟 1000 步（playfram/wait/goto/end），
     显示 ops/frames/waits/loops 与终止状态。
   - 回归：`--iscript-test` 增加 `sim/simOps/simFrames/simWaits/simEnded`。
-- [x] 启用声音（0x8072）：开关持久化；关闭后编辑器不再通过 MessageBeep 提示。
-- [ ] 自动检查更新（0x80A8）：仅保留占位（无更新源）。
 - [x] 小地图渲染（右下角，显示地形缩略图、单位点与当前视口）
   - 显示选项 → 隐藏小雷达（0x80B4）控制显隐；编辑层子菜单“显示战争迷雾”（0x80CE）
     与 0x8113 合并为同一开关。
@@ -234,4 +237,7 @@
 
 ## 建议顺序
 
-1. 在线升级（174）、自动检查更新（0x80A8）：无更新源，完善占位说明
+TODO 中列出的功能项均已处理。可选增强：
+1. GRP 动画预览（192 用定时器播放解码帧）
+2. 单位属性表（units.dat 压缩类型仍需确认）
+3. 更多原版对话框行为对齐

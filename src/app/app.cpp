@@ -1703,6 +1703,10 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     const bool soundOff = !ItemChecked(hwnd, 0x8072);
     cmd(0x8072);
     const bool soundOn = ItemChecked(hwnd, 0x8072);
+    cmd(0x80A8);   // 自动检查更新
+    const bool autoUpdateOn = ItemChecked(hwnd, 0x80A8);
+    cmd(0x80A8);
+    const bool autoUpdateOff = !ItemChecked(hwnd, 0x80A8);
 
     // 选项 → 输出：显示开关 / 字体大小 / 提示详细度
     cmd(0x80F3);
@@ -1749,7 +1753,7 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         L"gridLarge=%d\ngridOff=%d\ngridBack=%d\ngridRed=%d\n"
         L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\nzoom=%d\nminimapOff=%d\nminimapOn=%d\n"
         L"fogAlias=%d\nallColors=%d\neffects=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n"
-        L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\noutput=%d\ncache=%d\nwindow=%d\n",
+        L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\nautoUpdate=%d\noutput=%d\ncache=%d\nwindow=%d\n",
         layerInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0, layerBack ? 1 : 0,
         gridLarge ? 1 : 0, gridOff ? 1 : 0, gridBack ? 1 : 0, gridRed ? 1 : 0,
         unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0, zoomOk ? 1 : 0,
@@ -1757,14 +1761,16 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         effectsOk ? 1 : 0,
         debugOn ? 1 : 0, (debugData1 && debugData2) ? 1 : 0, overlapOn ? 1 : 0,
         imageSizeOn ? 1 : 0, compareOn ? 1 : 0, conflictOn ? 1 : 0, minimapNav ? 1 : 0,
-        (soundOff && soundOn) ? 1 : 0, outputOk ? 1 : 0, cacheOk ? 1 : 0, windowOk ? 1 : 0);
+        (soundOff && soundOn) ? 1 : 0, (autoUpdateOn && autoUpdateOff) ? 1 : 0,
+        outputOk ? 1 : 0, cacheOk ? 1 : 0, windowOk ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = layerInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
                     gridBack && gridRed && unitsOff && unitsOn && fogOn && zoomOk &&
                     minimapOff && minimapOn && fogAlias && allColorsOn && effectsOk && debugOn &&
                     debugData1 && debugData2 && overlapOn && imageSizeOn && compareOn &&
-                    conflictOn && minimapNav && soundOff && soundOn && outputOk && cacheOk && windowOk;
+                    conflictOn && minimapNav && soundOff && soundOn && autoUpdateOn &&
+                    autoUpdateOff && outputOk && cacheOk && windowOk;
     return ok ? 0 : 2;
 }
 
@@ -3068,6 +3074,7 @@ int RunRecentTest() {
         view.showFog = true;
     }
     settings.SetSoundEnabled(false);
+    settings.SetAutoCheckUpdate(true);
     const bool saved = settings.Save();
     settings.ClearRecentMaps();
     settings.SetUndoLimit(50);
@@ -3087,7 +3094,8 @@ int RunRecentTest() {
                             settings.view().zoomPx == 16 && !settings.view().gridEnabled &&
                             settings.view().gridCellX == 48 && settings.view().layer == 4 &&
                             !settings.view().showUnits && settings.view().hideMinimap &&
-                            settings.view().showFog && !settings.soundEnabled();
+                            settings.view().showFog && !settings.soundEnabled() &&
+                            settings.autoCheckUpdate();
 
     // 失效最近项移除：去重后再删除首项
     const bool frontBefore = !settings.recentMaps().empty();
@@ -3099,11 +3107,11 @@ int RunRecentTest() {
     ::wsprintfW(msg,
                 L"recent=1\nsaveClear=%d\nloadClear=%d\ncleared=%d\ncap=%d\n"
                 L"dedupe=%d\nsaved=%d\nreloaded=%d\npersisted=%d\nundo=%d\nsettings=%d\n"
-        L"remove=%d\n",
+        L"remove=%d\nautoUpdate=%d\n",
                 saveClear ? 1 : 0, loadClear ? 1 : 0,
                 cleared ? 1 : 0, capOk ? 1 : 0, dedupeOk ? 1 : 0, saved ? 1 : 0,
                 reloaded ? 1 : 0, persisted ? 1 : 0, undoOk ? 1 : 0, settingsOk ? 1 : 0,
-                removeOk ? 1 : 0);
+                removeOk ? 1 : 0, settings.autoCheckUpdate() ? 1 : 0);
     WriteDiag(msg);
     return (cleared && capOk && dedupeOk && saved && reloaded && persisted && undoOk &&
             settingsOk && removeOk)
