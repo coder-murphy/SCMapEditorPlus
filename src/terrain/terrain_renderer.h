@@ -13,7 +13,7 @@ struct TerrainImage {
     Buffer pixels;   // BGRA，长度 = width * height * 4
 };
 
-// 把 MTXM 瓦片表渲染成位图；pxPerTile 支持 2/4/8/16/32
+// 把 MTXM 瓦片表渲染成位图；pxPerTile 支持 1..128（最近邻采样）
 class TerrainRenderer {
 public:
     void SetTileset(const Tileset* ts) { tileset_ = ts; }

@@ -99,8 +99,8 @@ SCMDPlus.exe --extract-ts="<工程根目录>\ts" --game-dir="<工程根目录>\m
 |---|---|
 | `Tileset::Load(dir, prefix)` | 读取 `<dir>\\<prefix>.cv5/.vx4/.vr4/.wpe`；ERA→前缀映射在 `map_document.cpp` |
 | `Tileset::TileBlock(v, out[1024])` | 严格按上面管线：group/index → CV5 u16[10..25] → VX4 `ref>>1`/`ref&1` → VR4 8×8 |
-| `TerrainRenderer::Render` | 2/4/8/16/32 px/瓦片，最近邻采样，输出 32 位 BGRA |
-| 主窗口 | 打开后自动 8 px/瓦片渲染；滚轮 2/4/8/16/32 缩放；`BitBlt` 呈现，`WM_ERASEBKGND` 抑制闪烁 |
+| `TerrainRenderer::Render` | 1..128 px/瓦片，最近邻采样，输出 32 位 BGRA（支持 33%/66%/150%.. 等非整除档位） |
+| 主窗口 | 打开后自动 8 px/瓦片渲染；滚轮 2/4/8/11/16/21/32/48/64/96/128 缩放；`BitBlt` 呈现，`WM_ERASEBKGND` 抑制闪烁 |
 
 ### 验证
 
@@ -158,7 +158,7 @@ SCMDPlus.exe --tileset-render-test="<输出目录>"
 
 - `1` 地形刷 / `2` 单位 / `3` 吸管；左键应用，右键删除该格单位，`Delete` 删除光标处单位；
 - 拖动可连续绘制；每格修改后**只重绘该格**（`PaintTileToBuffer` 直接写 DIB 区域并 `InvalidateRect`），不整图重渲；
-- 滚轮 2/4/8/16/32 缩放；滚动条与 `WM_HSCROLL`/`WM_VSCROLL` 已接通；左上角 HUD 显示当前工具与刷子值。
+- 滚轮 2/4/8/11/16/21/32/48/64/96/128 缩放；滚动条与 `WM_HSCROLL`/`WM_VSCROLL` 已接通；左上角 HUD 显示当前工具与刷子值。
 
 验证：无头回归中 `painted=1`、保存后重开 `repaint=3/3`（3 格全部写回成功）。
 

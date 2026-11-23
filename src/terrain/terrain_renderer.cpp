@@ -16,8 +16,7 @@ bool TerrainRenderer::Render(const Buffer& mtxm, int mapWidth, int mapHeight,
                              int pxPerTile, TerrainImage& out) const {
     if (!tileset_ || !tileset_->IsLoaded()) return false;
     if (mapWidth <= 0 || mapHeight <= 0) return false;
-    if (pxPerTile < 1 || pxPerTile > 32) return false;
-    if (32 % pxPerTile != 0) return false;
+    if (pxPerTile < 1 || pxPerTile > 128) return false;
 
     out.width = mapWidth * pxPerTile;
     out.height = mapHeight * pxPerTile;
@@ -31,8 +30,7 @@ bool TerrainRenderer::RenderRegion(const Buffer& mtxm, int mapWidth, int mapHeig
                                   TerrainImage& out) const {
     if (!tileset_ || !tileset_->IsLoaded()) return false;
     if (mapWidth <= 0 || mapHeight <= 0) return false;
-    if (pxPerTile < 1 || pxPerTile > 32) return false;
-    if (32 % pxPerTile != 0) return false;
+    if (pxPerTile < 1 || pxPerTile > 128) return false;
 
     const std::size_t tileCount = static_cast<std::size_t>(mapWidth) * mapHeight;
     if (mtxm.size() < tileCount * 2) return false;
@@ -44,8 +42,6 @@ bool TerrainRenderer::RenderRegion(const Buffer& mtxm, int mapWidth, int mapHeig
     tx1 = std::min(mapWidth - 1, tx1);
     ty1 = std::min(mapHeight - 1, ty1);
     if (tx0 > tx1 || ty0 > ty1) return true;
-
-    const int step = 32 / pxPerTile;          // 源像素步长（32 必须能被 pxPerTile 整除）
 
     const Buffer& wpe = tileset_->palette();
     if (wpe.size() < 256 * 4) return false;
@@ -67,12 +63,14 @@ bool TerrainRenderer::RenderRegion(const Buffer& mtxm, int mapWidth, int mapHeig
             const int dstX0 = tx * pxPerTile;
             const int dstY0 = ty * pxPerTile;
             for (int py = 0; py < pxPerTile; py++) {
-                const int sy = py * step;
+                // 最近邻：缩小取整数步长，放大时相邻目标像素复用同一源像素
+                const int sy = (py * 32) / pxPerTile;
                 u8* dstRow = out.pixels.data() +
                              (static_cast<std::size_t>(dstY0 + py) * out.width + dstX0) * 4;
                 const u8* srcRow = block.data() + sy * 32;
                 for (int px = 0; px < pxPerTile; px++) {
-                    const u8 index = srcRow[px * step];
+                    const int sx = (px * 32) / pxPerTile;
+                    const u8 index = srcRow[sx];
                     const u8* rgb = wpe.data() + static_cast<std::size_t>(index) * 4;
                     // WPE 为 RGB(A) 顺序，DIB 需要 BGRA
                     dstRow[px * 4 + 0] = rgb[2];

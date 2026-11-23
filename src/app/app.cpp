@@ -3011,6 +3011,37 @@ int RunTilesetRenderTest(const std::wstring& tsDir, const std::wstring& outDir) 
             colors = static_cast<int>(seen.size());
         }
 
+        // 缩放档位：25%..400% 对应 8..128 px/瓦片；非整除档位（33/66/150..）也要正确
+        bool zoomOk = false;
+        if (files && created && doc.hasTileset()) {
+            TerrainImage ref32;
+            zoomOk = renderer.Render(doc.tiles(), doc.width(), doc.height(), 32, ref32);
+            static const int kZooms[] = {11, 21, 48, 128};
+            for (int z : kZooms) {
+                if (!zoomOk) break;
+                TerrainImage zi;
+                if (!renderer.Render(doc.tiles(), doc.width(), doc.height(), z, zi) ||
+                    zi.width != doc.width() * z || zi.height != doc.height() * z) {
+                    zoomOk = false;
+                    break;
+                }
+                for (int y = 0; y < zi.height && zoomOk; y++) {
+                    const int sy = (y * 32) / z;
+                    const u8* srcRow = ref32.pixels.data() +
+                                       static_cast<std::size_t>(sy) * ref32.width * 4;
+                    const u8* dstRow = zi.pixels.data() +
+                                       static_cast<std::size_t>(y) * zi.width * 4;
+                    for (int x = 0; x < zi.width; x++) {
+                        const int sx = (x * 32) / z;
+                        if (std::memcmp(dstRow + x * 4, srcRow + sx * 4, 4) != 0) {
+                            zoomOk = false;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         unsigned long long hash = 1469598103934665603ull;
         for (u8 b : image.pixels) {
             hash ^= b;
@@ -3021,17 +3052,17 @@ int RunTilesetRenderTest(const std::wstring& tsDir, const std::wstring& outDir) 
                                  kPrefix[era] + L".bmp";
         const bool bmpOk = rendered && TerrainRenderer::WriteBmp24(bmp, image);
         const bool ok = files && created && patternOk && rendered && dimsOk && pixelsOk &&
-                        colors > 1 && unique && bmpOk;
+                        zoomOk && colors > 1 && unique && bmpOk;
         if (ok) passed++;
 
         wchar_t line[512];
         ::wsprintfW(line,
                     L"era=%d name=%s files=%d created=%d groups=%d megas=%d vr=%d "
-                    L"render=%d dims=%d pixels=%d colors=%d unique=%d bmp=%d hash=%016I64x\n",
+                    L"render=%d dims=%d pixels=%d zoom=%d colors=%d unique=%d bmp=%d hash=%016I64x\n",
                     era, doc.eraName(), files ? 1 : 0, created ? 1 : 0, groups,
                     static_cast<int>(vx4.size() / 32), static_cast<int>(vr4.size() / 64),
-                    rendered ? 1 : 0, dimsOk ? 1 : 0, pixelsOk ? 1 : 0, colors,
-                    unique ? 1 : 0, bmpOk ? 1 : 0, hash);
+                    rendered ? 1 : 0, dimsOk ? 1 : 0, pixelsOk ? 1 : 0, zoomOk ? 1 : 0,
+                    colors, unique ? 1 : 0, bmpOk ? 1 : 0, hash);
         report += line;
     }
 
