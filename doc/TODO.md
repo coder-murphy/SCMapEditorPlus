@@ -24,7 +24,7 @@
   - 已接 0x8032/0x80E9/0x80EA 与重叠/自动连接/矿基距离/剪贴板装饰物的菜单状态；
     “任意放置”已影响可行走校验。
   - 回归：`--unit-param-test`。
-- [ ] **放置规则细化**
+- [x] **放置规则细化**
   - [x] 附属单位自动连接（0x80B8）：Comsat/Silo→Command Center、Machine Shop→Factory、
     Control Tower→Starport、Physics Lab/Covert Ops→Science Facility；
     光标落在宿主右侧 2×2 附属槽内时吸附到槽左上角。
