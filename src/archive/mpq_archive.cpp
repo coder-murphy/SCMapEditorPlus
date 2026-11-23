@@ -270,6 +270,18 @@ bool MpqArchive::FileExists(const std::string& entryName) const {
     return impl_ && impl_->FindBlock(entryName) >= 0;
 }
 
+bool MpqArchive::DebugEntryInfo(const std::string& entryName, EntryInfo& out) const {
+    if (!impl_) return false;
+    const int bi = impl_->FindBlock(entryName);
+    if (bi < 0 || static_cast<std::size_t>(bi) >= impl_->blocks.size()) return false;
+    const Impl::BlockEntry& be = impl_->blocks[static_cast<std::size_t>(bi)];
+    out.blockPos = be.pos;
+    out.compressedSize = be.compressedSize;
+    out.fileSize = be.fileSize;
+    out.flags = be.flags;
+    return true;
+}
+
 bool MpqArchive::ReadScenarioChk(Buffer& out) const {
     static const char* kCandidates[] = {
         "staredit\\scenario.chk", "Scenario.chk", "scenario.chk", "Staredit\\Scenario.chk"};

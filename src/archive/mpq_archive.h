@@ -37,6 +37,15 @@ public:
     // 依次尝试 scenario.chk / Scenario.chk / staredit\\scenario.chk / Staredit\\Scenario.chk
     bool ReadScenarioChk(Buffer& out) const;
 
+    // 调试：返回条目在块表中的原始信息（不读取内容）
+    struct EntryInfo {
+        u32 blockPos = 0;
+        u32 compressedSize = 0;
+        u32 fileSize = 0;
+        u32 flags = 0;
+    };
+    bool DebugEntryInfo(const std::string& entryName, EntryInfo& out) const;
+
     const std::wstring& path() const;
 
     // 已分配的条目数（哈希表中 blockIndex != 0xFFFFFFFF）

@@ -116,10 +116,10 @@ struct AddonRule {
 const AddonRule kAddonRules[] = {
     {107, 106, 4, 1},   // Comsat Station → Command Center
     {108, 106, 4, 1},   // Nuclear Silo → Command Center
-    {119, 113, 3, 1},   // Machine Shop → Factory
-    {116, 114, 3, 1},   // Control Tower → Starport
-    {117, 115, 3, 1},   // Physics Lab → Science Facility
-    {118, 115, 3, 1},   // Covert Ops → Science Facility
+    {120, 113, 4, 1},   // Machine Shop → Factory
+    {115, 114, 3, 1},   // Control Tower → Starport
+    {118, 116, 3, 1},   // Physics Lab → Science Facility
+    {117, 116, 3, 1},   // Covert Ops → Science Facility
 };
 constexpr int kMineralBaseMaxDistance = 12;
 
@@ -159,6 +159,78 @@ bool ResourceNearBase(const MapDocument& map, int tx, int ty, int maxDistance) {
         if (std::max(std::abs(tx - sx), std::abs(ty - sy)) <= maxDistance) return true;
     }
     return false;
+}
+
+// 建筑碰撞盒（像素，相对单位中心；来源：staredit wiki List of units）
+struct UnitBox {
+    u16 type;
+    u8 left;
+    u8 right;
+    u8 up;
+    u8 down;
+};
+const UnitBox kBuildingBoxes[] = {
+    {106, 58, 58, 41, 41},   // Command Center
+    {107, 37, 31, 16, 25},   // Comsat Station
+    {108, 37, 31, 16, 25},   // Nuclear Silo
+    {109, 38, 38, 22, 26},   // Supply Depot
+    {110, 56, 56, 32, 31},   // Refinery
+    {111, 48, 56, 40, 32},   // Barracks
+    {112, 40, 44, 32, 24},   // Academy
+    {113, 56, 56, 40, 40},   // Factory
+    {114, 48, 48, 40, 38},   // Starport
+    {115, 47, 28, 24, 22},   // Control Tower
+    {116, 48, 48, 38, 38},   // Science Facility
+    {117, 47, 28, 24, 22},   // Covert Ops
+    {118, 47, 28, 24, 22},   // Physics Lab
+    {120, 39, 31, 24, 24},   // Machine Shop
+    {122, 48, 48, 32, 28},   // Engineering Bay
+    {123, 48, 47, 32, 22},   // Armory
+    {124, 16, 16, 32, 16},   // Missile Turret
+    {125, 32, 32, 24, 16},   // Bunker
+    {130, 58, 58, 41, 41},   // Infested Command Center
+    {131, 49, 49, 32, 32},   // Hatchery
+    {132, 49, 49, 32, 32},   // Lair
+};
+
+const UnitBox* FindUnitBox(u16 type) {
+    for (const UnitBox& box : kBuildingBoxes) {
+        if (box.type == type) return &box;
+    }
+    return nullptr;
+}
+
+// 建筑正常规则：碰撞盒覆盖的瓦片必须可行走，且不与其它已知建筑相交。
+// 未知类型不额外限制，避免误拒绝。
+bool BuildingFits(const MapDocument& map, u16 type, int tx, int ty) {
+    const UnitBox* box = FindUnitBox(type);
+    if (!box) return true;
+    const int cx = tx * kTilePixels;
+    const int cy = ty * kTilePixels + 16;
+    const int x1 = cx - box->left;
+    const int x2 = cx + box->right;
+    const int y1 = cy - box->up;
+    const int y2 = cy + box->down;
+    const int tx0 = x1 / kTilePixels;
+    const int tx1 = x2 / kTilePixels;
+    const int ty0 = y1 / kTilePixels;
+    const int ty1 = y2 / kTilePixels;
+    if (tx0 < 0 || ty0 < 0 || tx1 >= map.width() || ty1 >= map.height()) return false;
+    for (int y = ty0; y <= ty1; y++) {
+        for (int x = tx0; x <= tx1; x++) {
+            if (!map.IsWalkableTile(x, y)) return false;
+        }
+    }
+    for (const UnitRecord& u : map.units()) {
+        const UnitBox* other = FindUnitBox(u.type);
+        if (!other) continue;
+        const int ux1 = static_cast<int>(u.x) - other->left;
+        const int ux2 = static_cast<int>(u.x) + other->right;
+        const int uy1 = static_cast<int>(u.y) - other->up;
+        const int uy2 = static_cast<int>(u.y) + other->down;
+        if (x1 <= ux2 && x2 >= ux1 && y1 <= uy2 && y2 >= uy1) return false;
+    }
+    return true;
 }
 
 // 递归找到直接包含命令 ID 的子菜单（用于按命令 ID 勾选/启用）
@@ -1122,6 +1194,11 @@ bool MainWindow::PlaceUnitAtTile(int tx, int ty) {
     if (mineralBaseDistance_ && !force && IsResourceType(unitType_) &&
         !ResourceNearBase(map_, tx, ty, kMineralBaseMaxDistance)) {
         Output(1, L"矿物/气矿距出生点超过 12 格，已拒绝放置");
+        return false;
+    }
+    if (buildNormalRules_ && !force && FindUnitBox(unitType_) &&
+        !BuildingFits(map_, unitType_, tx, ty)) {
+        Output(1, L"建筑超出可行走区域或与其它建筑重叠，已拒绝放置");
         return false;
     }
 

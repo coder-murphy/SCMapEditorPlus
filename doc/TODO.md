@@ -28,9 +28,13 @@
   - [x] 附属单位自动连接（0x80B8）：Comsat/Silo→Command Center、Machine Shop→Factory、
     Control Tower→Starport、Physics Lab/Covert Ops→Science Facility；
     光标落在宿主右侧 2×2 附属槽内时吸附到槽左上角。
+    ID 已按 staredit wiki / scmscx 资料校正：115 Control Tower、116 Science Facility、
+    117 Covert Ops、118 Physics Lab、120 Machine Shop。
   - [x] 矿物与基地距离限制（0x80BF）：开启后矿物/气矿必须距出生点 ≤12 格，否则拒绝并写入输出面板。
-  - [ ] 地面/空中重叠、建筑正常规则：仍需完整单位属性表（尺寸/空陆/建筑类型）。
-  - 回归：`--unit-param-test` 新增 `cc/addon/farRejected/nearMineral/addonOk/mineralOk`。
+  - [x] 建筑正常规则（0x8032）：对已知 Terran 建筑按碰撞盒检查占地瓦片可通行，
+    并与其它已知建筑做矩形相交检测（数据来源：staredit wiki List of units）。
+  - [ ] 地面/空中重叠（0x8015/0x8109）：仍需空中单位标记；Protoss/Zerg 建筑（133+）尺寸也待补。
+  - 回归：`--unit-param-test` 新增 `cc/addon/tower/farRejected/nearMineral/addonOk/towerOk/mineralOk/overlapRejected`。
   - 代码：`src/ui/main_window.cpp`、`src/units/`
 - [x] **选择与剪贴板**
   - 框选工具（0x8FFB / 数字键 4）、全选/取消、复制/剪切/粘贴（0x80E6/80E7/80E8/809A）。

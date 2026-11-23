@@ -609,8 +609,16 @@ int RunUnitParamTest(MainWindow& win, const std::wstring& outPath) {
     // 附属单位自动连接：CC(106) 在 12,12，附属槽为 (16,13)-(17,14)
     win.SetUnitPlacement(106, 1, 0);
     const bool placedCC = win.PlaceUnitAtTile(12, 12);
+    win.SetUnitPlacement(113, 1, 0);              // Factory 与 CC 重叠，应被拒绝
+    const bool rejectedOverlap = !win.PlaceUnitAtTile(12, 12);
     win.SetUnitPlacement(107, 1, 0);              // Comsat Station
     const bool placedAddon = win.PlaceUnitAtTile(17, 14);
+
+    // Control Tower(115) 应吸附到 Starport(114) 的 (15,21)-(16,22) 槽
+    win.SetUnitPlacement(114, 1, 0);
+    const bool placedStarport = win.PlaceUnitAtTile(12, 20);
+    win.SetUnitPlacement(115, 1, 0);
+    const bool placedTower = win.PlaceUnitAtTile(16, 22);
 
     // 矿物与基地距离限制：开启后远处矿物拒绝、近处允许
     ::SendMessageW(win.hwnd(), WM_COMMAND, MAKEWPARAM(0x80BF, 0), 0);
@@ -627,12 +635,14 @@ int RunUnitParamTest(MainWindow& win, const std::wstring& outPath) {
     bool startOk = false;
     bool geyserOk = false;
     bool addonOk = false;
+    bool towerOk = false;
     bool mineralOk = false;
     if (reopened) {
         for (const UnitRecord& u : check.units()) {
             if (u.type == 214 && u.owner == 3) startOk = true;
             if (u.type == 188 && u.owner == 11 && u.resource == 5000) geyserOk = true;
             if (u.type == 107 && u.x == 16 * 32 && u.y == 13 * 32 + 16) addonOk = true;
+            if (u.type == 115 && u.x == 15 * 32 && u.y == 21 * 32 + 16) towerOk = true;
             if (u.type == 176 && u.x == 8 * 32 && u.y == 5 * 32 + 16) mineralOk = true;
         }
     }
@@ -641,16 +651,19 @@ int RunUnitParamTest(MainWindow& win, const std::wstring& outPath) {
     ::wsprintfW(msg,
         L"create=OK\nplaced=%d/%d\nrejected=%d\nsaved=%d\nreopened=%d\nunits=%u\n"
         L"startOk=%d\ngeyserOk=%d\ncc=%d\naddon=%d\nfarRejected=%d\nnearMineral=%d\n"
-        L"addonOk=%d\nmineralOk=%d\n",
+        L"addonOk=%d\ntower=%d/%d\ntowerOk=%d\nmineralOk=%d\noverlapRejected=%d\n",
         placedStart ? 1 : 0, placedGeyser ? 1 : 0, rejected ? 1 : 0, saved ? 1 : 0,
         reopened ? 1 : 0, static_cast<unsigned>(check.unitCount()),
         startOk ? 1 : 0, geyserOk ? 1 : 0, placedCC ? 1 : 0, placedAddon ? 1 : 0,
-        rejectedFar ? 1 : 0, placedNearMineral ? 1 : 0, addonOk ? 1 : 0, mineralOk ? 1 : 0);
+        rejectedFar ? 1 : 0, placedNearMineral ? 1 : 0, addonOk ? 1 : 0,
+        placedStarport ? 1 : 0, placedTower ? 1 : 0, towerOk ? 1 : 0, mineralOk ? 1 : 0,
+        rejectedOverlap ? 1 : 0);
     WriteDiag(msg);
 
-    const bool ok = placedStart && placedGeyser && placedCC && placedAddon && rejectedFar &&
-                    placedNearMineral && rejected && saved && reopened &&
-                    check.unitCount() == 5 && startOk && geyserOk && addonOk && mineralOk;
+    const bool ok = placedStart && placedGeyser && placedCC && placedAddon && placedStarport &&
+                    placedTower && rejectedFar && placedNearMineral && rejected && saved &&
+                    reopened && check.unitCount() == 7 && startOk && geyserOk && addonOk &&
+                    towerOk && mineralOk && rejectedOverlap;
     return ok ? 0 : 2;
 }
 
@@ -3167,6 +3180,27 @@ int RunMpqExtract(const std::wstring& archivePath, const std::wstring& entryWide
         WriteDiag(L"extract=FAIL read\n");
         return 2;
     }
+    {
+        std::wstring diag;
+        MpqArchive::EntryInfo info = {};
+        if (mpq.DebugEntryInfo(entry, info)) {
+            wchar_t infoMsg[200];
+            ::wsprintfW(infoMsg, L"flags=0x%08X pos=%u csize=%u size=%u\n", info.flags,
+                        info.blockPos, info.compressedSize, info.fileSize);
+            diag += infoMsg;
+        }
+        wchar_t head[96];
+        ::wsprintfW(head, L"head=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+                    data.size() > 0 ? data[0] : 0, data.size() > 1 ? data[1] : 0,
+                    data.size() > 2 ? data[2] : 0, data.size() > 3 ? data[3] : 0,
+                    data.size() > 4 ? data[4] : 0, data.size() > 5 ? data[5] : 0,
+                    data.size() > 6 ? data[6] : 0, data.size() > 7 ? data[7] : 0);
+        diag += head;
+        wchar_t sizeMsg[64];
+        ::wsprintfW(sizeMsg, L"extract=OK size=%u\n", static_cast<unsigned>(data.size()));
+        diag += sizeMsg;
+        WriteDiag(diag);
+    }
     std::ofstream out(outPath.c_str(), std::ios::binary);
     if (!out) {
         WriteDiag(L"extract=FAIL write\n");
@@ -3174,9 +3208,6 @@ int RunMpqExtract(const std::wstring& archivePath, const std::wstring& entryWide
     }
     out.write(reinterpret_cast<const char*>(data.data()),
               static_cast<std::streamsize>(data.size()));
-    wchar_t msg[160];
-    ::wsprintfW(msg, L"extract=OK size=%u\n", static_cast<unsigned>(data.size()));
-    WriteDiag(msg);
     return 0;
 }
 
