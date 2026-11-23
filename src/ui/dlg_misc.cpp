@@ -569,6 +569,23 @@ void PlayIscriptTest(HWND dlg) {
             ::wsprintfW(grpLine, L"GRP: %d 帧 %dx%d\r\n", grp.frameCount(), grp.width(),
                         grp.height());
             extra += grpLine;
+            if (r.lastFrame < grp.frameCount()) {
+                Buffer palette;
+                GrpFile::GrayPalette(palette);
+                Buffer bgra;
+                int w = 0;
+                int h = 0;
+                if (grp.DecodeFrame(static_cast<int>(r.lastFrame), palette, bgra, w, h)) {
+                    int count = 0;
+                    for (std::size_t p = 3; p < bgra.size(); p += 4) {
+                        if (bgra[p]) count++;
+                    }
+                    wchar_t frameLine[192];
+                    ::wsprintfW(frameLine, L"解码帧 %u: %dx%d 不透明像素 %d\r\n",
+                                static_cast<unsigned>(r.lastFrame), w, h, count);
+                    extra += frameLine;
+                }
+            }
         } else {
             extra += L"GRP 读取失败\r\n";
         }

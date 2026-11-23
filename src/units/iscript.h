@@ -68,12 +68,13 @@ private:
     bool loaded_ = false;
 };
 
-// GRP 元数据（不做像素解码）：帧数 / 画布尺寸 / 每帧位置与大小
+// GRP 元数据与帧解码
 struct GrpFrameMeta {
     u8 x = 0;
     u8 y = 0;
     u8 width = 0;
     u8 height = 0;
+    u32 offset = 0;     // 帧数据在 GRP 内的偏移
 };
 
 class GrpFile {
@@ -85,7 +86,15 @@ public:
     int height() const { return height_; }
     const std::vector<GrpFrameMeta>& frames() const { return frames_; }
 
+    // 解码一帧为 BGRA。palette 支持 256*4（WPE）或 256*3（PAL）；为空时用索引灰度。
+    bool DecodeFrame(int index, const Buffer& palette, Buffer& bgra, int& width,
+                     int& height) const;
+    // 读取调色板文件：768 B（PAL）或 1024 B（WPE），统一转成 256*4
+    static bool LoadPalette(const std::wstring& path, Buffer& palette4);
+    static void GrayPalette(Buffer& palette4);
+
 private:
+    Buffer data_;
     int frameCount_ = 0;
     int width_ = 0;
     int height_ = 0;

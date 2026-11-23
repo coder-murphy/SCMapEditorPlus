@@ -332,30 +332,170 @@ bool IscriptFile::Disassemble(const IscriptHeader& header, int animIndex,
 bool GrpFile::Load(const std::wstring& path) {
     loaded_ = false;
     frames_.clear();
+    data_.clear();
     Buffer data;
-    if (!ReadWholeFile(path, data) || data.size() < 6) return false;
+    if (!ReadWholeFile(path, data) || data.size() < 10) return false;
     const int count = ReadU16(data.data());
     if (count <= 0 || count > 65535) return false;
     const std::size_t tableEnd = 6 + static_cast<std::size_t>(count) * 4;
     if (tableEnd > data.size()) return false;
 
+    data_ = data;
     frameCount_ = count;
     width_ = ReadU16(data.data() + 2);
     height_ = ReadU16(data.data() + 4);
     frames_.resize(static_cast<std::size_t>(count));
-    for (int i = 0; i < count; i++) {
-        const std::size_t at = static_cast<std::size_t>(ReadU32(
-            data.data() + 6 + static_cast<std::size_t>(i) * 4));
-        GrpFrameMeta& f = frames_[static_cast<std::size_t>(i)];
-        if (at + 4 <= data.size()) {
+
+    // 单位 GRP：每帧表项 8 字节（x, y, w, h, u32 帧数据偏移）
+    const std::size_t table8 = 6 + static_cast<std::size_t>(count) * 8;
+    bool has8 = table8 <= data.size();
+    u32 prev = 0;
+    if (has8) {
+        for (int i = 0; i < count; i++) {
+            const u32 off = ReadU32(data.data() + 6 + static_cast<std::size_t>(i) * 8 + 4);
+            if (off < table8 || off >= data.size() || off < prev) {
+                has8 = false;
+                break;
+            }
+            prev = off;
+        }
+    }
+    if (has8) {
+        for (int i = 0; i < count; i++) {
+            const std::size_t at = 6 + static_cast<std::size_t>(i) * 8;
+            GrpFrameMeta& f = frames_[static_cast<std::size_t>(i)];
             f.x = data[at];
             f.y = data[at + 1];
             f.width = data[at + 2];
             f.height = data[at + 3];
+            f.offset = ReadU32(data.data() + at + 4);
+        }
+    } else {
+        // 兼容 4 字节偏移表：x/y/w/h 放在帧数据开头
+        const std::size_t table4 = 6 + static_cast<std::size_t>(count) * 4;
+        if (table4 > data.size()) return false;
+        prev = 0;
+        for (int i = 0; i < count; i++) {
+            const u32 off = ReadU32(data.data() + 6 + static_cast<std::size_t>(i) * 4);
+            if (off < table4 || off >= data.size() || off < prev) return false;
+            prev = off;
+            GrpFrameMeta& f = frames_[static_cast<std::size_t>(i)];
+            f.offset = off;
+            if (off + 4 <= data.size()) {
+                f.x = data[off];
+                f.y = data[off + 1];
+                f.width = data[off + 2];
+                f.height = data[off + 3];
+            }
         }
     }
+
     loaded_ = true;
     return true;
+}
+
+bool GrpFile::DecodeFrame(int index, const Buffer& palette, Buffer& bgra, int& width,
+                          int& height) const {
+    bgra.clear();
+    width = height = 0;
+    if (!loaded_ || index < 0 || index >= frameCount_) return false;
+    const GrpFrameMeta& f = frames_[static_cast<std::size_t>(index)];
+    if (f.width == 0 || f.height == 0) return false;
+    if (width_ <= 0 || height_ <= 0) return false;
+
+    // 输出整张画布（帧矩形是画布内的区域）
+    width = width_;
+    height = height_;
+    bgra.assign(static_cast<std::size_t>(width) * height * 4, 0);
+
+    const bool hasPalette = palette.size() >= 256 * 3;
+    auto writePixel = [&](int x, int y, u8 index) {
+        if (x < 0 || y < 0 || x >= width || y >= height) return;
+        u8* dst = bgra.data() + (static_cast<std::size_t>(y) * width + x) * 4;
+        if (hasPalette) {
+            const std::size_t at = static_cast<std::size_t>(index) *
+                                   (palette.size() >= 256 * 4 ? 4 : 3);
+            dst[0] = palette[at + 2];
+            dst[1] = palette[at + 1];
+            dst[2] = palette[at + 0];
+        } else {
+            dst[0] = dst[1] = dst[2] = index;
+        }
+        dst[3] = 0xFF;
+    };
+
+    // 帧数据：u16 行偏移表（相对帧数据起点）+ 每行 RLE（从右往左绘制）
+    // 重复帧共享同一偏移，因此取下一个“更大”的偏移作为帧数据末尾
+    std::size_t frameEnd = data_.size();
+    for (int j = index + 1; j < frameCount_; j++) {
+        if (frames_[static_cast<std::size_t>(j)].offset > f.offset) {
+            frameEnd = frames_[static_cast<std::size_t>(j)].offset;
+            break;
+        }
+    }
+    const std::size_t lineTable = f.offset;
+    if (lineTable + static_cast<std::size_t>(f.height) * 2 > frameEnd) return false;
+
+    for (int line = 0; line < f.height; line++) {
+        const u16 lineOff = ReadU16(data_.data() + lineTable +
+                                    static_cast<std::size_t>(line) * 2);
+        std::size_t start = lineTable + lineOff;
+        std::size_t end = frameEnd;
+        if (line + 1 < f.height) {
+            end = lineTable + ReadU16(data_.data() + lineTable +
+                                      static_cast<std::size_t>(line + 1) * 2);
+        }
+        if (start > end || end > data_.size()) continue;
+        int x = static_cast<int>(f.x) + static_cast<int>(f.width) - 1;
+        const int y = static_cast<int>(f.y) + line;
+        std::size_t pos = start;
+        while (pos < end) {
+            const u8 b = data_[pos++];
+            if (b == 0x00) continue;
+            if (b & 0x80) {                         // 透明像素：向左跳过
+                x -= (b & 0x7F);
+                continue;
+            }
+            if (b & 0x40) {                         // 重复像素
+                const int n = b & 0x3F;
+                if (n == 0) continue;
+                if (pos >= end) break;
+                const u8 color = data_[pos++];
+                for (int i = 0; i < n; i++) writePixel(x--, y, color);
+                continue;
+            }
+            // 直接像素串（从右往左）
+            const int n = b;
+            for (int i = 0; i < n && pos < end; i++) {
+                writePixel(x--, y, data_[pos++]);
+            }
+        }
+    }
+    return true;
+}
+
+bool GrpFile::LoadPalette(const std::wstring& path, Buffer& palette4) {
+    Buffer raw;
+    if (!ReadWholeFile(path, raw)) return false;
+    if (raw.size() != 768 && raw.size() != 1024) return false;
+    palette4.assign(256 * 4, 0xFF);
+    const std::size_t stride = raw.size() == 1024 ? 4 : 3;
+    for (int i = 0; i < 256; i++) {
+        palette4[static_cast<std::size_t>(i) * 4 + 0] = raw[static_cast<std::size_t>(i) * stride + 0];
+        palette4[static_cast<std::size_t>(i) * 4 + 1] = raw[static_cast<std::size_t>(i) * stride + 1];
+        palette4[static_cast<std::size_t>(i) * 4 + 2] = raw[static_cast<std::size_t>(i) * stride + 2];
+        palette4[static_cast<std::size_t>(i) * 4 + 3] = 0xFF;
+    }
+    return true;
+}
+
+void GrpFile::GrayPalette(Buffer& palette4) {
+    palette4.assign(256 * 4, 0xFF);
+    for (int i = 0; i < 256; i++) {
+        palette4[static_cast<std::size_t>(i) * 4 + 0] = static_cast<u8>(i);
+        palette4[static_cast<std::size_t>(i) * 4 + 1] = static_cast<u8>(i);
+        palette4[static_cast<std::size_t>(i) * 4 + 2] = static_cast<u8>(i);
+    }
 }
 
 }  // namespace scmd

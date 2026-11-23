@@ -446,7 +446,8 @@ minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1 output=1 cache=1 windo
   - 面板区域拦截鼠标，避免误操作底层地图；回归 `--menu-cmd-test` 的 `output`。
 - Iscript 测试（192）：自动加载 `scripts\iscript.bin`；IscriptID 驱动动画下拉与反汇编；
   Play 用 `IscriptFile::Simulate` 线性模拟 1000 步（playfram/wait/goto/end），
-  显示 ops/frames/waits/loops 与终止状态；GRP 文件名仅显示帧数/尺寸（不做像素解码）。
+  显示 ops/frames/waits/loops 与终止状态；GRP 文件名显示帧数/尺寸，并按模拟帧号解码
+  统计不透明像素（灰度；调色板解码走 `--grp-test --pal`）。
   本工程新增的 205 提供按条目浏览与共享头/别名解析。
 
 ## 重设地图大小（175）

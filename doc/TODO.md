@@ -174,7 +174,8 @@
 - [ ] 在线升级（174）：无更新源，保留信息展示。
 - [x] **Iscript 测试（192）**
   - 自动加载 `scripts\iscript.bin`（星际目录 / exe / 仓库 `mpq/StarDat.mpq`）。
-  - IscriptID（1085）驱动动画下拉与操作码反汇编；GRP 文件名（1086）显示帧数/尺寸。
+  - IscriptID（1085）驱动动画下拉与操作码反汇编；GRP 文件名（1086）显示帧数/尺寸，
+    并按模拟到的帧号解码统计不透明像素。
   - Play 调用 `IscriptFile::Simulate` 线性模拟 1000 步（playfram/wait/goto/end），
     显示 ops/frames/waits/loops 与终止状态。
   - 回归：`--iscript-test` 增加 `sim/simOps/simFrames/simWaits/simEnded`。
@@ -214,10 +215,12 @@
     type→动画槽数量、u8 操作码与操作数；支持无 SCPE 的别名条目与指向共享头的动画偏移。
   - 新增 205「Iscript / Grp 调试」：自动从星际目录/exe 目录/仓库 `mpq/StarDat.mpq` 读取
     `scripts\iscript.bin`，也可手动载入；按 Iscript ID 列出动画与反汇编操作码。
-  - `GrpFile` 解析 GRP 帧数/画布尺寸/帧矩形（暂不做像素解码）。
+  - `GrpFile` 解析 GRP：8 字节帧表项（x/y/w/h + u32 帧数据偏移）、行偏移表与
+    从右往左的 RLE；支持帧像素解码为 BGRA（灰度或 768/1024 B 调色板）。
   - 实测数据：342 个条目 / 34 880 B、1 627 个可用动画、12 774 条指令；示例 GRP
-    `unit\terran\tank.grp` 为 51 帧、128×128。
-  - 回归：`--iscript-test=<iscript.bin> [--grp=<grp>]`；全量脚本先从仓库 MPQ 抽取样本。
+    `unit\terran\tank.grp` 为 51 帧、128×128，逐帧解码 51/51。
+  - 回归：`--iscript-test=<iscript.bin> [--grp=<grp>]`；
+    `--grp-test=<grp> [--pal=<pal>] [--grp-bmp=<bmp>]`（首次运行脚本从仓库 MPQ 抽取样本）。
 - [ ] BIN 183/193 与 bin_170 的用途仍未确认。
 - [x] 文档旧设备路径与游戏目录引用已改为「可选逆向来源」，常规构建不依赖游戏
 - [x] `accel.rc` 中 `.` 加速键的 RC4204 警告确认与处理
@@ -228,4 +231,3 @@
 
 1. 在线升级（174）、自动检查更新（0x80A8）：无更新源，完善占位说明
 2. BIN 183/193 与 bin_170 用途确认
-3. GRP 像素解码与动画预览（可选扩展）

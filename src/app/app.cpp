@@ -1352,6 +1352,45 @@ std::wstring ParseGrpArg() {
     return path;
 }
 
+std::wstring ParseGrpTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--grp-test=", 11) == 0) path = argv[i] + 11;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+std::wstring ParsePalArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--pal=", 6) == 0) path = argv[i] + 6;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+std::wstring ParseGrpBmpArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--grp-bmp=", 10) == 0) path = argv[i] + 10;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
 int RunIscriptTest(const std::wstring& iscriptPath, const std::wstring& grpPath) {
     IscriptFile file;
     if (!file.Load(iscriptPath)) {
@@ -1445,6 +1484,80 @@ int RunIscriptTest(const std::wstring& iscriptPath, const std::wstring& grpPath)
 
     const bool ok = file.entries().size() >= 300 && emptyAnims == 0 && unknownOps == 0 &&
                     sampleOk && simOk && grpOk;
+    return ok ? 0 : 2;
+}
+
+// --grp-test=<grp> [--pal=<pal>] [--grp-bmp=<bmp>]：GRP 帧解码回归
+int RunGrpTest(const std::wstring& grpPath, const std::wstring& palPath,
+               const std::wstring& bmpPath) {
+    GrpFile grp;
+    if (!grp.Load(grpPath)) {
+        WriteDiag(L"load=FAIL\n");
+        return 2;
+    }
+    Buffer palette;
+    bool palOk = true;
+    if (!palPath.empty()) palOk = GrpFile::LoadPalette(palPath, palette);
+    if (palette.empty()) GrpFile::GrayPalette(palette);
+
+    int decoded = 0;
+    long long opaque = 0;
+    int maxOpaque = 0;
+    int firstW = 0;
+    int firstH = 0;
+    int firstOpaque = 0;
+    int firstFail = -1;
+    Buffer firstFrame;
+    for (int i = 0; i < grp.frameCount(); i++) {
+        Buffer bgra;
+        int w = 0;
+        int h = 0;
+        if (!grp.DecodeFrame(i, palette, bgra, w, h)) {
+            if (firstFail < 0) firstFail = i;
+            continue;
+        }
+        decoded++;
+        int count = 0;
+        for (std::size_t p = 3; p < bgra.size(); p += 4) {
+            if (bgra[p]) count++;
+        }
+        opaque += count;
+        maxOpaque = std::max(maxOpaque, count);
+        if (i == 0) {
+            firstFrame = std::move(bgra);
+            firstW = w;
+            firstH = h;
+            firstOpaque = count;
+        }
+    }
+
+    bool bmpOk = true;
+    if (!bmpPath.empty()) {
+        TerrainImage image;
+        image.width = firstW;
+        image.height = firstH;
+        image.pixels = firstFrame;
+        bmpOk = !firstFrame.empty() && TerrainRenderer::WriteBmp24(bmpPath, image);
+    }
+
+    wchar_t msg[640];
+    ::wsprintfW(msg,
+                L"grp=1\nframes=%d\ndims=%dx%d\ndecoded=%d/%d\nopaque=%I64d\nmax=%d\n"
+                L"firstOpaque=%d\npal=%d\nbmp=%d\n",
+                grp.frameCount(), grp.width(), grp.height(), decoded, grp.frameCount(),
+                opaque, maxOpaque, firstOpaque, palOk ? 1 : 0, bmpOk ? 1 : 0);
+    std::wstring text = msg;
+    if (firstFail >= 0 && firstFail < grp.frameCount()) {
+        const GrpFrameMeta& f = grp.frames()[static_cast<std::size_t>(firstFail)];
+        wchar_t extra[192];
+        ::wsprintfW(extra, L"firstFail=%d off=%u rect=%u,%u %ux%u\n", firstFail,
+                    static_cast<unsigned>(f.offset), f.x, f.y, f.width, f.height);
+        text += extra;
+    }
+    WriteDiag(text);
+
+    const bool ok = decoded == grp.frameCount() && grp.frameCount() > 0 && maxOpaque > 0 &&
+                    palOk && bmpOk;
     return ok ? 0 : 2;
 }
 
@@ -3533,6 +3646,11 @@ int App::Run(HINSTANCE hInstance) {
     // Iscript / GRP 解析回归（无窗口）
     if (const std::wstring iscript = ParseIscriptTestArg(); !iscript.empty()) {
         return RunIscriptTest(iscript, ParseGrpArg());
+    }
+
+    // GRP 帧解码回归（无窗口）
+    if (const std::wstring grpTest = ParseGrpTestArg(); !grpTest.empty()) {
+        return RunGrpTest(grpTest, ParsePalArg(), ParseGrpBmpArg());
     }
 
     ::InitCommonControls();
