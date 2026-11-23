@@ -50,3 +50,5 @@
 // 本工程新增：编辑声音 / 任务简报
 #define IDD_SOUNDS 198
 #define IDD_BRIEFING 199
+// 本工程新增：Iscript / Grp 调试
+#define IDD_ISCRIPT 205

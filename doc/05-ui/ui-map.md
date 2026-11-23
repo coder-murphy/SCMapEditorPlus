@@ -40,6 +40,7 @@
 | 189 | `IDD_DLG_189` | 编辑字符串 | 字符串表编辑 | `src/triggers/` |
 | 191 | `IDD_DLG_191` | 重叠单位 | 重叠单位处理 | `src/units/` |
 | 192 | `IDD_DLG_192` | Iscript测试 | Iscript 测试工具 | `src/tools/` |
+| 205 | `IDD_ISCRIPT` | Iscript / Grp 调试 | 解析 iscript.bin 并按 ID/动画反汇编；GRP 头校验 | `src/units/` |
 | 195 | `IDD_UNIT_PLACE` | 单位放置参数 | 单位面板：类型/玩家/资源 | `src/units/` |
 | 196 | `IDD_PLAYER_ROSTER` | 玩家 / 势力设定 | OWNR/SIDE/FORC/COLR 编辑 | `src/players/` |
 | 197 | `IDD_RESTRICTIONS` | 升级 / 科技限制 | UPGR/PTEC/PUPx/PTEx 编辑 | `src/players/` |
@@ -69,7 +70,7 @@
 | `ui/dlg_restrictions.cpp` | 197 升级 / 科技限制 |
 | `ui/dlg_terrain.cpp` | 166 方格设置、182 自定义刷子 |
 | `ui/dlg_tools.cpp` | 173 备份、174 升级、192 Iscript |
-| `ui/dlg_misc.cpp` | 167 MPQ 附加文件管理、183 标签容器、184 列表容器、185/186 列表编辑、187 富文本 |
+| `ui/dlg_misc.cpp` | 167 MPQ 附加文件管理、205 Iscript / Grp 调试、183 标签容器、184 列表容器、185/186 列表编辑、187 富文本 |
 
 返回值通过 `dlg_types.h` 的结构体与 `LastInputValue()` / `LastEditedString()` 取回。
 
@@ -104,6 +105,7 @@
 | 撤销 / 恢复 | 0x807F / 0x8080 |
 | 编辑层 → 地形 | 0x803A |
 | 触发 → 编辑触发 | 0x810F |
+| 调试 → Iscript / Grp 调试 | 0x811E（打开 205） |
 | 帮助 → 关于 / 文件 → 退出 | 0x68 / 0x69 |
 
 `command_ids.h` 已改用这些原值；菜单项全部导入（未实现的命令统一走

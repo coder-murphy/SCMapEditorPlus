@@ -3701,6 +3701,9 @@ void MainWindow::OnCommand(int id) {
             UpdateTitle();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
+        case kIscriptGrpDebug:
+            ShowRecoveredDialog(IDD_ISCRIPT, hwnd_);
+            break;
         case kDebugDialogs:
             ShowRecoveredDialog(IDD_DLG_155, hwnd_);
             break;

@@ -22,6 +22,7 @@
 #include "map/edit_history.h"
 #include "map/map_document.h"
 #include "map/map_switches.h"
+#include "units/iscript.h"
 #include "terrain/terrain_renderer.h"
 #include "terrain/edge_placer.h"
 #include "terrain/tileset_export.h"
@@ -1257,8 +1258,7 @@ std::wstring ParseExtraTestArg() {
     return path;
 }
 
-int RunExtraFileTest(const std::wstring& mapPath, const std::wstring& outPath) {
-    MpqArchive src;
+int RunExtraFileTest(const std::wstring& mapPath, const std::wstring& outPath) {    MpqArchive src;
     Buffer chk;
     if (!src.Open(mapPath) || !src.ReadScenarioChk(chk)) {
         WriteDiag(L"seed=FAIL\n");
@@ -1323,6 +1323,109 @@ int RunExtraFileTest(const std::wstring& mapPath, const std::wstring& outPath) {
             replaceRead && rejected && removed && extrasStill)
                ? 0
                : 2;
+}
+
+// --iscript-test=<iscript.bin>：解析头表/动画/操作码；可选 --grp=<grp> 校验 GRP 头
+std::wstring ParseIscriptTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--iscript-test=", 15) == 0) path = argv[i] + 15;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+std::wstring ParseGrpArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--grp=", 6) == 0) path = argv[i] + 6;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+int RunIscriptTest(const std::wstring& iscriptPath, const std::wstring& grpPath) {
+    IscriptFile file;
+    if (!file.Load(iscriptPath)) {
+        WriteDiag(L"load=FAIL\n");
+        return 2;
+    }
+
+    int anims = 0;
+    int instructions = 0;
+    int emptyAnims = 0;
+    int unknownOps = 0;
+    int maxInstructions = 0;
+    std::vector<std::wstring> unknownList;
+    for (const IscriptHeader& header : file.entries()) {
+        for (int i = 0; i < static_cast<int>(header.animOffsets.size()); i++) {
+            if (header.animOffsets[static_cast<std::size_t>(i)] == 0) continue;
+            anims++;
+            std::vector<IscriptInstruction> list;
+            if (!file.Disassemble(header, i, list)) {
+                emptyAnims++;
+                continue;
+            }
+            instructions += static_cast<int>(list.size());
+            maxInstructions = std::max(maxInstructions, static_cast<int>(list.size()));
+            for (const IscriptInstruction& ins : list) {
+                if (IscriptFile::OpcodeName(ins.opcode)[0] == '?') {
+                    unknownOps++;
+                    if (unknownList.size() < 8) {
+                        wchar_t one[64];
+                        ::wsprintfW(one, L"%u/%d/%02X", header.id, i, ins.opcode);
+                        unknownList.push_back(one);
+                    }
+                }
+            }
+        }
+    }
+
+    const IscriptHeader* sample = file.Find(198);
+    const bool sampleOk = sample && sample->type == 12 && sample->animOffsets.size() == 14;
+
+    bool grpOk = true;
+    GrpFile grp;
+    if (!grpPath.empty()) {
+        grpOk = grp.Load(grpPath) && grp.frameCount() > 0 && grp.width() > 0 &&
+                grp.height() > 0;
+    }
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+                L"load=1\nentries=%u\nsize=%u\nanims=%d\ninstructions=%d\n"
+                L"empty=%d\nunknown=%d\nmax=%d\nsample=%d\n",
+                static_cast<unsigned>(file.entries().size()),
+                static_cast<unsigned>(file.size()), anims, instructions, emptyAnims,
+                unknownOps, maxInstructions, sampleOk ? 1 : 0);
+    std::wstring text = msg;
+    if (!unknownList.empty()) {
+        text += L"unknownOps=";
+        for (std::size_t i = 0; i < unknownList.size(); i++) {
+            if (i) text += L",";
+            text += unknownList[i];
+        }
+        text += L"\n";
+    }
+    if (!grpPath.empty()) {
+        wchar_t grpMsg[192];
+        ::wsprintfW(grpMsg, L"grp=%d\nframes=%d\ndims=%dx%d\n", grpOk ? 1 : 0,
+                    grp.frameCount(), grp.width(), grp.height());
+        text += grpMsg;
+    }
+    WriteDiag(text);
+
+    const bool ok = file.entries().size() >= 300 && emptyAnims == 0 && unknownOps == 0 &&
+                    sampleOk && grpOk;
+    return ok ? 0 : 2;
 }
 
 // --menu-cmd-test：检验编辑层/方格/显示选项菜单命令与勾选回显
@@ -3405,6 +3508,11 @@ int App::Run(HINSTANCE hInstance) {
     // 自动备份回归（无窗口）
     if (HasBackupTestArg()) {
         return RunBackupTest(ParseOpenArg(), ParseSettingsDirArg());
+    }
+
+    // Iscript / GRP 解析回归（无窗口）
+    if (const std::wstring iscript = ParseIscriptTestArg(); !iscript.empty()) {
+        return RunIscriptTest(iscript, ParseGrpArg());
     }
 
     ::InitCommonControls();

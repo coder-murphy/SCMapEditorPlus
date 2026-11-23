@@ -37,6 +37,7 @@ INT_PTR CALLBACK ProcCustomBrush(HWND dlg, UINT msg, WPARAM wParam, LPARAM lPara
 INT_PTR CALLBACK ProcBackupViewer(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 查看备份数据（173）
 INT_PTR CALLBACK ProcUpdater(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 在线升级（174）
 INT_PTR CALLBACK ProcIscriptTest(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // Iscript 测试（192）
+INT_PTR CALLBACK ProcIscriptGrpDebug(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // Iscript / Grp 调试（205）
 INT_PTR CALLBACK ProcMpqList(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // MPQ 文件管理（167）
 INT_PTR CALLBACK ProcTabHost(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 标签容器（183）
 INT_PTR CALLBACK ProcListViewHost(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 列表容器（184）

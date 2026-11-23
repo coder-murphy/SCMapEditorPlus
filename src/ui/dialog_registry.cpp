@@ -41,6 +41,7 @@ const DialogEntry kEntries[] = {
     {197, L"升级 / 科技限制", "impl", false, &ProcRestrictions},
     {198, L"编辑声音", "impl", false, &ProcSoundList},
     {199, L"任务简报", "impl", false, &ProcMissionBriefing},
+    {205, L"Iscript / Grp 调试", "impl", false, &ProcIscriptGrpDebug},
 };
 
 int g_lastDialogError = 0;

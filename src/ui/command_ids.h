@@ -144,6 +144,7 @@ enum CommandId : int {
     kDebugOverlaps = 0x80E1,    // 显示重叠标记
     kDebugCompare = 0x80E0,     // 显示对比数据
     kDebugUnitConflict = 0x811D,// 显示单位冲突大小
+    kIscriptGrpDebug = 0x811E,  // Iscript / Grp 调试（205）
     kDebugCpu = 0x80F2,         // 显示CPU测试数据
     kDebugClearScreen = 0x80E2, // 清除屏幕
     kDebugImageSize = 0x810A,   // 显示图像大小

@@ -749,3 +749,24 @@ BEGIN
     CONTROL "仅编辑已有的文本/目标/传输行动；更新写入 STR。", -1, "Static", 0x50020000, 6, 234, 320, 8
 END
 
+/////////////////////////////////////////////////////////////////////////////
+// IDD_ISCRIPT  「Iscript / Grp 调试」  360x260（本工程新增）
+IDD_ISCRIPT DIALOGEX 0, 0, 360, 260
+STYLE 0x80C800C8
+EXSTYLE 0x00000000
+CAPTION "Iscript / Grp 调试"
+FONT 9, "宋体", 400, 0, 0x1
+BEGIN
+    CONTROL "iscript 来源:", -1, "Static", 0x50020000, 6, 8, 54, 8
+    CONTROL "0", 1600, "Edit", 0x50810080, 64, 6, 224, 14
+    CONTROL "载入...", 1601, "Button", 0x50010000, 294, 6, 60, 14
+    CONTROL "Iscript ID:", -1, "Static", 0x50020000, 6, 28, 48, 8
+    CONTROL "198", 1602, "Edit", 0x50810080, 56, 26, 40, 14
+    CONTROL "动画:", -1, "Static", 0x50020000, 104, 28, 26, 8
+    CONTROL "0", 1603, "ComboBox", 0x50210102, 132, 24, 152, 160
+    CONTROL "解析", 1604, "Button", 0x50010001, 294, 24, 60, 14
+    CONTROL "0", 1605, "ListBox", 0x50A10103, 6, 44, 170, 190
+    CONTROL "0", 1606, "Edit", 0x508108C4, 180, 44, 174, 190
+    CONTROL "关闭", 2, "Button", 0x50010000, 300, 240, 54, 14
+END
+

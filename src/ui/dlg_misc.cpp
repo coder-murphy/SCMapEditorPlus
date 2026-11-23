@@ -1,12 +1,17 @@
 ﻿#include "ui/dlg_procs.h"
 
 #include <commdlg.h>
+#include <cwchar>
 #include <string>
+#include <vector>
 
+#include "app/app_settings.h"
+#include "archive/mpq_archive.h"
 #include "common/log.h"
 #include "map/map_document.h"
 #include "res/control_ids.h"
 #include "ui/dlg_common.h"
+#include "units/iscript.h"
 
 namespace scmd {
 
@@ -251,6 +256,173 @@ INT_PTR CALLBACK ProcMpqList(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
                 }
                 case IDC_D167_1:
                 case IDC_D167_1059:
+                    ::EndDialog(dlg, IDCANCEL);
+                    return TRUE;
+                default:
+                    break;
+            }
+            break;
+        case WM_CLOSE:
+            ::EndDialog(dlg, IDCANCEL);
+            return TRUE;
+        default:
+            break;
+    }
+    return FALSE;
+}
+
+// 205：Iscript / Grp 调试（解析 iscript.bin，展示动画操作码；GRP 仅校验头）
+namespace {
+
+IscriptFile g_iscript;
+std::wstring g_iscriptLabel;
+
+std::wstring ExeDir() {
+    wchar_t path[MAX_PATH] = L"";
+    ::GetModuleFileNameW(nullptr, path, MAX_PATH);
+    wchar_t* slash = std::wcsrchr(path, L'\\');
+    if (slash) *slash = L'\0';
+    return path;
+}
+
+// 依次尝试：星际目录 / exe 目录 / 工程根的 scripts\iscript.bin，再从 StarDat.mpq 读取
+bool LoadIscriptAuto(std::wstring& label) {
+    std::vector<std::wstring> dirs;
+    const std::wstring gameDir = AppSettings::Instance().gameDir();
+    if (!gameDir.empty()) dirs.push_back(gameDir);
+    dirs.push_back(ExeDir());
+    dirs.push_back(ExeDir() + L"\\..\\..\\..");
+
+    for (const std::wstring& dir : dirs) {
+        const std::wstring file = dir + L"\\scripts\\iscript.bin";
+        if (::GetFileAttributesW(file.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+        if (g_iscript.Load(file)) {
+            label = file;
+            return true;
+        }
+    }
+    for (const std::wstring& dir : dirs) {
+        const std::wstring candidates[] = {dir + L"\\mpq\\StarDat.mpq", dir + L"\\StarDat.mpq"};
+        for (const std::wstring& mpqPath : candidates) {
+            if (::GetFileAttributesW(mpqPath.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+            MpqArchive mpq;
+            Buffer data;
+            if (mpq.Open(mpqPath) && mpq.ReadFile("scripts\\iscript.bin", data) &&
+                g_iscript.Parse(data)) {
+                label = mpqPath + L"  (scripts\\iscript.bin)";
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void ShowIscriptAnimation(HWND dlg, const IscriptHeader* header) {
+    HWND list = ::GetDlgItem(dlg, IDC_ISCRIPT_LIST);
+    ::SendMessageW(list, LB_RESETCONTENT, 0, 0);
+    if (!header) return;
+    HWND combo = ::GetDlgItem(dlg, IDC_ISCRIPT_ANIM);
+    const int sel = static_cast<int>(::SendMessageW(combo, CB_GETCURSEL, 0, 0));
+    if (sel == CB_ERR) return;
+    const LRESULT data = ::SendMessageW(combo, CB_GETITEMDATA, static_cast<WPARAM>(sel), 0);
+    if (data == CB_ERR) return;
+
+    std::vector<IscriptInstruction> instructions;
+    if (!g_iscript.Disassemble(*header, static_cast<int>(data), instructions)) return;
+    for (const IscriptInstruction& ins : instructions) {
+        wchar_t line[256];
+        int used = ::wsprintfW(line, L"%04X  %-18hs", static_cast<unsigned>(ins.offset),
+                               IscriptFile::OpcodeName(ins.opcode));
+        for (u8 b : ins.operands) {
+            if (used > 200) break;
+            used += ::wsprintfW(line + used, L" %02X", b);
+        }
+        ListAddString(dlg, IDC_ISCRIPT_LIST, line);
+    }
+}
+
+void RefreshIscriptDialog(HWND dlg) {
+    HWND combo = ::GetDlgItem(dlg, IDC_ISCRIPT_ANIM);
+    ::SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+    ::SendMessageW(::GetDlgItem(dlg, IDC_ISCRIPT_LIST), LB_RESETCONTENT, 0, 0);
+    ::SetDlgItemTextW(dlg, IDC_ISCRIPT_PATH, g_iscriptLabel.c_str());
+    if (!g_iscript.loaded()) {
+        ::SetDlgItemTextW(dlg, IDC_ISCRIPT_SUMMARY,
+                          L"未找到 iscript.bin。\r\n"
+                          L"可用「载入...」选择文件，或在选项 → 155 中设置星际目录。\r\n");
+        return;
+    }
+    const u16 id = static_cast<u16>(ReadClampedInt(dlg, IDC_ISCRIPT_ID, 198, 0, 65535));
+    const IscriptHeader* header = g_iscript.Find(id);
+    if (!header) {
+        wchar_t msg[128];
+        ::wsprintfW(msg, L"未找到 Iscript ID %u。\r\n", static_cast<unsigned>(id));
+        ::SetDlgItemTextW(dlg, IDC_ISCRIPT_SUMMARY, msg);
+        return;
+    }
+
+    int present = 0;
+    for (int i = 0; i < static_cast<int>(header->animOffsets.size()); i++) {
+        if (header->animOffsets[static_cast<std::size_t>(i)] == 0) continue;
+        const std::wstring name = WidenName(IscriptFile::AnimationName(i));
+        const LRESULT idx = ::SendMessageW(combo, CB_ADDSTRING, 0,
+                                           reinterpret_cast<LPARAM>(name.c_str()));
+        if (idx != CB_ERR) {
+            ::SendMessageW(combo, CB_SETITEMDATA, static_cast<WPARAM>(idx),
+                           static_cast<LPARAM>(i));
+            present++;
+        }
+    }
+    if (present > 0) ::SendMessageW(combo, CB_SETCURSEL, 0, 0);
+
+    wchar_t summary[640];
+    ::wsprintfW(summary,
+                L"文件: %ls\r\n大小: %u 字节\r\n条目: %u\r\n"
+                L"ID: %u\r\n类型: %u\r\n动画槽: %u（可用 %d）\r\n",
+                g_iscriptLabel.c_str(), static_cast<unsigned>(g_iscript.size()),
+                static_cast<unsigned>(g_iscript.entries().size()),
+                static_cast<unsigned>(id), static_cast<unsigned>(header->type),
+                static_cast<unsigned>(header->animOffsets.size()), present);
+    ::SetDlgItemTextW(dlg, IDC_ISCRIPT_SUMMARY, summary);
+    ShowIscriptAnimation(dlg, header);
+}
+
+}  // namespace
+
+// 205：Iscript / Grp 调试
+INT_PTR CALLBACK ProcIscriptGrpDebug(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
+    switch (msg) {
+        case WM_INITDIALOG:
+            CenterDialog(dlg);
+            ::SetDlgItemTextW(dlg, IDC_ISCRIPT_ID, L"198");
+            if (!LoadIscriptAuto(g_iscriptLabel)) g_iscriptLabel.clear();
+            RefreshIscriptDialog(dlg);
+            return TRUE;
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDC_ISCRIPT_LOAD: {
+                    const std::wstring path = PickOpenFile(dlg);
+                    if (path.empty()) return TRUE;
+                    if (!g_iscript.Load(path)) {
+                        ::MessageBoxW(dlg, L"iscript.bin 解析失败。", L"Iscript / Grp 调试",
+                                      MB_ICONERROR);
+                        return TRUE;
+                    }
+                    g_iscriptLabel = path;
+                    RefreshIscriptDialog(dlg);
+                    return TRUE;
+                }
+                case IDC_ISCRIPT_PARSE:
+                    RefreshIscriptDialog(dlg);
+                    return TRUE;
+                case IDC_ISCRIPT_ANIM:
+                    if (HIWORD(wParam) == CBN_SELCHANGE) {
+                        const u16 id = static_cast<u16>(
+                            ReadClampedInt(dlg, IDC_ISCRIPT_ID, 198, 0, 65535));
+                        ShowIscriptAnimation(dlg, g_iscript.Find(id));
+                    }
+                    return TRUE;
+                case 2:
                     ::EndDialog(dlg, IDCANCEL);
                     return TRUE;
                 default:

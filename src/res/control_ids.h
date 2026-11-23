@@ -385,3 +385,12 @@
 #define IDC_D199_TEXT  1511       // Edit     文本
 #define IDC_D199_UPDATE  1512     // Button   更新文本
 #define IDC_D199_CLOSE  1513      // Button   关闭
+
+// ── 205  Iscript / Grp 调试（本工程新增）──
+#define IDC_ISCRIPT_PATH    1600  // Edit     iscript 来源
+#define IDC_ISCRIPT_LOAD    1601  // Button   载入...
+#define IDC_ISCRIPT_ID      1602  // Edit     Iscript ID
+#define IDC_ISCRIPT_ANIM    1603  // ComboBox 动画
+#define IDC_ISCRIPT_PARSE   1604  // Button   解析
+#define IDC_ISCRIPT_LIST    1605  // ListBox  操作码
+#define IDC_ISCRIPT_SUMMARY 1606  // Edit     摘要
