@@ -193,6 +193,16 @@ bool FindSubmenuPosition(HMENU menu, HMENU target, HMENU& parent, int& position)
     return false;
 }
 
+// 枚举本程序的全部主窗口（含其他进程实例），用于排列/最小化
+BOOL CALLBACK CollectAppWindows(HWND hwnd, LPARAM param) {
+    wchar_t cls[64] = L"";
+    if (::GetClassNameW(hwnd, cls, 64) == 0) return TRUE;
+    if (::lstrcmpW(cls, kWindowClass) != 0) return TRUE;
+    if (!::IsWindowVisible(hwnd)) return TRUE;
+    reinterpret_cast<std::vector<HWND>*>(param)->push_back(hwnd);
+    return TRUE;
+}
+
 // 比较两份 MTXM，返回变化瓦片的包围盒；没有任何变化时 any=false
 bool DiffTileRect(const Buffer& before, const Buffer& after, int width, int height,
                   int& x0, int& y0, int& x1, int& y1, bool& any) {
@@ -873,6 +883,65 @@ void MainWindow::AutoPlaceCliffs() {
     map_.MarkDirty();
     CommitEdit(L"自动铺设崖壁");
     ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+void MainWindow::NewWindow() {
+    wchar_t exe[MAX_PATH] = L"";
+    if (::GetModuleFileNameW(nullptr, exe, MAX_PATH) == 0) {
+        Output(0, L"新建窗口失败：无法取得程序路径");
+        return;
+    }
+    STARTUPINFOW si = {};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi = {};
+    if (::CreateProcessW(exe, nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+        ::CloseHandle(pi.hThread);
+        ::CloseHandle(pi.hProcess);
+        Output(2, L"已新建窗口");
+    } else {
+        wchar_t msg[128];
+        ::wsprintfW(msg, L"新建窗口失败（错误 %lu）", ::GetLastError());
+        Output(0, msg);
+    }
+}
+
+void MainWindow::MinimizeWindows() {
+    std::vector<HWND> windows;
+    ::EnumWindows(&CollectAppWindows, reinterpret_cast<LPARAM>(&windows));
+    for (HWND w : windows) ::ShowWindow(w, SW_MINIMIZE);
+    Output(2, L"窗口已最小化");
+}
+
+void MainWindow::ArrangeWindows(bool horizontal) {
+    std::vector<HWND> windows;
+    ::EnumWindows(&CollectAppWindows, reinterpret_cast<LPARAM>(&windows));
+    if (windows.empty()) return;
+
+    RECT work = {};
+    ::SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+    const int totalW = static_cast<int>(work.right - work.left);
+    const int totalH = static_cast<int>(work.bottom - work.top);
+    const int count = static_cast<int>(windows.size());
+
+    for (int i = 0; i < count; i++) {
+        ::ShowWindow(windows[static_cast<std::size_t>(i)], SW_RESTORE);
+        if (horizontal) {
+            // 左右分栏
+            const int w = totalW / count;
+            const int x = static_cast<int>(work.left) + i * w;
+            const int width = (i == count - 1) ? static_cast<int>(work.right) - x : w;
+            ::MoveWindow(windows[static_cast<std::size_t>(i)], x, static_cast<int>(work.top),
+                         width, totalH, TRUE);
+        } else {
+            // 上下分行
+            const int h = totalH / count;
+            const int y = static_cast<int>(work.top) + i * h;
+            const int height = (i == count - 1) ? static_cast<int>(work.bottom) - y : h;
+            ::MoveWindow(windows[static_cast<std::size_t>(i)], static_cast<int>(work.left), y,
+                         totalW, height, TRUE);
+        }
+    }
+    Output(2, horizontal ? L"窗口已水平排列" : L"窗口已垂直排列");
 }
 
 void MainWindow::SetDefaultMapEditor() {
@@ -2878,6 +2947,21 @@ void MainWindow::OnCommand(int id) {
         case kOutputClear:
             outputLines_.clear();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kWindowNew:
+            NewWindow();
+            break;
+        case kWindowMinimize:
+            MinimizeWindows();
+            break;
+        case kWindowTileHorizontal:
+            ArrangeWindows(true);
+            break;
+        case kWindowTileVertical:
+            ArrangeWindows(false);
+            break;
+        case kWindowClose:
+            ::PostMessageW(hwnd_, WM_CLOSE, 0, 0);
             break;
         case kWindowTerrain:
             InvalidateRect(hwnd_, nullptr, FALSE);   // 地形视图即主视图，重绘即可

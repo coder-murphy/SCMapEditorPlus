@@ -248,7 +248,7 @@ reopened=1 sizeOk=1 painted=16/16 closed=1 freshOk=1
 layerInit=1 layerUnits=1 layerLoc=1 layerBack=1
 gridLarge=1 gridOff=1 gridBack=1 gridRed=1
 unitsOff=1 unitsOn=1 fogOn=1 zoom=1
-minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1 output=1 cache=1
+minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1 output=1 cache=1 window=1
 ```
 
 
@@ -483,6 +483,15 @@ minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1 output=1 cache=1
 - 编辑层子菜单里的“显示战争迷雾”（0x80CE）与显示选项的 0x8113 同义，勾选状态同步。
 - 左键点击小地图可把主视图定位到对应位置；回归 `--menu-cmd-test` 的 `miniNav`。
 
+## 多窗口（P1，近似 MDI）
+
+- 窗口 → 新建窗口（0x80ED）：以当前 exe 启动一个新进程，两窗口各自打开/编辑地图。
+- 微型窗口（0x80EE）、水平排列（0x80EF）、垂直排列（0x80F0）：
+  用 `EnumWindows` 收集窗口类为 `SCMDPlusMainWindow` 的可见窗口后统一最小化/重排。
+- 关闭窗口（0x80F1）：关闭当前实例，先走 `MaybeSave()`。
+- 说明：这是多进程近似实现，不是经典 MDI 子窗口；进程间不共享撤销栈与剪贴板。
+- 回归：`--menu-cmd-test` 的 `window`（单窗口下排列命令安全执行）。
+
 ## 地图显示比率（P0 收尾）
 
 - 选项 → 地图显示比率（0x8119/0x8118/0x8117/0x8116/0x80D8/0x80DD/0x80D9/0x80DB/0x80DA）：
@@ -520,6 +529,7 @@ minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1 output=1 cache=1
 | 窗口 → 刷子窗口 | 0x8114 | 地形刷调色板窗口（见 `doc/03-terrain/tileset-pipeline.md`） |
 | 窗口 → 单位面板 | 0x8FFD | 195 单位放置参数（类型/玩家/资源）→ 下次放置使用；本工程新增 |
 | 窗口 → SP单位窗口 | 0x80A4 | 164 SP 单位属性（THG2 列表 + flags）；原资源置灰已启用 |
+| 窗口 → 新建/微型/水平/垂直/关闭 | 0x80ED..0x80F1 | 多进程窗口：新建自身副本；EnumWindows 枚举同类窗口做最小化/排列；关闭当前实例 |
 | 剧本设置 → 势力设定 | 0x8042 | 196 玩家/势力设定：12 槽控制者/种族、8 玩家队伍/颜色、4 Force 名称与标志 |
 | 剧本设置 → 升级/科技设置 | 0x8043/0x8045 | 197 升级/科技限制：原版 UPGR/PTEC 或资料片 PUPx/PTEx |
 | 剧本设置 → 编辑声音 | 0x8047 | 198 WAV 512 槽（STR 路径） |

@@ -121,6 +121,9 @@ private:
     void GotoStartPosition();
     void SaveMapImage();
     void AutoPlaceCliffs();
+    void NewWindow();
+    void MinimizeWindows();
+    void ArrangeWindows(bool horizontal);
     void SetDefaultMapEditor();
     void CreateStartMenuShortcut();
 

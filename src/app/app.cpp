@@ -65,6 +65,34 @@ std::wstring ParseMpqArg() {
     return path;
 }
 
+// 调试开关：SCMDPlus.exe --mpq=<档案> --mpq-extract=<条目> --extract-to=<输出>
+// 仅用于逆向取数（如 arr\units.dat），不写 settings、不建窗口。
+std::wstring ParseMpqExtractArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring entry;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--mpq-extract=", 14) == 0) entry = argv[i] + 14;
+        }
+        ::LocalFree(argv);
+    }
+    return entry;
+}
+
+std::wstring ParseExtractToArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--extract-to=", 13) == 0) path = argv[i] + 13;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
 // 调试开关：SCMDPlus.exe --open="<地图>" 启动后直接载入地图（窗口保持打开）
 std::wstring ParseOpenArg() {
     int argc = 0;
@@ -134,6 +162,7 @@ bool IsHeadlessRun() {
                 std::wcsncmp(a, L"--dump-render=", 14) == 0 ||
                 std::wcsncmp(a, L"--dialog=", 9) == 0 ||
                 std::wcsncmp(a, L"--extract-ts=", 13) == 0 ||
+                std::wcsncmp(a, L"--mpq-extract=", 14) == 0 ||
                 std::wcsncmp(a, L"--mpq=", 6) == 0) {
                 headless = true;
             }
@@ -1382,13 +1411,18 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
                      win.scrollY() > 0;
     }
 
+    // 窗口排列（单窗口也应安全；不测试新建/关闭）
+    cmd(0x80EF);   // 水平排列
+    cmd(0x80F0);   // 垂直排列
+    const bool windowOk = ::IsWindow(hwnd) != 0;
+
     wchar_t msg[512];
     ::wsprintfW(msg,
         L"layerInit=%d\nlayerUnits=%d\nlayerLoc=%d\nlayerBack=%d\n"
         L"gridLarge=%d\ngridOff=%d\ngridBack=%d\ngridRed=%d\n"
         L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\nzoom=%d\nminimapOff=%d\nminimapOn=%d\n"
         L"fogAlias=%d\nallColors=%d\neffects=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n"
-        L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\noutput=%d\ncache=%d\n",
+        L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\noutput=%d\ncache=%d\nwindow=%d\n",
         layerInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0, layerBack ? 1 : 0,
         gridLarge ? 1 : 0, gridOff ? 1 : 0, gridBack ? 1 : 0, gridRed ? 1 : 0,
         unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0, zoomOk ? 1 : 0,
@@ -1396,14 +1430,14 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         effectsOk ? 1 : 0,
         debugOn ? 1 : 0, (debugData1 && debugData2) ? 1 : 0, overlapOn ? 1 : 0,
         imageSizeOn ? 1 : 0, compareOn ? 1 : 0, conflictOn ? 1 : 0, minimapNav ? 1 : 0,
-        (soundOff && soundOn) ? 1 : 0, outputOk ? 1 : 0, cacheOk ? 1 : 0);
+        (soundOff && soundOn) ? 1 : 0, outputOk ? 1 : 0, cacheOk ? 1 : 0, windowOk ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = layerInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
                     gridBack && gridRed && unitsOff && unitsOn && fogOn && zoomOk &&
                     minimapOff && minimapOn && fogAlias && allColorsOn && effectsOk && debugOn &&
                     debugData1 && debugData2 && overlapOn && imageSizeOn && compareOn &&
-                    conflictOn && minimapNav && soundOff && soundOn && outputOk && cacheOk;
+                    conflictOn && minimapNav && soundOff && soundOn && outputOk && cacheOk && windowOk;
     return ok ? 0 : 2;
 }
 
@@ -3111,6 +3145,36 @@ void WriteDiag(const std::wstring& text) {
     ::CloseHandle(f);
 }
 
+// 从 MPQ 取出单个条目：--mpq=<档案> --mpq-extract=<条目> --extract-to=<输出>
+int RunMpqExtract(const std::wstring& archivePath, const std::wstring& entryWide,
+                  const std::wstring& outPath) {
+    if (archivePath.empty() || entryWide.empty() || outPath.empty()) {
+        WriteDiag(L"extract=FAIL args\n");
+        return 2;
+    }
+    std::string entry;
+    entry.reserve(entryWide.size());
+    for (wchar_t c : entryWide) entry.push_back(static_cast<char>(c & 0xFF));
+
+    MpqArchive mpq;
+    Buffer data;
+    if (!mpq.Open(archivePath) || !mpq.ReadFile(entry, data)) {
+        WriteDiag(L"extract=FAIL read\n");
+        return 2;
+    }
+    std::ofstream out(outPath.c_str(), std::ios::binary);
+    if (!out) {
+        WriteDiag(L"extract=FAIL write\n");
+        return 2;
+    }
+    out.write(reinterpret_cast<const char*>(data.data()),
+              static_cast<std::streamsize>(data.size()));
+    wchar_t msg[160];
+    ::wsprintfW(msg, L"extract=OK size=%u\n", static_cast<unsigned>(data.size()));
+    WriteDiag(msg);
+    return 0;
+}
+
 // 读取地图容器并输出自检信息：条目数、CHK 大小、DIM
 int RunMpqSelfTest(const std::wstring& path) {
     // 先做文件级诊断，区分"路径打不开"和"容器解析失败"
@@ -3535,6 +3599,13 @@ int App::Run(HINSTANCE hInstance) {
             ::DestroyWindow(mainWindow_.hwnd());
             return 2;
         }
+    }
+
+    // 单条目提取（逆向取数）
+    if (const std::wstring entry = ParseMpqExtractArg(); !entry.empty()) {
+        const int rc = RunMpqExtract(ParseMpqArg(), entry, ParseExtractToArg());
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
     }
 
     // 容器读取自检
