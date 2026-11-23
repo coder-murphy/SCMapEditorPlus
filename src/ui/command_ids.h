@@ -143,6 +143,20 @@ enum CommandId : int {
     kDebugClearScreen = 0x80E2, // 清除屏幕
     kDebugImageSize = 0x810A,   // 显示图像大小
 
+    // 选项 → 输出
+    kOutputShow = 0x80F3,       // 显示输出面板
+    kOutputFont8 = 0x805A,      // .. 16 = 0x805E
+    kOutputFont10 = 0x805B,
+    kOutputFont12 = 0x805C,
+    kOutputFont14 = 0x805D,
+    kOutputFont16 = 0x805E,
+    kOutputVerbOff = 0x8067,    // 关闭显示
+    kOutputVerbSimple = 0x8065, // 简化模式
+    kOutputVerbNormal = 0x8062, // 正常模式
+    kOutputVerbHigh = 0x8063,   // 高级模式
+    kOutputVerbDebug = 0x8064,  // 调试模式
+    kOutputClear = 0x8068,      // 清除当前信息
+
     kHelpAbout = 0x0068,        // 帮助 → 关于...
 
     // 本工程自有的调试入口（原程序无此菜单项，运行时追加）

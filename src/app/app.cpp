@@ -1319,6 +1319,20 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     const bool soundOff = !ItemChecked(hwnd, 0x8072);
     cmd(0x8072);
     const bool soundOn = ItemChecked(hwnd, 0x8072);
+
+    // 选项 → 输出：显示开关 / 字体大小 / 提示详细度
+    cmd(0x80F3);
+    const bool outputOff = !ItemChecked(hwnd, 0x80F3);
+    cmd(0x80F3);
+    cmd(0x805A);   // 8 号字体
+    const bool font8 = ItemChecked(hwnd, 0x805A) && !ItemChecked(hwnd, 0x805C);
+    cmd(0x805C);   // 还原 12 号
+    cmd(0x8063);   // 高级模式
+    const bool verbHigh = ItemChecked(hwnd, 0x8063) && !ItemChecked(hwnd, 0x8062);
+    cmd(0x8062);   // 还原正常模式
+    cmd(0x8068);   // 清除当前信息
+    const bool outputOk = outputOff && ItemChecked(hwnd, 0x80F3) && font8 && verbHigh;
+
     cmd(0x80DE);   // 关闭调试
 
     // 地图显示比率（需要已打开地图；--menu-cmd-test 可配合 --open）
@@ -1346,7 +1360,7 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         L"gridLarge=%d\ngridOff=%d\ngridBack=%d\ngridRed=%d\n"
         L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\nzoom=%d\nminimapOff=%d\nminimapOn=%d\n"
         L"fogAlias=%d\nallColors=%d\neffects=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n"
-        L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\n",
+        L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\noutput=%d\n",
         layerInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0, layerBack ? 1 : 0,
         gridLarge ? 1 : 0, gridOff ? 1 : 0, gridBack ? 1 : 0, gridRed ? 1 : 0,
         unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0, zoomOk ? 1 : 0,
@@ -1354,14 +1368,14 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         effectsOk ? 1 : 0,
         debugOn ? 1 : 0, (debugData1 && debugData2) ? 1 : 0, overlapOn ? 1 : 0,
         imageSizeOn ? 1 : 0, compareOn ? 1 : 0, conflictOn ? 1 : 0, minimapNav ? 1 : 0,
-        (soundOff && soundOn) ? 1 : 0);
+        (soundOff && soundOn) ? 1 : 0, outputOk ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = layerInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
                     gridBack && gridRed && unitsOff && unitsOn && fogOn && zoomOk &&
                     minimapOff && minimapOn && fogAlias && allColorsOn && effectsOk && debugOn &&
                     debugData1 && debugData2 && overlapOn && imageSizeOn && compareOn &&
-                    conflictOn && minimapNav && soundOff && soundOn;
+                    conflictOn && minimapNav && soundOff && soundOn && outputOk;
     return ok ? 0 : 2;
 }
 

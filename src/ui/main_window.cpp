@@ -121,6 +121,23 @@ HMENU FindMenuContaining(HMENU menu, int id) {
     return nullptr;
 }
 
+// 找到 target 子菜单在父菜单中的位置（用于解除整个 POPUP 的 GRAYED）
+bool FindSubmenuPosition(HMENU menu, HMENU target, HMENU& parent, int& position) {
+    if (!menu) return false;
+    const int count = ::GetMenuItemCount(menu);
+    for (int i = 0; i < count; i++) {
+        HMENU sub = ::GetSubMenu(menu, i);
+        if (!sub) continue;
+        if (sub == target) {
+            parent = menu;
+            position = i;
+            return true;
+        }
+        if (FindSubmenuPosition(sub, target, parent, position)) return true;
+    }
+    return false;
+}
+
 // 比较两份 MTXM，返回变化瓦片的包围盒；没有任何变化时 any=false
 bool DiffTileRect(const Buffer& before, const Buffer& after, int width, int height,
                   int& x0, int& y0, int& x1, int& y1, bool& any) {
@@ -254,6 +271,15 @@ bool MainWindow::Create(HINSTANCE hInstance) {
             ::AppendMenuW(debug, MF_SEPARATOR, 0, nullptr);
             ::AppendMenuW(debug, MF_STRING, kAutoEdgeCliffs, L"自动铺设崖壁");
         }
+        // 原资源把「字体大小」整个 POPUP 灰掉了，这里解除
+        if (HMENU fonts = FindMenuContaining(bar, kOutputFont8)) {
+            HMENU parent = nullptr;
+            int position = 0;
+            if (FindSubmenuPosition(bar, fonts, parent, position) && parent) {
+                ::EnableMenuItem(parent, static_cast<UINT>(position),
+                                 MF_BYPOSITION | MF_ENABLED);
+            }
+        }
     }
     SyncMenuChecks();
 
@@ -386,11 +412,17 @@ void MainWindow::UpdateScrollBars() {
 
 bool MainWindow::OpenMap(const std::wstring& path) {
     if (!map_.Open(path, tilesetDir_)) {
+        Output(0, L"打开地图失败: " + FileNameOf(path));
         ::MessageBoxW(hwnd_, L"无法打开该地图文件。", kWindowTitle, MB_ICONWARNING);
         return false;
     }
     mapPath_ = path;
     fileName_ = FileNameOf(path);
+    {
+        wchar_t msg[256];
+        ::wsprintfW(msg, L"打开地图: %ls  %dx%d", fileName_.c_str(), map_.width(), map_.height());
+        Output(2, msg);
+    }
     history_.Clear();
     editOpen_ = false;
     ClearSelection();
@@ -408,6 +440,11 @@ void MainWindow::NewMap() {
     if (LastDialogResult() != IDOK) return;
     const MapSizeParams& size = LastMapSize();
     if (!map_.CreateNew(size.width, size.height, 0, tilesetDir_)) return;
+    {
+        wchar_t msg[128];
+        ::wsprintfW(msg, L"新建地图: %dx%d", size.width, size.height);
+        Output(2, msg);
+    }
     mapPath_.clear();
     fileName_.clear();
     history_.Clear();
@@ -420,6 +457,7 @@ void MainWindow::NewMap() {
 
 void MainWindow::CloseMap() {
     if (!MaybeSave()) return;
+    if (map_.IsOpen()) Output(2, L"关闭地图: " + fileName_);
     map_.Close();
     mapPath_.clear();
     fileName_.clear();
@@ -444,11 +482,18 @@ bool MainWindow::SaveMap(bool saveAs) {
         if (settings.backupEnabled()) MakeBackup(path, settings.backupCount());
     }
     if (!map_.Save(path)) {
+        Output(0, L"保存地图失败: " + FileNameOf(path));
         ::MessageBoxW(hwnd_, L"保存地图失败。", kWindowTitle, MB_ICONWARNING);
         return false;
     }
     mapPath_ = path;
     fileName_ = FileNameOf(path);
+    {
+        wchar_t msg[256];
+        ::wsprintfW(msg, L"保存地图: %ls  (%ls)", fileName_.c_str(),
+                    saveAs ? L"另存为" : L"覆盖");
+        Output(2, msg);
+    }
     lastBackupTick_ = ::GetTickCount64();
     UpdateTitle();
     return true;
@@ -1421,6 +1466,26 @@ void MainWindow::SyncMenuChecks() {
     CheckOnly(bar, kDebugDataIds, 3,
               debugMode_ ? kDebugDataIds[debugDataMode_ % 3] : 0);
 
+    // 输出面板：显示 / 字体大小 / 提示详细度
+    if (HMENU menu = FindMenuContaining(bar, kOutputShow)) {
+        ::CheckMenuItem(menu, kOutputShow,
+                        MF_BYCOMMAND | (outputVisible_ ? MF_CHECKED : MF_UNCHECKED));
+    }
+    {
+        const int kFontIds[] = {kOutputFont8, kOutputFont10, kOutputFont12, kOutputFont14,
+                                kOutputFont16};
+        const int kFontPoints[] = {8, 10, 12, 14, 16};
+        int checkedFont = kOutputFont12;
+        for (int i = 0; i < 5; i++) {
+            if (kFontPoints[i] == outputFontPt_) checkedFont = kFontIds[i];
+        }
+        CheckOnly(bar, kFontIds, 5, checkedFont);
+
+        const int kVerbIds[] = {kOutputVerbOff, kOutputVerbSimple, kOutputVerbNormal,
+                                kOutputVerbHigh, kOutputVerbDebug};
+        CheckOnly(bar, kVerbIds, 5, kVerbIds[std::clamp(outputVerbosity_, 0, 4)]);
+    }
+
     struct Toggle { int id; bool on; };
     const Toggle toggles[] = {
         {kDispAllColors, showAllColors_}, {kDispUnits, showUnits_},
@@ -1682,6 +1747,7 @@ void MainWindow::PaintTileToBuffer(int tx, int ty, u16 value) {
 }
 
 void MainWindow::OnLButtonDown(int mx, int my) {
+    if (PointInOutputPanel(mx, my)) return;
     if (ClickMinimapAt(mx, my)) return;
 
     int tx = -1, ty = -1;
@@ -1733,6 +1799,7 @@ void MainWindow::OnLButtonDown(int mx, int my) {
 }
 
 void MainWindow::OnLButtonDblClk(int mx, int my) {
+    if (PointInOutputPanel(mx, my)) return;
     int tx = -1, ty = -1;
     TileCoordsFromClient(mx, my, tx, ty);
     if (tx < 0) return;
@@ -1778,6 +1845,7 @@ void MainWindow::OnMouseMove(int mx, int my, bool leftDown) {
 }
 
 void MainWindow::OnRButtonDown(int mx, int my) {
+    if (PointInOutputPanel(mx, my)) return;
     int tx = -1, ty = -1;
     TileCoordsFromClient(mx, my, tx, ty);
     if (tx < 0) return;
@@ -1870,8 +1938,7 @@ void MainWindow::DrawDeathMarks(HDC dc, const RECT& client) const {
     ::DeleteObject(pen);
 }
 
-int MainWindow::RemoveUnitsAtTileWithFx(int tx, int ty) {
-    std::vector<std::pair<int, int>> removed;
+int MainWindow::RemoveUnitsAtTileWithFx(int tx, int ty) {    std::vector<std::pair<int, int>> removed;
     for (const auto& u : map_.units()) {
         const int ux = static_cast<int>(u.x) / kTilePixels;
         const int uy = static_cast<int>(u.y) / kTilePixels;
@@ -1883,6 +1950,84 @@ int MainWindow::RemoveUnitsAtTileWithFx(int tx, int ty) {
         for (const auto& p : removed) deathMarks_.push_back({p.first, p.second, now});
     }
     return count;
+}
+
+void MainWindow::Output(int severity, const std::wstring& text) {
+    if (outputVerbosity_ <= 0 || severity > outputVerbosity_) return;
+    outputLines_.push_back({text, severity});
+    constexpr std::size_t kMaxLines = 500;
+    if (outputLines_.size() > kMaxLines) {
+        outputLines_.erase(outputLines_.begin(),
+                           outputLines_.begin() + (outputLines_.size() - kMaxLines));
+    }
+    if (outputVisible_ && hwnd_) ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+int MainWindow::OutputPanelHeight() const {
+    if (!outputVisible_ || outputVerbosity_ <= 0) return 0;
+    const int lineH = outputFontPt_ * 4 / 3;   // 96 DPI 近似字号
+    return lineH * 7 + 14;
+}
+
+bool MainWindow::PointInOutputPanel(int mx, int my) const {
+    const int h = OutputPanelHeight();
+    if (h <= 0 || !hwnd_) return false;
+    RECT rc;
+    ::GetClientRect(hwnd_, &rc);
+    return mx >= rc.left && mx < rc.right && my >= rc.bottom - h && my < rc.bottom;
+}
+
+void MainWindow::DrawOutputPanel(HDC dc, const RECT& client) const {
+    const int h = OutputPanelHeight();
+    if (h <= 0) return;
+    const int clientH = static_cast<int>(client.bottom - client.top);
+    const int panelH = std::min(h, std::max(0, clientH) / 3);
+    if (panelH <= 0) return;
+    const int top = client.bottom - panelH;
+
+    RECT bg = {client.left, top, client.right, client.bottom};
+    HBRUSH back = ::CreateSolidBrush(RGB(24, 24, 24));
+    ::FillRect(dc, &bg, back);
+    ::DeleteObject(back);
+
+    HPEN border = ::CreatePen(PS_SOLID, 1, RGB(96, 96, 96));
+    HGDIOBJ oldPen = ::SelectObject(dc, border);
+    ::MoveToEx(dc, client.left, top, nullptr);
+    ::LineTo(dc, client.right, top);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(border);
+
+    const int dpi = ::GetDeviceCaps(dc, LOGPIXELSY);
+    HFONT font = ::CreateFontW(-::MulDiv(outputFontPt_, dpi, 72), 0, 0, 0, FW_NORMAL, FALSE,
+                               FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                               CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH,
+                               L"Microsoft YaHei");
+    HGDIOBJ oldFont = ::SelectObject(dc, font);
+    const int oldMode = ::SetBkMode(dc, TRANSPARENT);
+    const int lineH = outputFontPt_ * dpi / 72 + 2;
+    const int maxLines = std::max(0, (panelH - 8) / lineH);
+    const std::size_t total = outputLines_.size();
+    const std::size_t first =
+        total > static_cast<std::size_t>(maxLines) ? total - static_cast<std::size_t>(maxLines) : 0;
+    int y = top + 4;
+    for (std::size_t i = first; i < total; i++) {
+        const OutputLine& line = outputLines_[i];
+        COLORREF color = RGB(220, 220, 220);
+        switch (line.severity) {
+            case 0: color = RGB(255, 120, 120); break;
+            case 1: color = RGB(255, 200, 120); break;
+            case 3: color = RGB(160, 220, 255); break;
+            case 4: color = RGB(150, 150, 150); break;
+            default: break;
+        }
+        ::SetTextColor(dc, color);
+        RECT r = {client.left + 8, y, client.right - 8, y + lineH};
+        ::DrawTextW(dc, line.text.c_str(), -1, &r, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
+        y += lineH;
+    }
+    ::SetBkMode(dc, oldMode);
+    ::SelectObject(dc, oldFont);
+    ::DeleteObject(font);
 }
 
 void MainWindow::DrawOverlapMarkers(HDC dc, const RECT& client) const {
@@ -2163,6 +2308,7 @@ void MainWindow::Present(HDC dc, const RECT& client) {
 
     DrawMinimap(dc, client);
     DrawHud(dc);
+    DrawOutputPanel(dc, client);
 }
 
 void MainWindow::BeepWarning() const {
@@ -2629,6 +2775,44 @@ void MainWindow::OnCommand(int id) {
             AppSettings::Instance().Save();
             SyncMenuChecks();
             if (soundEnabled_) ::MessageBeep(MB_ICONASTERISK);
+            break;
+        // 选项 → 输出
+        case kOutputShow:
+            outputVisible_ = !outputVisible_;
+            SyncMenuChecks();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kOutputFont8:
+        case kOutputFont10:
+        case kOutputFont12:
+        case kOutputFont14:
+        case kOutputFont16: {
+            static const int kPoints[] = {8, 10, 12, 14, 16};
+            outputFontPt_ = kPoints[id - kOutputFont8];
+            SyncMenuChecks();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        }
+        case kOutputVerbOff:
+        case kOutputVerbSimple:
+        case kOutputVerbNormal:
+        case kOutputVerbHigh:
+        case kOutputVerbDebug: {
+            static const int kLevels[] = {0, 1, 2, 3, 4};
+            static const int kIds[] = {kOutputVerbOff, kOutputVerbSimple, kOutputVerbNormal,
+                                       kOutputVerbHigh, kOutputVerbDebug};
+            int level = 2;
+            for (int i = 0; i < 5; i++) {
+                if (kIds[i] == id) level = kLevels[i];
+            }
+            outputVerbosity_ = level;
+            SyncMenuChecks();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        }
+        case kOutputClear:
+            outputLines_.clear();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         case kWindowTerrain:
             InvalidateRect(hwnd_, nullptr, FALSE);   // 地形视图即主视图，重绘即可

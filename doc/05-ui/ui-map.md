@@ -248,7 +248,7 @@ reopened=1 sizeOk=1 painted=16/16 closed=1 freshOk=1
 layerInit=1 layerUnits=1 layerLoc=1 layerBack=1
 gridLarge=1 gridOff=1 gridBack=1 gridRed=1
 unitsOff=1 unitsOn=1 fogOn=1 zoom=1
-minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1
+minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1 output=1
 ```
 
 
@@ -429,7 +429,13 @@ minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1
 - 显示 CPU 测试数据（0x80F2）：调试行显示上次整图重建耗时（ms）。
 - 显示图像大小（0x810A）：HUD 追加位图尺寸与当前缩放。
 - 清除屏幕（0x80E2）：强制重绘。
-- 其余项（清除缓存 / Iscript / 输出面板）仍为占位。
+- 输出面板（选项 → 输出）：底部信息区，默认显示，最多占客户区 1/3 高。
+  - 显示（0x80F3）开关；字体大小 8/10/12/14/16（0x805A-E，原资源灰显已解除）。
+  - 提示详细度：关闭 / 简化 / 正常 / 高级 / 调试（0x8067/65/62/63/64），
+    按严重度过滤（错误 / 警告 / 普通 / 详细 / 调试）。
+  - 清除当前信息（0x8068）。打开/新建/保存/关闭地图会写入摘要。
+  - 面板区域拦截鼠标，避免误操作底层地图；回归 `--menu-cmd-test` 的 `output`。
+- 其余项（清除缓存 / Iscript）仍为占位。
 
 ## 重设地图大小（175）
 

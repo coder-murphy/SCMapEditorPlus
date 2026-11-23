@@ -153,6 +153,10 @@ private:
     void RefreshAfterHistory(const Buffer& oldTiles);
     void DrawUnits(HDC dc, const RECT& client) const;
     void DrawDeathMarks(HDC dc, const RECT& client) const;
+    void DrawOutputPanel(HDC dc, const RECT& client) const;
+    int OutputPanelHeight() const;
+    bool PointInOutputPanel(int mx, int my) const;
+    void Output(int severity, const std::wstring& text);
     int RemoveUnitsAtTileWithFx(int tx, int ty);
     void DrawHud(HDC dc) const;
     void DrawMinimap(HDC dc, const RECT& client) const;
@@ -212,6 +216,16 @@ private:
         ULONGLONG tick = 0;
     };
     std::vector<DeathMark> deathMarks_;   // 0x80F6：删除单位后的短暂 X 标记
+
+    // 选项 → 输出面板
+    struct OutputLine {
+        std::wstring text;
+        int severity = 2;   // 0 错误 / 1 警告 / 2 普通 / 3 详细 / 4 调试
+    };
+    std::vector<OutputLine> outputLines_;
+    bool outputVisible_ = true;
+    int outputFontPt_ = 12;
+    int outputVerbosity_ = 2;   // 0 关闭 / 1 简化 / 2 正常 / 3 高级 / 4 调试
     u16 brushTile_ = 0x0040;   // 默认：platform 甲板
     TerrainBrush brushPattern_;      // 当前刷子图案（1x1 即单格刷）
     std::vector<TerrainBrush> customBrushes_;   // 182 列表（进程内）
