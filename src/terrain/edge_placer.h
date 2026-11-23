@@ -11,8 +11,9 @@ namespace scmd {
 //   * 崖壁必须向虚空外侧压印，绝不可占用甲板，否则会切断 3 格宽的窄口
 class EdgePlacer {
 public:
-    // 以 walkable 掩码为准，把崖壁压印到 void 侧
-    void StampOutward(const Buffer& walkable, int width, int height, const Tileset& ts, Buffer& mtxm) const;
+    // 以 walkable 掩码为准，把崖壁压印到 void 侧；返回被改写的瓦片数。
+    int StampOutward(const Buffer& walkable, int width, int height, const Tileset& ts,
+                     Buffer& mtxm) const;
 };
 
 }  // namespace scmd

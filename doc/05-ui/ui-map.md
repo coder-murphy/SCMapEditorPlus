@@ -87,8 +87,10 @@
 - 每项按 4 字节对齐
 - 资源尾部有 2 460 字节英文调试菜单残留（本地化后未清理的死数据），解析到顶层闭合即停
 
-统计：**10 个顶层菜单 / 226 项 / 18 个分隔符**
-（文件 编辑 选项 显示选项 剧本设置 高级 触发 窗口 帮助 调试；226 含本工程新增的「单位面板」与「选择工具」）。
+统计：资源原始 **10 个顶层菜单 / 226 项 / 18 个分隔符**
+（文件 编辑 选项 显示选项 剧本设置 高级 触发 窗口 帮助 调试）。
+运行时还会追加：帮助 →「恢复的界面...」（0x8FFF）、调试 → 分隔符 +「自动铺设崖壁」（0x8FFE），
+`--menu-test` 统计的是 LoadMenu 的原始项，不含这两处追加。
 
 ### 命令 ID
 
@@ -105,7 +107,7 @@
 
 `command_ids.h` 已改用这些原值；菜单项全部导入（未实现的命令统一走
 `Log("[ui] command ...")`）。原菜单没有“恢复的界面”入口，运行时追加到「帮助」子菜单
-（0x8FFF，仅本工程调试用）。
+（0x8FFF，仅本工程调试用）；「调试」子菜单追加「自动铺设崖壁」（0x8FFE，仅本工程）。
 
 ### 加速键
 
@@ -246,7 +248,7 @@ reopened=1 sizeOk=1 painted=16/16 closed=1 freshOk=1
 layerInit=1 layerUnits=1 layerLoc=1 layerBack=1
 gridLarge=1 gridOff=1 gridBack=1 gridRed=1
 unitsOff=1 unitsOn=1 fogOn=1 zoom=1
-minimapOff=1 minimapOn=1 fogAlias=1 allColors=1
+minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1
 ```
 
 

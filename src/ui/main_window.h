@@ -120,6 +120,7 @@ private:
     int UnitIndexAtTile(int tx, int ty) const;
     void GotoStartPosition();
     void SaveMapImage();
+    void AutoPlaceCliffs();
     void SetDefaultMapEditor();
     void CreateStartMenuShortcut();
 

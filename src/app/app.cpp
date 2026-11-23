@@ -7,6 +7,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <queue>
 #include <string>
 #include <unordered_set>
 
@@ -22,6 +23,7 @@
 #include "map/map_document.h"
 #include "map/map_switches.h"
 #include "terrain/terrain_renderer.h"
+#include "terrain/edge_placer.h"
 #include "terrain/tileset_export.h"
 #include "chk/chk_section.h"
 
@@ -949,6 +951,116 @@ int RunMpqCompressTest(const std::wstring& outPath) {
                 smaller ? 1 : 0, textOk ? 1 : 0, noiseOk ? 1 : 0);
     WriteDiag(msg);
     return (smaller && textOk && noiseOk) ? 0 : 2;
+}
+
+// --edge-test：崖壁自动铺设回归（合成 Space 甲板 + 虚空，验证 1..3 圈与不侵占甲板）
+int RunEdgeTest(const std::wstring& tsDir) {
+    if (tsDir.empty()) {
+        WriteDiag(L"edge=FAIL no-ts\n");
+        return 2;
+    }
+    MapDocument doc;
+    if (!doc.CreateNew(32, 32, 1, tsDir) || !doc.hasTileset()) {
+        WriteDiag(L"edge=FAIL create\n");
+        return 2;
+    }
+    const Tileset& ts = doc.tileset();
+    u16 deck = 0;
+    u16 voidTile = 0;
+    bool haveDeck = false;
+    bool haveVoid = false;
+    for (int g = 0; g < ts.GroupCount(); g++) {
+        const u16 group = static_cast<u16>(g);
+        const u16 type = ts.Type(group);
+        if (!haveDeck && ts.IsWalkable(group) && type == 3) {
+            deck = static_cast<u16>(g << 4);
+            haveDeck = true;
+        }
+        if (!haveVoid && !ts.IsWalkable(group) && type == 2) {
+            voidTile = static_cast<u16>(g << 4);
+            haveVoid = true;
+        }
+    }
+    if (!haveDeck || !haveVoid) {
+        WriteDiag(L"edge=FAIL groups\n");
+        return 2;
+    }
+    doc.PaintRect(0, 0, doc.width() - 1, doc.height() - 1, voidTile);
+    doc.PaintRect(8, 8, 23, 23, deck);
+
+    const int w = doc.width();
+    const int h = doc.height();
+    const std::size_t count = static_cast<std::size_t>(w) * h;
+    const Buffer before = doc.tiles();
+    Buffer walkable(count, 0);
+    for (std::size_t i = 0; i < count; i++) {
+        const u16 v = static_cast<u16>(before[i * 2] | (before[i * 2 + 1] << 8));
+        walkable[i] = ts.IsWalkable(static_cast<u16>((v & 0x7FF0) >> 4)) ? 1 : 0;
+    }
+
+    Buffer stamped = before;
+    const int changed = EdgePlacer().StampOutward(walkable, w, h, ts, stamped);
+    Buffer repeat = stamped;
+    const int changedAgain = EdgePlacer().StampOutward(walkable, w, h, ts, repeat);
+
+    std::vector<int> dist(count, -1);
+    std::queue<int> queue;
+    for (std::size_t i = 0; i < count; i++) {
+        if (walkable[i]) {
+            dist[i] = 0;
+            queue.push(static_cast<int>(i));
+        }
+    }
+    const int nx[4] = {0, 1, 0, -1};
+    const int ny[4] = {-1, 0, 1, 0};
+    while (!queue.empty()) {
+        const int idx = queue.front();
+        queue.pop();
+        if (dist[static_cast<std::size_t>(idx)] >= 3) continue;
+        const int x = idx % w;
+        const int y = idx / w;
+        for (int k = 0; k < 4; k++) {
+            const int px = x + nx[k];
+            const int py = y + ny[k];
+            if (px < 0 || py < 0 || px >= w || py >= h) continue;
+            const std::size_t p = static_cast<std::size_t>(py) * w + px;
+            if (dist[p] >= 0) continue;
+            dist[p] = dist[static_cast<std::size_t>(idx)] + 1;
+            queue.push(static_cast<int>(p));
+        }
+    }
+
+    bool deckKept = true;
+    bool cliffOk = true;
+    bool ring1 = false;
+    bool ring2 = false;
+    bool ring3 = false;
+    for (std::size_t i = 0; i < count; i++) {
+        const u16 a = static_cast<u16>(before[i * 2] | (before[i * 2 + 1] << 8));
+        const u16 b = static_cast<u16>(stamped[i * 2] | (stamped[i * 2 + 1] << 8));
+        if (walkable[i]) {
+            if (a != b) deckKept = false;
+            continue;
+        }
+        if (a == b) continue;
+        const u16 group = static_cast<u16>((b & 0x7FF0) >> 4);
+        const u16 type = ts.Type(group);
+        if (ts.IsWalkable(group) || (type != 10 && type != 20)) cliffOk = false;
+        if (dist[i] == 1) ring1 = true;
+        else if (dist[i] == 2) ring2 = true;
+        else if (dist[i] == 3) ring3 = true;
+        else cliffOk = false;   // 只允许压印 1..3 圈
+    }
+
+    wchar_t msg[256];
+    ::wsprintfW(msg,
+                L"edge=1\nstamped=%d\nidempotent=%d\ndeckKept=%d\ncliffOk=%d\nrings=%d%d%d\n",
+                changed, changedAgain == 0 ? 1 : 0, deckKept ? 1 : 0, cliffOk ? 1 : 0,
+                ring1 ? 1 : 0, ring2 ? 1 : 0, ring3 ? 1 : 0);
+    WriteDiag(msg);
+    return (changed > 0 && changedAgain == 0 && deckKept && cliffOk && ring1 && ring2 && ring3)
+               ? 0
+               : 2;
 }
 
 // --trig-test=<输出scx>：触发语义回归（字段解析 + 条件/行动编辑 + 玩家开关 + 无损保存）
@@ -3154,6 +3266,13 @@ int App::Run(HINSTANCE hInstance) {
     // 启动视图状态恢复回归
     if (HasSwitchArg(L"--view-test")) {
         const int rc = RunViewTest(mainWindow_.hwnd(), mainWindow_);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 崖壁自动铺设回归（无头）
+    if (HasSwitchArg(L"--edge-test")) {
+        const int rc = RunEdgeTest(tsDir);
         ::DestroyWindow(mainWindow_.hwnd());
         return rc;
     }

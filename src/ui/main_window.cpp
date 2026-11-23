@@ -18,6 +18,7 @@
 #include "app/backups.h"
 #include "platform/file_dialog.h"
 #include "map/map_switches.h"
+#include "terrain/edge_placer.h"
 #include "res/resource.h"
 #include "ui/command_ids.h"
 #include "ui/dialog_registry.h"
@@ -247,6 +248,11 @@ bool MainWindow::Create(HINSTANCE hInstance) {
             if (HMENU menu = FindMenuContaining(bar, id)) {
                 ::EnableMenuItem(menu, id, MF_BYCOMMAND | MF_ENABLED);
             }
+        }
+        // 「调试」菜单追加本工程的崖壁自动铺设
+        if (HMENU debug = ::GetSubMenu(bar, 9)) {
+            ::AppendMenuW(debug, MF_SEPARATOR, 0, nullptr);
+            ::AppendMenuW(debug, MF_STRING, kAutoEdgeCliffs, L"自动铺设崖壁");
         }
     }
     SyncMenuChecks();
@@ -728,6 +734,43 @@ void MainWindow::SaveMapImage() {
         return;
     }
     Log(L"[ui] map image saved: %s (%dx%d)", path.c_str(), image.width, image.height);
+}
+
+void MainWindow::AutoPlaceCliffs() {
+    if (!map_.IsOpen() || !map_.hasTileset()) {
+        BeepWarning();
+        return;
+    }
+    const int width = map_.width();
+    const int height = map_.height();
+    const std::size_t count = static_cast<std::size_t>(width) * height;
+    const Buffer& tiles = map_.tiles();
+    if (tiles.size() < count * 2) {
+        BeepWarning();
+        return;
+    }
+
+    // 可行走掩码：CV5 组号 → 通行位
+    Buffer walkable(count, 0);
+    for (std::size_t i = 0; i < count; i++) {
+        const u16 value = static_cast<u16>(tiles[i * 2] | (tiles[i * 2 + 1] << 8));
+        const u16 group = static_cast<u16>((value & 0x7FF0) >> 4);
+        walkable[i] = map_.tileset().IsWalkable(group) ? 1 : 0;
+    }
+
+    BeginEdit();
+    Buffer stamped = tiles;
+    const int changed =
+        EdgePlacer().StampOutward(walkable, width, height, map_.tileset(), stamped);
+    if (changed <= 0) {
+        editOpen_ = false;
+        BeepWarning();
+        return;
+    }
+    map_.mutableTiles() = std::move(stamped);
+    map_.MarkDirty();
+    CommitEdit(L"自动铺设崖壁");
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void MainWindow::SetDefaultMapEditor() {
@@ -2808,6 +2851,9 @@ void MainWindow::OnCommand(int id) {
             break;
         case kDebugClearScreen:
             ::InvalidateRect(hwnd_, nullptr, TRUE);
+            break;
+        case kAutoEdgeCliffs:
+            AutoPlaceCliffs();
             break;
         case kDispAllColors:
         case kDispUnits:
