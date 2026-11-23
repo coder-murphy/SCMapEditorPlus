@@ -3,6 +3,8 @@
 
 // 从二进制导出的 25 个对话框（自动生成，勿手改）
 #include "dialogs.rc"
+// 原版内嵌默认地图数据（VCOD / TRIG），用途见 doc/00-reverse/resource-inventory.md
+#include "assets.rc"
 
 IDI_APP ICON "app.ico"
 // 103 号对话框的 SS_ICON 静态控件按字符串名 "130" 取图标

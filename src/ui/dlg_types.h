@@ -9,6 +9,7 @@ namespace scmd {
 struct MapSizeParams {
     int width = 64;
     int height = 64;
+    int triggerPreset = 1;   // 0=无 / 1=3 条默认触发 / 2=4 条默认触发
 };
 
 struct ResizeParams {

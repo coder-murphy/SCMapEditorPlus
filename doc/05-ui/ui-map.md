@@ -525,7 +525,7 @@ minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1 output=1 cache=1 windo
 
 | 菜单命令 | ID | 对话框 / 行为 |
 | --- | --- | --- |
-| 文件 → 新建 | 0x8005 | 169 新建地图（16..256，默认 64）→ `CreateNew` |
+| 文件 → 新建 | 0x8005 | 169 新建地图（16..256，默认 64；默认触发组 无/3/4 条）→ `CreateNew` |
 | 剧本设置 → 变更地图尺寸 | 0x8106 | 175 → `MapDocument::Resize`（MTXM 平移、DIM 更新、越界单位丢弃） |
 | 剧本设置 → 地图描述 | 0x8041 | 187 富文本，读写 STR[2] |
 | 剧本设置 → 编辑字符串字符串 | 0x8046 | 189，读写 STR[1]（地图名） |

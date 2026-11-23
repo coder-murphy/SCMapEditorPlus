@@ -979,17 +979,40 @@ int RunFileTest(const std::wstring& outPath) {
     const bool freshOk = fresh.CreateNew(64, 64, 0, std::wstring()) && fresh.IsOpen() &&
                          fresh.path().empty();
 
-    wchar_t msg[512];
+    // 默认段：VCOD 1040 B；TRIG 预设 1/2 分别为 3/4 条，0 为不写
+    auto sectionSize = [](const MapDocument& d, const char* name) -> int {
+        const Buffer* b = d.chk().Find(name);
+        return b ? static_cast<int>(b->size()) : -1;
+    };
+    const int vcodSize = sectionSize(fresh, "VCOD");
+    const int trig3Size = sectionSize(fresh, "TRIG");
+    const int trig3Blocks = static_cast<int>(fresh.triggers().BlockCount());
+
+    MapDocument noTrig;
+    const bool preset0Created = noTrig.CreateNew(32, 32, 0, std::wstring(), 0);
+    const bool preset0Ok = preset0Created && sectionSize(noTrig, "VCOD") == 1040 &&
+                           sectionSize(noTrig, "TRIG") == -1;
+
+    MapDocument fourTrig;
+    const bool preset2Created = fourTrig.CreateNew(32, 32, 0, std::wstring(), 2);
+    const int trig4Size = sectionSize(fourTrig, "TRIG");
+    const int trig4Blocks = static_cast<int>(fourTrig.triggers().BlockCount());
+
+    wchar_t msg[640];
     ::wsprintfW(msg,
         L"created=%d\ndirtyNew=%d\nunnamed=%d\nsaved=%d\ncleanAfterSave=%d\n"
-        L"pathSaved=%d\nreopened=%d\nsizeOk=%d\npainted=%d/16\nclosed=%d\nfreshOk=%d\n",
+        L"pathSaved=%d\nreopened=%d\nsizeOk=%d\npainted=%d/16\nclosed=%d\nfreshOk=%d\n"
+        L"vcod=%d\ntrig3=%d/%d\npreset0=%d\ntrig4=%d/%d\n",
         created ? 1 : 0, dirtyAfterNew ? 1 : 0, unnamed ? 1 : 0, saved ? 1 : 0,
         cleanAfterSave ? 1 : 0, pathAfterSave ? 1 : 0, reopened ? 1 : 0, sizeOk ? 1 : 0,
-        painted, closed ? 1 : 0, freshOk ? 1 : 0);
+        painted, closed ? 1 : 0, freshOk ? 1 : 0,
+        vcodSize, trig3Size, trig3Blocks, preset0Ok ? 1 : 0, trig4Size, trig4Blocks);
     WriteDiag(msg);
 
     const bool ok = created && dirtyAfterNew && unnamed && saved && cleanAfterSave &&
-                    pathAfterSave && reopened && sizeOk && painted == 16 && closed && freshOk;
+                    pathAfterSave && reopened && sizeOk && painted == 16 && closed && freshOk &&
+                    vcodSize == 1040 && trig3Size == 7200 && trig3Blocks == 3 && preset0Ok &&
+                    trig4Size == 9600 && trig4Blocks == 4;
     return ok ? 0 : 2;
 }
 

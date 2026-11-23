@@ -1,0 +1,9 @@
+#include "resource.h"
+
+// 原版 ScmDraft2 内嵌的默认地图数据（用途已确认）
+//  148  1040 B = VCOD（地图校验码）默认段
+//  183  7200 B = TRIG 默认触发（3 条，每条 2400 B）
+//  193  9600 B = TRIG 默认触发（4 条）
+IDR_ASSET_VCOD  RCDATA "assets\\bin_148.bin"
+IDR_ASSET_TRIG3 RCDATA "assets\\bin_183.bin"
+IDR_ASSET_TRIG4 RCDATA "assets\\bin_193.bin"

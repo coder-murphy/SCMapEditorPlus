@@ -21,8 +21,10 @@ public:
     // tilesetDir 为空时只打开文档、不渲染
     bool Open(const std::wstring& path, const std::wstring& tilesetDir);
     bool Open(const std::wstring& path) { return Open(path, std::wstring()); }
-    // 新建空白地图：只写 DIM/ERA/MTXM（全 0，可行走），单位表为空
-    bool CreateNew(int width, int height, u16 era, const std::wstring& tilesetDir);
+    // 新建空白地图：写 DIM/ERA/MTXM、默认 VCOD 与可选 TRIG
+    // triggerPreset: 0=不写 TRIG / 1=3 条默认触发 / 2=4 条默认触发
+    bool CreateNew(int width, int height, u16 era, const std::wstring& tilesetDir,
+                   int triggerPreset = 1);
     bool Save(const std::wstring& path);
     // 更改地图尺寸：旧内容按 (offsetX, offsetY) 平移进新画布，越界单位丢弃
     bool Resize(int width, int height, int offsetX, int offsetY, bool smoothEdges);

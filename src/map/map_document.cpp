@@ -1,11 +1,14 @@
 ﻿#include "map/map_document.h"
 
-#include "archive/mpq_archive.h"
+#include <windows.h>
+
 #include <algorithm>
 #include <cstring>
 #include <utility>
 
+#include "archive/mpq_archive.h"
 #include "common/log.h"
+#include "res/resource.h"
 
 namespace scmd {
 
@@ -35,6 +38,20 @@ void WriteU32(u8* p, u32 v) {
 }
 
 constexpr std::size_t kUnitRecordSize = 36;
+
+// 读取本工程内嵌的原版默认地图数据（RCDATA）；SCMDCore/Cli 无资源时返回 false
+bool LoadEmbeddedData(int id, Buffer& out) {
+    HMODULE module = ::GetModuleHandleW(nullptr);
+    const HRSRC info = ::FindResourceW(module, MAKEINTRESOURCEW(id), RT_RCDATA);
+    if (!info) return false;
+    const DWORD size = ::SizeofResource(module, info);
+    const HGLOBAL handle = ::LoadResource(module, info);
+    if (!handle || size == 0) return false;
+    const void* data = ::LockResource(handle);
+    if (!data) return false;
+    out.assign(static_cast<const u8*>(data), static_cast<const u8*>(data) + size);
+    return true;
+}
 
 }  // namespace
 
@@ -211,7 +228,8 @@ bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir)
     return true;
 }
 
-bool MapDocument::CreateNew(int width, int height, u16 era, const std::wstring& tilesetDir) {
+bool MapDocument::CreateNew(int width, int height, u16 era, const std::wstring& tilesetDir,
+                            int triggerPreset) {
     Close();
     if (width <= 0 || height <= 0 || width > kMaxMapSize || height > kMaxMapSize) return false;
 
@@ -231,6 +249,20 @@ bool MapDocument::CreateNew(int width, int height, u16 era, const std::wstring& 
     chk_.Set(section::kDim, std::move(dim));
     chk_.Set(section::kEra, std::move(eraBytes));
     chk_.Set(section::kMtxm, tiles_);
+
+    // 原版新建地图的默认数据：VCOD + 可选 TRIG 模板
+    Buffer vcod;
+    if (LoadEmbeddedData(IDR_ASSET_VCOD, vcod) && vcod.size() == 1040) {
+        chk_.Set("VCOD", std::move(vcod));
+    }
+    if (triggerPreset == 1 || triggerPreset == 2) {
+        Buffer trig;
+        const int id = triggerPreset == 1 ? IDR_ASSET_TRIG3 : IDR_ASSET_TRIG4;
+        if (LoadEmbeddedData(id, trig) && !trig.empty()) {
+            chk_.Set("TRIG", trig);
+            triggers_.Parse(trig);
+        }
+    }
 
     if (!tilesetDir.empty() && !tileset_.Load(tilesetDir, kEraPrefix[era_])) {
         Log(L"[map] 新地图地形集加载失败（ERA %u）", era_);

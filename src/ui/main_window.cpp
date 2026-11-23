@@ -836,7 +836,7 @@ void MainWindow::NewMap() {
     ShowRecoveredDialog(IDD_DLG_169, hwnd_);
     if (LastDialogResult() != IDOK) return;
     const MapSizeParams& size = LastMapSize();
-    if (!map_.CreateNew(size.width, size.height, 0, tilesetDir_)) return;
+    if (!map_.CreateNew(size.width, size.height, 0, tilesetDir_, size.triggerPreset)) return;
     {
         wchar_t msg[128];
         ::wsprintfW(msg, L"新建地图: %dx%d", size.width, size.height);
