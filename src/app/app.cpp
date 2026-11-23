@@ -1406,7 +1406,13 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     const bool specialOff = !ItemChecked(hwnd, 0x80B3);
     cmd(0x80B3);
     const bool specialOn = ItemChecked(hwnd, 0x80B3);
-    const bool effectsOk = colorCycleOn && colorCycleOff && deathFxOn && specialOff && specialOn;
+    // Zerg地皮（0x8034）默认勾选：关→开
+    cmd(0x8034);
+    const bool zergGroundOff = !ItemChecked(hwnd, 0x8034);
+    cmd(0x8034);
+    const bool zergGroundOn = ItemChecked(hwnd, 0x8034);
+    const bool effectsOk = colorCycleOn && colorCycleOff && deathFxOn && specialOff && specialOn &&
+                           zergGroundOff && zergGroundOn;
 
     // 调试菜单（本轮启用）
     cmd(0x80DE);   // 允许调试
@@ -2921,6 +2927,7 @@ int RunTilesetRenderTest(const std::wstring& tsDir, const std::wstring& outDir) 
 
     std::wstring report;
     int passed = 0;
+    int creepSets = 0;
     std::unordered_set<unsigned long long> hashes;
 
     for (int era = 0; era < 8; era++) {
@@ -3051,26 +3058,37 @@ int RunTilesetRenderTest(const std::wstring& tsDir, const std::wstring& outDir) 
         const std::wstring bmp = outDir + L"\\ts_" + std::to_wstring(era) + L"_" +
                                  kPrefix[era] + L".bmp";
         const bool bmpOk = rendered && TerrainRenderer::WriteBmp24(bmp, image);
+        // creep 图案：CV5 flags & 0x0040，4×4 槽位（Installation 当前没有该组）
+        int creepTiles = 0;
+        for (int i = 0; i < 16; i++) {
+            u16 v = 0;
+            if (doc.tileset().CreepTile(i, v)) creepTiles++;
+        }
+        const bool creepOk = creepTiles == 0 || creepTiles >= 9;
+        if (creepTiles >= 9) creepSets++;
+
         const bool ok = files && created && patternOk && rendered && dimsOk && pixelsOk &&
-                        zoomOk && colors > 1 && unique && bmpOk;
+                        zoomOk && creepOk && colors > 1 && unique && bmpOk;
         if (ok) passed++;
 
         wchar_t line[512];
         ::wsprintfW(line,
                     L"era=%d name=%s files=%d created=%d groups=%d megas=%d vr=%d "
-                    L"render=%d dims=%d pixels=%d zoom=%d colors=%d unique=%d bmp=%d hash=%016I64x\n",
+                    L"render=%d dims=%d pixels=%d zoom=%d creepGroup=%d creepTiles=%d "
+                    L"colors=%d unique=%d bmp=%d hash=%016I64x\n",
                     era, doc.eraName(), files ? 1 : 0, created ? 1 : 0, groups,
                     static_cast<int>(vx4.size() / 32), static_cast<int>(vr4.size() / 64),
                     rendered ? 1 : 0, dimsOk ? 1 : 0, pixelsOk ? 1 : 0, zoomOk ? 1 : 0,
+                    doc.tileset().CreepGroup(), creepTiles,
                     colors, unique ? 1 : 0, bmpOk ? 1 : 0, hash);
         report += line;
     }
 
-    wchar_t tail[32];
-    ::wsprintfW(tail, L"pass=%d/8\n", passed);
+    wchar_t tail[64];
+    ::wsprintfW(tail, L"pass=%d/8 creep=%d/7\n", passed, creepSets);
     report += tail;
     WriteDiag(report);
-    return passed == 8 ? 0 : 2;
+    return (passed == 8 && creepSets == 7) ? 0 : 2;
 }
 
 // --section-test：校验 TRIG/MRGN/STR 的解析与无损重建

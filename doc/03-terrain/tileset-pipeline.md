@@ -99,6 +99,7 @@ SCMDPlus.exe --extract-ts="<工程根目录>\ts" --game-dir="<工程根目录>\m
 |---|---|
 | `Tileset::Load(dir, prefix)` | 读取 `<dir>\\<prefix>.cv5/.vx4/.vr4/.wpe`；ERA→前缀映射在 `map_document.cpp` |
 | `Tileset::TileBlock(v, out[1024])` | 严格按上面管线：group/index → CV5 u16[10..25] → VX4 `ref>>1`/`ref&1` → VR4 8×8 |
+| `Tileset::HasCreep/CreepTile` | 扫描 CV5：type=0 且 `flags & 0x0040` 的组为 creep；取 4×4 槽位。7 套地形集均为组 1、13 个非空槽；Installation 无 creep 组 |
 | `TerrainRenderer::Render` | 1..128 px/瓦片，最近邻采样，输出 32 位 BGRA（支持 33%/66%/150%.. 等非整除档位） |
 | 主窗口 | 打开后自动 8 px/瓦片渲染；滚轮 2/4/8/11/16/21/32/48/64/96/128 缩放；`BitBlt` 呈现，`WM_ERASEBKGND` 抑制闪烁 |
 

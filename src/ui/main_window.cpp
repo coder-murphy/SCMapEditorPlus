@@ -2369,6 +2369,80 @@ void MainWindow::OnKeyDown(int vk) {
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
+void MainWindow::DrawCreep(HDC dc, const RECT& client) const {
+    if (!map_.IsOpen() || !map_.hasTileset()) return;
+    const Tileset& ts = map_.tileset();
+    if (!ts.HasCreep()) return;
+
+    // CV5 里的 creep 图案是 4×4 槽位（空槽不画）
+    u16 tileValue[16] = {};
+    bool hasSlot[16] = {};
+    int slotCount = 0;
+    for (int i = 0; i < 16; i++) {
+        if (ts.CreepTile(i, tileValue[i])) {
+            hasSlot[i] = true;
+            slotCount++;
+        }
+    }
+    if (slotCount == 0) return;
+
+    const Buffer& wpe = ts.palette();
+    if (wpe.size() < 256 * 4) return;
+
+    // 预解码每个槽位的 32×32 BGRA 图块
+    std::vector<Buffer> blocks(16);
+    for (int i = 0; i < 16; i++) {
+        if (!hasSlot[i]) continue;
+        u8 index[1024] = {};
+        if (!ts.TileBlock(tileValue[i], index)) continue;
+        blocks[i].resize(32 * 32 * 4);
+        for (int p = 0; p < 1024; p++) {
+            const u8* rgb = wpe.data() + static_cast<std::size_t>(index[p]) * 4;
+            blocks[i][p * 4 + 0] = rgb[2];
+            blocks[i][p * 4 + 1] = rgb[1];
+            blocks[i][p * 4 + 2] = rgb[0];
+            blocks[i][p * 4 + 3] = 0xFF;
+        }
+    }
+
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = 32;
+    bi.bmiHeader.biHeight = -32;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    const int oldMode = ::SetStretchBltMode(dc, COLORONCOLOR);
+    for (const auto& u : map_.units()) {
+        // 产生虫族地皮的建筑：基地三形态 / 地刺 / 孢子 / 下沉
+        const u16 type = u.type;
+        if (type != 131 && type != 132 && type != 133 && type != 143 && type != 144 &&
+            type != 145) {
+            continue;
+        }
+        const int tx = static_cast<int>(u.x) / 32;
+        const int ty = static_cast<int>(u.y) / 32;
+        const int originX = tx - 2;
+        const int originY = ty - 3;
+        for (int slot = 0; slot < 16; slot++) {
+            if (!hasSlot[slot] || blocks[slot].empty()) continue;
+            const int mx = originX + (slot % 4);
+            const int my = originY + (slot / 4);
+            if (mx < 0 || my < 0 || mx >= map_.width() || my >= map_.height()) continue;
+            const int dx = mx * pxPerTile_ - scrollX_;
+            const int dy = my * pxPerTile_ - scrollY_;
+            if (dx + pxPerTile_ <= client.left || dx >= client.right ||
+                dy + pxPerTile_ <= client.top || dy >= client.bottom) {
+                continue;
+            }
+            ::StretchDIBits(dc, dx, dy, pxPerTile_, pxPerTile_, 0, 0, 32, 32,
+                            blocks[slot].data(), &bi, DIB_RGB_COLORS, SRCCOPY);
+        }
+    }
+    ::SetStretchBltMode(dc, oldMode);
+}
+
 void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
     if (!map_.IsOpen()) return;
 
@@ -2782,6 +2856,7 @@ void MainWindow::Present(HDC dc, const RECT& client) {
         }
     }
 
+    if (showZergGround_) DrawCreep(dc, client);
     if (showDoodads_) DrawDoodads(dc, client);
     if (showSpUnits_) DrawSprites(dc, client);
     if (showFog_) DrawFog(dc, client);

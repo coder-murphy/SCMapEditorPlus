@@ -31,8 +31,25 @@ bool Tileset::Load(const std::wstring& dir, const std::wstring& prefix) {
     if (!ReadWholeFile(base + L".vx4", vx4_)) { Log(L"[ts] 缺少 %s.vx4", base.c_str()); Unload(); return false; }
     if (!ReadWholeFile(base + L".vr4", vr4_)) { Log(L"[ts] 缺少 %s.vr4", base.c_str()); Unload(); return false; }
     if (!ReadWholeFile(base + L".wpe", wpe_)) { Log(L"[ts] 缺少 %s.wpe", base.c_str()); Unload(); return false; }
-    Log(L"[ts] loaded %s: groups=%d megatiles=%d vr=%d", prefix.c_str(),
-        GroupCount(), MegaCount(), VrCount());
+
+    // 找 creep 图案组：type=0 且 flags 带 0x0040，至少一个有效 megatile
+    creepGroup_ = -1;
+    for (int g = 0; g < GroupCount(); g++) {
+        const std::size_t at = static_cast<std::size_t>(g) * 52;
+        if (ReadU16(cv5_.data() + at) != 0) continue;
+        if ((ReadU16(cv5_.data() + at + 2) & 0x0040) == 0) continue;
+        bool any = false;
+        for (int i = 0; i < 16 && !any; i++) {
+            if (ReadU16(cv5_.data() + at + 20 + i * 2) != 0) any = true;
+        }
+        if (any) {
+            creepGroup_ = g;
+            break;
+        }
+    }
+
+    Log(L"[ts] loaded %s: groups=%d megatiles=%d vr=%d creep=%d", prefix.c_str(),
+        GroupCount(), MegaCount(), VrCount(), creepGroup_);
     return true;
 }
 
@@ -41,6 +58,17 @@ void Tileset::Unload() {
     vx4_.clear();
     vr4_.clear();
     wpe_.clear();
+    creepGroup_ = -1;
+}
+
+bool Tileset::CreepTile(int slot, u16& value) const {
+    if (creepGroup_ < 0 || slot < 0 || slot >= 16) return false;
+    const std::size_t at = static_cast<std::size_t>(creepGroup_) * 52 + 20 +
+                           static_cast<std::size_t>(slot) * 2;
+    if (at + 1 >= cv5_.size()) return false;
+    if (ReadU16(cv5_.data() + at) == 0) return false;      // 空槽不绘制
+    value = static_cast<u16>((static_cast<u16>(creepGroup_) << 4) | static_cast<u16>(slot));
+    return true;
 }
 
 u16 Tileset::MegatileOf(u16 mtxmValue) const {

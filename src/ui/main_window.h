@@ -155,6 +155,8 @@ private:
     // 撤销/重做后只重绘发生变化的瓦片区域（大面积改动回退为整图重建）
     void RefreshAfterHistory(const Buffer& oldTiles);
     void DrawUnits(HDC dc, const RECT& client) const;
+    // 显示选项 → Zerg地皮：在虫族建筑下铺 4×4 creep 图案
+    void DrawCreep(HDC dc, const RECT& client) const;
     void DrawDeathMarks(HDC dc, const RECT& client) const;
     void DrawOutputPanel(HDC dc, const RECT& client) const;
     int OutputPanelHeight() const;

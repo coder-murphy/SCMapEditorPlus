@@ -30,11 +30,18 @@ public:
     bool IsWalkable(u16 group) const;
     u16 Type(u16 group) const;
 
+    // CV5 里 flags & 0x0040（Creep）的 4×4 图案组；无则 HasCreep() 为 false
+    bool HasCreep() const { return creepGroup_ >= 0; }
+    int CreepGroup() const { return creepGroup_; }
+    // 取 creep 图案第 slot（0..15，4×4 行优先）个 MTXM 值；空槽返回 false
+    bool CreepTile(int slot, u16& value) const;
+
     // WPE 原始数据，每色 4 字节
     const Buffer& palette() const { return wpe_; }
 
 private:
     Buffer cv5_, vx4_, vr4_, wpe_;
+    int creepGroup_ = -1;
 };
 
 }  // namespace scmd
