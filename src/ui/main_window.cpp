@@ -4709,9 +4709,13 @@ void MainWindow::OnCommand(int id) {
                 BeepWarning();
                 break;
             }
+            BeginEdit();
             SetDialogDocument(&map_);
             ShowRecoveredDialog(IDD_TRIG_TEXT, hwnd_);
             SetDialogDocument(nullptr);
+            CommitEdit(L"编辑触发文本");
+            UpdateTitle();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         case kIscriptGrpDebug:
             ShowRecoveredDialog(IDD_ISCRIPT, hwnd_);

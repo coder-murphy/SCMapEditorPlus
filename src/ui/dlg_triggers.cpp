@@ -1,6 +1,10 @@
 ﻿#include "ui/dlg_procs.h"
 
 #include <commctrl.h>
+
+#include <cstdlib>
+#include <cstring>
+#include <cwctype>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1001,13 +1005,34 @@ INT_PTR HandleTriggerListEditor(HWND dlg, UINT msg, WPARAM wParam) {
     return HandleListEditor(dlg, msg, wParam);
 }
 
-// 206：触发文本视图（只读）。格式为本工程自定义，便于快速浏览/对照。
+// 206：触发文本视图（可编辑）。格式为本工程自定义：
+//   T players=1,2 flags=0
+//   C type=1 player=0 amount=100 unit=0 loc=0 cmp=0 res=0 prop=0
+//   A type=9 player=0 amount=0 unit=0 loc=0 str=1 wav=0 time=0 target=0 prop=0
+// 每行 # 之后为注释；点「应用」整体重建 TRIG 并进入撤销栈。
 namespace {
+
+std::wstring PlayersText(const Trigger& t) {
+    std::wstring out;
+    for (int p = 0; p < 27; p++) {
+        if (!t.effectivePlayers[p]) continue;
+        if (!out.empty()) out += L",";
+        out += std::to_wstring(p + 1);
+    }
+    return out.empty() ? L"none" : out;
+}
 
 std::wstring BuildTriggerText(const MapDocument& doc) {
     const auto& items = doc.triggers().Items();
-    if (items.empty()) return L"（当前地图没有触发）\r\n";
     std::wstring out;
+    out += L"# 触发文本视图（本工程格式）\r\n";
+    out += L"# T=触发头  C=条件  A=行动；# 之后为注释\r\n\r\n";
+    if (items.empty()) {
+        out += L"# 当前地图没有触发。可新增：\r\n";
+        out += L"T players=1 flags=0\r\n";
+        out += L"C type=1 player=0 amount=100 unit=0 loc=0 cmp=0 res=0 prop=0\r\n";
+        return out;
+    }
     for (std::size_t i = 0; i < items.size(); i++) {
         const Trigger& t = items[i];
         wchar_t head[256];
@@ -1017,17 +1042,250 @@ std::wstring BuildTriggerText(const MapDocument& doc) {
                     (t.executionFlags & 0x1u) ? L"  [仅一次]" : L"",
                     (t.executionFlags & 0x8u) ? L"  [禁用]" : L"");
         out += head;
+        out += L"T players=" + PlayersText(t) + L" flags=" +
+               std::to_wstring(t.executionFlags) + L"\r\n";
         for (int c = 0; c < t.ConditionCount(); c++) {
-            out += L"    条件 " + std::to_wstring(c + 1) + L": " +
-                   ConditionText(doc, t.conditions[c]) + L"\r\n";
+            const TriggerCondition& cond = t.conditions[c];
+            out += L"C type=" + std::to_wstring(cond.type) +
+                   L" player=" + std::to_wstring(cond.player) +
+                   L" amount=" + std::to_wstring(cond.amount) +
+                   L" unit=" + std::to_wstring(cond.unitType) +
+                   L" loc=" + std::to_wstring(cond.locationId) +
+                   L" cmp=" + std::to_wstring(cond.comparison) +
+                   L" res=" + std::to_wstring(cond.resourceType) +
+                   L" prop=" + std::to_wstring(cond.property) +
+                   L"  # " + ConditionName(cond.type) + L"\r\n";
         }
         for (int a = 0; a < t.ActionCount(); a++) {
-            out += L"    行动 " + std::to_wstring(a + 1) + L": " +
-                   ActionText(doc, t.actions[a]) + L"\r\n";
+            const TriggerAction& act = t.actions[a];
+            const std::wstring preview = StringPreview(doc, act.stringId);
+            out += L"A type=" + std::to_wstring(act.type) +
+                   L" player=" + std::to_wstring(act.player) +
+                   L" amount=" + std::to_wstring(act.amount) +
+                   L" unit=" + std::to_wstring(act.setting) +
+                   L" loc=" + std::to_wstring(act.locationId) +
+                   L" str=" + std::to_wstring(act.stringId) +
+                   L" wav=" + std::to_wstring(act.wavId) +
+                   L" time=" + std::to_wstring(act.time) +
+                   L" target=" + std::to_wstring(act.target) +
+                   L" prop=" + std::to_wstring(act.property) +
+                   L"  # " + ActionName(act.type) +
+                   (preview.empty() ? L"" : (L"「" + preview + L"」")) + L"\r\n";
         }
         out += L"\r\n";
     }
     return out;
+}
+
+std::wstring TrimWide(const std::wstring& s) {
+    std::size_t b = 0;
+    std::size_t e = s.size();
+    while (b < e && (s[b] == L' ' || s[b] == L'\t')) b++;
+    while (e > b && (s[e - 1] == L' ' || s[e - 1] == L'\t')) e--;
+    return s.substr(b, e - b);
+}
+
+bool ParseU32(const std::wstring& text, unsigned long long limit, u32& out, std::wstring& err) {
+    if (text.empty()) {
+        err = L"缺少数值";
+        return false;
+    }
+    wchar_t* end = nullptr;
+    const unsigned long long v = static_cast<unsigned long long>(::_wcstoui64(text.c_str(), &end, 10));
+    if (!end || *end != L'\0' || v > limit) {
+        err = L"数值非法: " + text;
+        return false;
+    }
+    out = static_cast<u32>(v);
+    return true;
+}
+
+bool ApplyTriggerToken(Trigger& t, wchar_t kind, int index, const std::wstring& key,
+                       const std::wstring& value, std::wstring& err) {
+    u32 v = 0;
+    if (kind == L'T') {
+        if (key == L"flags") {
+            if (!ParseU32(value, 0xFFFFFFFFull, v, err)) return false;
+            t.executionFlags = v;
+            return true;
+        }
+        if (key == L"players") {
+            for (int p = 0; p < 27; p++) t.effectivePlayers[p] = 0;
+            if (value != L"none" && !value.empty()) {
+                std::size_t pos = 0;
+                while (pos <= value.size()) {
+                    const std::size_t comma = value.find(L',', pos);
+                    const std::wstring one = value.substr(
+                        pos, comma == std::wstring::npos ? std::wstring::npos : comma - pos);
+                    if (!one.empty()) {
+                        if (!ParseU32(one, 27, v, err) || v == 0) {
+                            err = L"players 取值应为 1..27";
+                            return false;
+                        }
+                        t.effectivePlayers[v - 1] = 1;
+                    }
+                    if (comma == std::wstring::npos) break;
+                    pos = comma + 1;
+                }
+            }
+            return true;
+        }
+        err = L"T 行未知字段: " + key;
+        return false;
+    }
+
+    TriggerCondition* cond = nullptr;
+    TriggerAction* act = nullptr;
+    if (kind == L'C') cond = &t.conditions[index];
+    if (kind == L'A') act = &t.actions[index];
+
+    if (key == L"type") {
+        if (!ParseU32(value, 0xFFull, v, err)) return false;
+        if (kind == L'C') cond->type = static_cast<u8>(v);
+        else act->type = static_cast<u8>(v);
+    } else if (key == L"player") {
+        if (!ParseU32(value, 0xFFFFFFFFull, v, err)) return false;
+        if (kind == L'C') cond->player = v;
+        else act->player = v;
+    } else if (key == L"amount") {
+        if (!ParseU32(value, kind == L'C' ? 0xFFFFFFFFull : 0xFFull, v, err)) return false;
+        if (kind == L'C') cond->amount = v;
+        else act->amount = static_cast<u8>(v);
+    } else if (key == L"unit") {
+        if (!ParseU32(value, 0xFFFFull, v, err)) return false;
+        if (kind == L'C') cond->unitType = static_cast<u16>(v);
+        else act->setting = static_cast<u16>(v);
+    } else if (key == L"loc") {
+        if (!ParseU32(value, 0xFFFFFFFFull, v, err)) return false;
+        if (kind == L'C') cond->locationId = v;
+        else act->locationId = v;
+    } else if (key == L"cmp") {
+        if (kind != L'C') {
+            err = L"cmp 只用于条件";
+            return false;
+        }
+        if (!ParseU32(value, 0xFFull, v, err)) return false;
+        cond->comparison = static_cast<u8>(v);
+    } else if (key == L"res") {
+        if (kind != L'C') {
+            err = L"res 只用于条件";
+            return false;
+        }
+        if (!ParseU32(value, 0xFFull, v, err)) return false;
+        cond->resourceType = static_cast<u8>(v);
+    } else if (key == L"prop") {
+        if (!ParseU32(value, 0xFFull, v, err)) return false;
+        if (kind == L'C') cond->property = static_cast<u8>(v);
+        else act->property = static_cast<u8>(v);
+    } else if (key == L"str" && kind == L'A') {
+        if (!ParseU32(value, 0xFFFFFFFFull, v, err)) return false;
+        act->stringId = v;
+    } else if (key == L"wav" && kind == L'A') {
+        if (!ParseU32(value, 0xFFFFFFFFull, v, err)) return false;
+        act->wavId = v;
+    } else if (key == L"time" && kind == L'A') {
+        if (!ParseU32(value, 0xFFFFFFFFull, v, err)) return false;
+        act->time = v;
+    } else if (key == L"target" && kind == L'A') {
+        if (!ParseU32(value, 0xFFFFFFFFull, v, err)) return false;
+        act->target = v;
+    } else {
+        err = std::wstring(kind == L'C' ? L"C" : L"A") + L" 行未知字段: " + key;
+        return false;
+    }
+    return true;
+}
+
+bool ParseTriggerText(const std::wstring& text, std::vector<Trigger>& out,
+                      int& errorLine, std::wstring& errorMsg) {
+    out.clear();
+    errorLine = 0;
+    errorMsg.clear();
+    std::size_t pos = 0;
+    int lineNo = 0;
+    while (pos <= text.size()) {
+        const std::size_t nl = text.find(L'\n', pos);
+        std::wstring line = text.substr(
+            pos, nl == std::wstring::npos ? std::wstring::npos : nl - pos);
+        pos = (nl == std::wstring::npos) ? text.size() + 1 : nl + 1;
+        lineNo++;
+        if (!line.empty() && line.back() == L'\r') line.pop_back();
+        line = TrimWide(line);
+        if (line.empty() || line[0] == L'#') continue;
+
+        const std::size_t space = line.find_first_of(L" \t");
+        std::wstring kindText = space == std::wstring::npos ? line : line.substr(0, space);
+        if (kindText.size() != 1) {
+            errorLine = lineNo;
+            errorMsg = L"行首应为 T / C / A";
+            return false;
+        }
+        const wchar_t kind = static_cast<wchar_t>(std::towupper(kindText[0]));
+        if (kind != L'T' && kind != L'C' && kind != L'A') {
+            errorLine = lineNo;
+            errorMsg = L"行首应为 T / C / A";
+            return false;
+        }
+        if (kind != L'T' && out.empty()) {
+            errorLine = lineNo;
+            errorMsg = L"条件/行动之前缺少 T 行";
+            return false;
+        }
+        if (kind == L'T') out.push_back(Trigger{});
+        Trigger& current = out.back();
+        int slot = -1;
+        if (kind == L'C') {
+            slot = current.ConditionCount();
+            if (slot >= 16) {
+                errorLine = lineNo;
+                errorMsg = L"条件超过 16 条";
+                return false;
+            }
+        } else if (kind == L'A') {
+            slot = current.ActionCount();
+            if (slot >= 64) {
+                errorLine = lineNo;
+                errorMsg = L"行动超过 64 条";
+                return false;
+            }
+        }
+
+        std::size_t p = (space == std::wstring::npos) ? line.size() : space;
+        while (p < line.size()) {
+            while (p < line.size() && (line[p] == L' ' || line[p] == L'\t')) p++;
+            if (p >= line.size() || line[p] == L'#') break;
+            const std::size_t end = line.find_first_of(L" \t#", p);
+            const std::wstring token =
+                line.substr(p, end == std::wstring::npos ? std::wstring::npos : end - p);
+            p = (end == std::wstring::npos) ? line.size() : end;
+            const std::size_t eq = token.find(L'=');
+            if (eq == std::wstring::npos) {
+                errorLine = lineNo;
+                errorMsg = L"字段应为 key=value: " + token;
+                return false;
+            }
+            const std::wstring key = token.substr(0, eq);
+            const std::wstring value = token.substr(eq + 1);
+            std::wstring err;
+            if (!ApplyTriggerToken(current, kind, slot, key, value, err)) {
+                errorLine = lineNo;
+                errorMsg = err;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+std::wstring GetDlgTextAll(HWND dlg, int id) {
+    HWND h = ::GetDlgItem(dlg, id);
+    if (!h) return std::wstring();
+    const int len = ::GetWindowTextLengthW(h);
+    if (len <= 0) return std::wstring();
+    std::wstring text(static_cast<std::size_t>(len) + 1, L'\0');
+    ::GetWindowTextW(h, &text[0], len + 1);
+    text.resize(static_cast<std::size_t>(len));
+    return text;
 }
 
 }  // namespace
@@ -1038,11 +1296,51 @@ INT_PTR CALLBACK ProcTriggerTextView(HWND dlg, UINT msg, WPARAM wParam, LPARAM) 
             CenterDialog(dlg);
             MapDocument* doc = DialogDocument();
             const std::wstring text =
-                doc ? BuildTriggerText(*doc) : std::wstring(L"（未打开地图）\r\n");
+                doc ? BuildTriggerText(*doc)
+                    : std::wstring(L"# 未打开地图\r\n");
             ::SetDlgItemTextW(dlg, IDC_D206_TEXT, text.c_str());
+            ::SetDlgItemTextW(dlg, IDC_D206_STATUS, L"修改后点「应用」写回地图");
             return TRUE;
         }
         case WM_COMMAND:
+            if (LOWORD(wParam) == IDC_D206_APPLY) {
+                MapDocument* doc = DialogDocument();
+                if (!doc) {
+                    ::SetDlgItemTextW(dlg, IDC_D206_STATUS, L"未打开地图，无法应用");
+                    return TRUE;
+                }
+                std::vector<Trigger> parsed;
+                int errorLine = 0;
+                std::wstring errorMsg;
+                if (!ParseTriggerText(GetDlgTextAll(dlg, IDC_D206_TEXT), parsed, errorLine,
+                                      errorMsg)) {
+                    wchar_t status[256];
+                    ::wsprintfW(status, L"解析失败（第 %d 行）：%s；未修改地图", errorLine,
+                                errorMsg.c_str());
+                    ::SetDlgItemTextW(dlg, IDC_D206_STATUS, status);
+                    return TRUE;
+                }
+                // 保留原记录中未参与文本化的字节（保留区 / currentAction）
+                const auto& old = doc->triggers().Items();
+                for (std::size_t i = 0; i < parsed.size() && i < old.size(); i++) {
+                    parsed[i].currentAction = old[i].currentAction;
+                    for (int c = 0; c < 16; c++) {
+                        std::memcpy(parsed[i].conditions[c].reserved,
+                                    old[i].conditions[c].reserved, 2);
+                    }
+                    for (int a = 0; a < 64; a++) {
+                        std::memcpy(parsed[i].actions[a].reserved,
+                                    old[i].actions[a].reserved, 3);
+                    }
+                }
+                doc->mutableTriggers().MutableItems() = std::move(parsed);
+                doc->MarkDirty();
+                wchar_t status[96];
+                ::wsprintfW(status, L"已应用 %u 条触发（关闭后进入撤销栈）",
+                            static_cast<unsigned>(doc->triggers().BlockCount()));
+                ::SetDlgItemTextW(dlg, IDC_D206_STATUS, status);
+                return TRUE;
+            }
             if (LOWORD(wParam) == IDC_D206_CLOSE || LOWORD(wParam) == IDOK ||
                 LOWORD(wParam) == IDCANCEL) {
                 ::EndDialog(dlg, IDOK);

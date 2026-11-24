@@ -4720,9 +4720,40 @@ int RunDialogAuditTest(HWND owner) {
             if (dlg) {
                 const std::wstring text = textOf(dlg, IDC_D206_TEXT);
                 ok = ok && text.find(L"触发 1/1") != std::wstring::npos &&
-                     text.find(L"条件 1") != std::wstring::npos &&
-                     text.find(L"显示文本") != std::wstring::npos &&
+                     text.find(L"T players=1 flags=0") != std::wstring::npos &&
+                     text.find(L"C type=1") != std::wstring::npos &&
+                     text.find(L"A type=9") != std::wstring::npos &&
                      text.find(L"Hello") != std::wstring::npos;
+
+                // 原样应用：序列化结果应逐字节一致（无损往返）
+                const Buffer roundTripBefore = doc.triggers().Serialize();
+                command(dlg, IDC_D206_APPLY);
+                ok = ok && doc.triggers().Serialize() == roundTripBefore &&
+                     textOf(dlg, IDC_D206_STATUS).find(L"已应用") != std::wstring::npos;
+
+                // 应用修改后的文本：玩家 1/2、仅一次、条件改为 type=2/player=3/amount=7/cmp=1
+                ::SetDlgItemTextW(
+                    dlg, IDC_D206_TEXT,
+                    L"T players=1,2 flags=1\r\n"
+                    L"C type=2 player=3 amount=7 unit=0 loc=0 cmp=1 res=0 prop=0\r\n"
+                    L"A type=9 player=0 amount=0 unit=0 loc=0 str=1 wav=0 time=0 target=0 "
+                    L"prop=0\r\n");
+                command(dlg, IDC_D206_APPLY);
+                const auto& items = doc.triggers().Items();
+                ok = ok && items.size() == 1 && items[0].executionFlags == 1 &&
+                     items[0].effectivePlayers[0] == 1 && items[0].effectivePlayers[1] == 1 &&
+                     items[0].ConditionCount() == 1 && items[0].conditions[0].type == 2 &&
+                     items[0].conditions[0].player == 3 && items[0].conditions[0].amount == 7 &&
+                     items[0].conditions[0].comparison == 1 &&
+                     items[0].ActionCount() == 1 && items[0].actions[0].type == 9 &&
+                     items[0].actions[0].stringId == 1 &&
+                     textOf(dlg, IDC_D206_STATUS).find(L"已应用") != std::wstring::npos;
+
+                // 非法文本：只报错，不改地图
+                ::SetDlgItemTextW(dlg, IDC_D206_TEXT, L"X bad=1");
+                command(dlg, IDC_D206_APPLY);
+                ok = ok && doc.triggers().Items()[0].conditions[0].type == 2 &&
+                     textOf(dlg, IDC_D206_STATUS).find(L"解析失败") != std::wstring::npos;
                 ::DestroyWindow(dlg);
             }
             SetDialogDocument(nullptr);

@@ -395,6 +395,8 @@
 #define IDC_ISCRIPT_LIST    1605  // ListBox  操作码
 #define IDC_ISCRIPT_SUMMARY 1606  // Edit     摘要
 
-// ── 206  触发文本视图（本工程新增，只读）──
-#define IDC_D206_TEXT   1700      // Edit     触发文本
+// ── 206  触发文本视图（本工程新增，可编辑）──
+#define IDC_D206_TEXT   1700      // Edit     触发文本（T/C/A 行）
+#define IDC_D206_APPLY  1701      // Button   应用
+#define IDC_D206_STATUS 1702      // Static   状态
 #define IDC_D206_CLOSE  2         // Button   关闭
