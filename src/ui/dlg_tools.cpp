@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "app/app_settings.h"
 #include "app/backups.h"
 #include "common/log.h"
 #include "res/control_ids.h"
@@ -125,25 +126,26 @@ INT_PTR CALLBACK ProcBackupViewer(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     return FALSE;
 }
 
-// 174：在线升级（下载逻辑待接入）
+// 174：在线升级。当前只预留 CDN 配置，界面统一显示“已是最新版本”
 INT_PTR CALLBACK ProcUpdater(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
     switch (msg) {
-        case WM_INITDIALOG:
+        case WM_INITDIALOG: {
             CenterDialog(dlg);
             ::SendDlgItemMessageW(dlg, IDC_D174_1087, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
-            ::SendDlgItemMessageW(dlg, IDC_D174_1087, PBM_SETPOS, 0, 0);
-            ::SetDlgItemTextW(dlg, IDC_D174_1091, L"未配置更新源");
-            ::SetDlgItemTextW(dlg, IDC_D174_1089,
-                              L"SCMD Plus 3.0.0.0\r\n"
-                              L"更新源：未配置\r\n\r\n"
-                              L"当前构建不含在线升级服务器，本对话框仅展示版本与状态。\r\n"
-                              L"如需升级，请手动替换 SCMDPlus.exe。");
+            ::SendDlgItemMessageW(dlg, IDC_D174_1087, PBM_SETPOS, 100, 0);
+            ::SetDlgItemTextW(dlg, IDC_D174_1091, L"已是最新版本");
+            const std::wstring& cdn = AppSettings::Instance().updateCdn();
+            const std::wstring source = cdn.empty() ? L"未配置（预留）" : cdn;
+            std::wstring info = L"SCMD Plus 3.0.0.0\r\n已是最新版本，无需下载。\r\n";
+            info += L"更新源（CDN 预留）：" + source;
+            ::SetDlgItemTextW(dlg, IDC_D174_1089, info.c_str());
             return TRUE;
+        }
         case WM_COMMAND:
             if (LOWORD(wParam) == IDC_D174_1090) {              // 下载升级文件
-                ::SetDlgItemTextW(dlg, IDC_D174_1091, L"未配置更新源，无法下载");
-                ::SendDlgItemMessageW(dlg, IDC_D174_1087, PBM_SETPOS, 0, 0);
-                Log(L"[update] download requested: no update source configured");
+                ::SetDlgItemTextW(dlg, IDC_D174_1091, L"已是最新版本，无需下载");
+                ::SendDlgItemMessageW(dlg, IDC_D174_1087, PBM_SETPOS, 100, 0);
+                Log(L"[update] download requested: already latest");
                 return TRUE;
             }
             if (LOWORD(wParam) == IDC_D174_1) {

@@ -100,6 +100,10 @@ public:
     // 高级 → 自动检查更新（当前无更新源，仅记录用户选择）
     bool autoCheckUpdate() const { return autoCheckUpdate_; }
     void SetAutoCheckUpdate(bool enabled) { autoCheckUpdate_ = enabled; }
+    // 在线升级 CDN 配置（预留）：作为更新源前缀，空 = 未配置。
+    // 目前仅持久化，供后续接入实际检查/下载逻辑。
+    const std::wstring& updateCdn() const { return updateCdn_; }
+    void SetUpdateCdn(const std::wstring& cdn) { updateCdn_ = cdn; }
     // 无头回归时关闭退出保存，避免污染用户设置
     void SetPersistViewOnExit(bool persist) { persistViewOnExit_ = persist; }
     bool persistViewOnExit() const { return persistViewOnExit_; }
@@ -132,6 +136,7 @@ private:
     ViewState view_;
     bool soundEnabled_ = true;
     bool autoCheckUpdate_ = false;
+    std::wstring updateCdn_;
     bool persistViewOnExit_ = true;
 };
 

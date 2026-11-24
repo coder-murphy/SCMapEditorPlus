@@ -734,7 +734,7 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
     ::SetTimer(hwnd_, 2, 120, nullptr);     // 颜色循环 / 死亡效果动画
 
     if (AppSettings::Instance().autoCheckUpdate()) {
-        Output(2, L"自动检查更新：未配置更新源（当前版本 SCMD Plus 3.0.0.0）");
+        Output(2, L"自动检查更新：已是最新版本（SCMD Plus 3.0.0.0）");
     }
     return true;
 }

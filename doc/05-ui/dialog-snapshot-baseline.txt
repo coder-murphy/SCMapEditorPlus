@@ -239,8 +239,8 @@
   #1 Button enabled check=0
   #1087 msctls_progress32 enabled text="0"
   #1090 Button disabled check=0
-  #1091 Static enabled text="未配置更新源"
-  #1089 Edit enabled text="SCMD Plus 3.0.0.0\r\n更新源：未配置\r\n\r\n当前构建不含在线升级服务器，本对话框仅展示版本与状态。\r\n如需升级，请手动替换 SCMDPlus.exe。"
+  #1091 Static enabled text="已是最新版本"
+  #1089 Edit enabled text="SCMD Plus 3.0.0.0\r\n已是最新版本，无需下载。\r\n更新源（CDN 预留）：未配置（预留）"
 [dialog 175] 重设地图大小
   #1062 Edit enabled text="64"
   #1063 Edit enabled text="64"

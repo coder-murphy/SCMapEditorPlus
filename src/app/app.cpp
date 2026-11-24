@@ -3487,6 +3487,7 @@ int RunRecentTest() {
     }
     settings.SetSoundEnabled(false);
     settings.SetAutoCheckUpdate(true);
+    settings.SetUpdateCdn(L"https://cdn.example.com/scmdplus/");
     const bool saved = settings.Save();
     settings.ClearRecentMaps();
     settings.SetUndoLimit(50);
@@ -3510,6 +3511,8 @@ int RunRecentTest() {
                             !settings.view().showUnits && settings.view().hideMinimap &&
                             settings.view().showFog && !settings.soundEnabled() &&
                             settings.autoCheckUpdate();
+    const bool updateCdnOk =
+        settings.updateCdn() == L"https://cdn.example.com/scmdplus/";
 
     // 失效最近项移除：去重后再删除首项
     const bool frontBefore = !settings.recentMaps().empty();
@@ -3521,14 +3524,14 @@ int RunRecentTest() {
     ::wsprintfW(msg,
                 L"recent=1\nsaveClear=%d\nloadClear=%d\ncleared=%d\ncap=%d\n"
                 L"dedupe=%d\nsaved=%d\nreloaded=%d\npersisted=%d\nundo=%d\nsettings=%d\n"
-        L"remove=%d\nautoUpdate=%d\n",
+        L"remove=%d\nautoUpdate=%d\nupdateCdn=%d\n",
                 saveClear ? 1 : 0, loadClear ? 1 : 0,
                 cleared ? 1 : 0, capOk ? 1 : 0, dedupeOk ? 1 : 0, saved ? 1 : 0,
                 reloaded ? 1 : 0, persisted ? 1 : 0, undoOk ? 1 : 0, settingsOk ? 1 : 0,
-                removeOk ? 1 : 0, settings.autoCheckUpdate() ? 1 : 0);
+                removeOk ? 1 : 0, settings.autoCheckUpdate() ? 1 : 0, updateCdnOk ? 1 : 0);
     WriteDiag(msg);
     return (cleared && capOk && dedupeOk && saved && reloaded && persisted && undoOk &&
-            settingsOk && removeOk)
+            settingsOk && removeOk && updateCdnOk)
                ? 0
                : 2;
 }
@@ -4634,6 +4637,17 @@ int RunDialogAuditTest(HWND owner) {
         for (int id : kDisabled) ok = ok && !enabled(dlg, id);
         if (dlg) ::DestroyWindow(dlg);
         record(L"unitNames172", ok);
+    }
+
+    // 4a-0) 174：在线升级只预留 CDN 配置，界面统一显示“已是最新版本”
+    {
+        HWND dlg = open(174);
+        bool ok = dlg != nullptr;
+        if (dlg) {
+            ok = ok && textOf(dlg, IDC_D174_1091).find(L"最新版本") != std::wstring::npos;
+            ::DestroyWindow(dlg);
+        }
+        record(L"updater174", ok);
     }
 
     // 4a) 163：兼容性问题列表可填充（问题由主窗口开图后检测）

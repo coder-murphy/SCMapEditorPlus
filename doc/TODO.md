@@ -365,10 +365,12 @@
 - [x] 系统集成：设置默认地图编辑器（0x806B，HKCU 关联 .scx/.scm）、
   创建开始菜单快捷方式（0x806C，IShellLink 写入当前用户 Programs）。
 - [x] **在线升级（174）与自动检查更新（0x80A8）**
-  - 174 显示版本 3.0.0.0 与更新源状态；无更新源时明确提示“无法下载”，不再写占位 TODO。
-  - 0x80A8 为持久化开关（`settings.ini` 的 `autoCheckUpdate`）；启动时若开启，
-    向输出面板写入“未配置更新源”的提示。
-  - 回归：`--recent-test` 新增 `autoUpdate`；`--menu-cmd-test` 新增 `autoUpdate` 勾选回显。
+  - 174 显示版本 3.0.0.0，界面统一显示“已是最新版本”，下载按钮保持禁用。
+  - 仅预留 CDN 配置：`settings.ini` 的 `updateCdn`（空 = 未配置），174 中作为
+    「更新源（CDN 预留）」展示；暂不发起网络请求。
+  - 0x80A8 为持久化开关（`autoCheckUpdate`）；启动时若开启，输出面板提示“已是最新版本”。
+  - 回归：`--recent-test` 新增 `updateCdn` 往返；`--dialog-audit-test` 新增 `updater174`
+    （1091 文本含“最新版本”）；`--menu-cmd-test` 保留 `autoUpdate` 勾选回显。
 - [x] 启用声音（0x8072）：开关持久化；关闭后编辑器不再通过 MessageBeep 提示。
 - [x] **Iscript 测试（192）**
   - 自动加载 `scripts\iscript.bin`（星际目录 / exe / 仓库 `mpq/StarDat.mpq`）。
