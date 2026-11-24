@@ -20,6 +20,8 @@
 - [x] 地形集 `ts/` 入库，构建后自动复制到输出目录（产物脱离游戏目录运行）
 - [x] `StarDat.mpq` / `BrooDat.mpq` 入库到 `mpq/`，可离线重导出地形集
 - [x] 核心能力 C ABI 封装（`SCMDCore.dll`）与示例 CLI（`scmd_cli.exe`）
+- [x] 项目技能 `.trae/skills/starcraft-map-assets`：封装原版 ScmDraft2 解包、
+  星际 MPQ/地形集提取、资源组织与四配置验证闭环，供后续地图编辑器开发复用。
 - [x] **无头测试移出 GUI 进程（SCMDTests.exe）**
   - 新增 `src/SCMDTests.vcxproj`（Console）与 `src/tests/`：`headless_main.cpp` 解析与 GUI
     相同的测试参数，`headless_tests.cpp` 承载 24 个纯模型/格式/渲染测试；
