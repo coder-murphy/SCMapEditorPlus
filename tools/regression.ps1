@@ -9,6 +9,7 @@
     powershell ... -Configs Debug/Win32             # 只跑一个配置
 
   说明：
+    - 无头用例由 SCMDTests.exe 运行，UI 探针由 SCMDPlus.exe 运行；
     - 依赖地图的测试（undo/trig/edit/player/...）在未提供 -Map 时自动跳过；
     - 所有输出写在 %TEMP%\scmdplus_regression_<pid>，结束后清理；
     - 任一构建/审计/测试失败则退出码非 0。
@@ -86,43 +87,46 @@ if (-not $SkipAudit) {
     }
 }
 
-# 3) 无头功能测试（用第一个配置的 exe）
+# 3) 功能测试：无头用例走 SCMDTests，UI 探针走 SCMDPlus
 $firstParts = $Configs[0].Split('/')
-$exe = Join-Path $root ("bin\{0}\{1}\SCMDPlus.exe" -f $firstParts[1], $firstParts[0])
-if (-not (Test-Path -LiteralPath $exe)) { throw "找不到可执行文件：$exe" }
+$uiExe = Join-Path $root ("bin\{0}\{1}\SCMDPlus.exe" -f $firstParts[1], $firstParts[0])
+$testExe = Join-Path $root ("bin\{0}\{1}\SCMDTests.exe" -f $firstParts[1], $firstParts[0])
+if (-not (Test-Path -LiteralPath $uiExe)) { throw "找不到可执行文件：$uiExe" }
+if (-not (Test-Path -LiteralPath $testExe)) { throw "找不到可执行文件：$testExe" }
 
 $tsArgs = @()
 if (-not [string]::IsNullOrEmpty($Ts)) { $tsArgs = @('--ts="' + $Ts + '"') }
 
-Invoke-Test $exe 'unit-data' @('--unit-data-test')
-Invoke-Test $exe 'unit-param' @('--unit-param-test="' + (Join-Path $tmp 'unit.scx') + '"')
-Invoke-Test $exe 'clip' @('--clip-test="' + (Join-Path $tmp 'clip.scx') + '"')
-Invoke-Test $exe 'doodad' @('--doodad-test="' + (Join-Path $tmp 'doodad.scx') + '"')
-Invoke-Test $exe 'loc-draw' @('--loc-draw-test="' + (Join-Path $tmp 'locdraw.scx') + '"')
-Invoke-Test $exe 'brush-pattern' @('--brush-pattern-test="' + (Join-Path $tmp 'brush.scx') + '"')
-Invoke-Test $exe 'tileset-render' (@('--tileset-render-test="' + (Join-Path $tmp 'tsrender') + '"') + $tsArgs)
-Invoke-Test $exe 'file' @('--file-test="' + (Join-Path $tmp 'file.scx') + '"')
-Invoke-Test $exe 'mpq-compress' @('--mpq-compress-test="' + (Join-Path $tmp 'compress.scx') + '"')
-Invoke-Test $exe 'edge' ($tsArgs + @('--edge-test'))
-Invoke-Test $exe 'menu' @('--menu-test')
+# 无头（SCMDTests.exe）与 UI（SCMDPlus.exe）分开，避免 GUI 进程承担模型回归
+Invoke-Test $testExe 'unit-data' @('--unit-data-test')
+Invoke-Test $uiExe 'unit-param' @('--unit-param-test="' + (Join-Path $tmp 'unit.scx') + '"')
+Invoke-Test $uiExe 'clip' @('--clip-test="' + (Join-Path $tmp 'clip.scx') + '"')
+Invoke-Test $uiExe 'doodad' @('--doodad-test="' + (Join-Path $tmp 'doodad.scx') + '"')
+Invoke-Test $uiExe 'loc-draw' @('--loc-draw-test="' + (Join-Path $tmp 'locdraw.scx') + '"')
+Invoke-Test $uiExe 'brush-pattern' @('--brush-pattern-test="' + (Join-Path $tmp 'brush.scx') + '"')
+Invoke-Test $testExe 'tileset-render' (@('--tileset-render-test="' + (Join-Path $tmp 'tsrender') + '"') + $tsArgs)
+Invoke-Test $testExe 'file' @('--file-test="' + (Join-Path $tmp 'file.scx') + '"')
+Invoke-Test $testExe 'mpq-compress' @('--mpq-compress-test="' + (Join-Path $tmp 'compress.scx') + '"')
+Invoke-Test $testExe 'edge' ($tsArgs + @('--edge-test'))
+Invoke-Test $uiExe 'menu' @('--menu-test')
 
 if (-not [string]::IsNullOrEmpty($Map)) {
     if (-not (Test-Path -LiteralPath $Map)) { throw "地图不存在：$Map" }
     $openArgs = @('--open="' + $Map + '"') + $tsArgs
-    Invoke-Test $exe 'menu-cmd' ($openArgs + @('--menu-cmd-test'))
-    Invoke-Test $exe 'undo' ($openArgs + @('--undo-test'))
-    Invoke-Test $exe 'trig' ($openArgs + @('--trig-test="' + (Join-Path $tmp 'trig.scx') + '"'))
-    Invoke-Test $exe 'edit' ($openArgs + @('--edit-test="' + (Join-Path $tmp 'edit.scx') + '"'))
-    Invoke-Test $exe 'player' ($openArgs + @('--player-test="' + (Join-Path $tmp 'player.scx') + '"'))
-    Invoke-Test $exe 'restriction' ($openArgs + @('--restriction-test="' + (Join-Path $tmp 'restriction.scx') + '"'))
-    Invoke-Test $exe 'location' ($openArgs + @('--location-test="' + (Join-Path $tmp 'location.scx') + '"'))
-    Invoke-Test $exe 'decor' ($openArgs + @('--decor-test="' + (Join-Path $tmp 'decor.scx') + '"'))
-    Invoke-Test $exe 'sprite' ($openArgs + @('--sprite-test="' + (Join-Path $tmp 'sprite.scx') + '"'))
-    Invoke-Test $exe 'radar' ($openArgs + @('--radar-test="' + (Join-Path $tmp 'radar.scx') + '"'))
-    Invoke-Test $exe 'scenario-text' ($openArgs + @('--scenario-text-test="' + (Join-Path $tmp 'text.scx') + '"'))
-    Invoke-Test $exe 'map-tools' ($openArgs + @('--map-tools-test="' + (Join-Path $tmp 'tools.scx') + '"'))
-    Invoke-Test $exe 'extra' ($openArgs + @('--extra-test="' + (Join-Path $tmp 'extra.scx') + '"'))
-    Invoke-Test $exe 'resize' ($openArgs + @('--resize-test="' + (Join-Path $tmp 'resize.scx') + '"'))
+    Invoke-Test $uiExe 'menu-cmd' ($openArgs + @('--menu-cmd-test'))
+    Invoke-Test $testExe 'undo' ($openArgs + @('--undo-test'))
+    Invoke-Test $testExe 'trig' ($openArgs + @('--trig-test="' + (Join-Path $tmp 'trig.scx') + '"'))
+    Invoke-Test $testExe 'edit' ($openArgs + @('--edit-test="' + (Join-Path $tmp 'edit.scx') + '"'))
+    Invoke-Test $testExe 'player' ($openArgs + @('--player-test="' + (Join-Path $tmp 'player.scx') + '"'))
+    Invoke-Test $testExe 'restriction' ($openArgs + @('--restriction-test="' + (Join-Path $tmp 'restriction.scx') + '"'))
+    Invoke-Test $testExe 'location' ($openArgs + @('--location-test="' + (Join-Path $tmp 'location.scx') + '"'))
+    Invoke-Test $testExe 'decor' ($openArgs + @('--decor-test="' + (Join-Path $tmp 'decor.scx') + '"'))
+    Invoke-Test $testExe 'sprite' ($openArgs + @('--sprite-test="' + (Join-Path $tmp 'sprite.scx') + '"'))
+    Invoke-Test $testExe 'radar' ($openArgs + @('--radar-test="' + (Join-Path $tmp 'radar.scx') + '"'))
+    Invoke-Test $testExe 'scenario-text' ($openArgs + @('--scenario-text-test="' + (Join-Path $tmp 'text.scx') + '"'))
+    Invoke-Test $testExe 'map-tools' ($openArgs + @('--map-tools-test="' + (Join-Path $tmp 'tools.scx') + '"'))
+    Invoke-Test $testExe 'extra' ($openArgs + @('--extra-test="' + (Join-Path $tmp 'extra.scx') + '"'))
+    Invoke-Test $testExe 'resize' ($openArgs + @('--resize-test="' + (Join-Path $tmp 'resize.scx') + '"'))
 } else {
     Write-Host '未提供 -Map，跳过依赖输入地图的测试（undo/trig/edit/player/...）。'
 }

@@ -22,3 +22,6 @@
 原始程序的完整 PE 资源反解产物在仓库根目录 `reverse/scmdraft2/`
 （`raw/` 原始字节 + `converted/` 位图/图标/字符串/版本 + `resources.csv`），
 可用 `tools/dump_original.ps1` 重新生成。
+
+测试入口：`SCMDTests.exe`（无头，`src/tests/`）承载模型/格式/渲染回归；
+UI 探针仍由 `SCMDPlus.exe --*-test` 运行，两者由 `tools/regression.ps1` 统一调度。

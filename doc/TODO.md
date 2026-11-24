@@ -20,6 +20,16 @@
 - [x] 地形集 `ts/` 入库，构建后自动复制到输出目录（产物脱离游戏目录运行）
 - [x] `StarDat.mpq` / `BrooDat.mpq` 入库到 `mpq/`，可离线重导出地形集
 - [x] 核心能力 C ABI 封装（`SCMDCore.dll`）与示例 CLI（`scmd_cli.exe`）
+- [x] **无头测试移出 GUI 进程（SCMDTests.exe）**
+  - 新增 `src/SCMDTests.vcxproj`（Console）与 `src/tests/`：`headless_main.cpp` 解析与 GUI
+    相同的测试参数，`headless_tests.cpp` 承载 24 个纯模型/格式/渲染测试；
+    GUI 只保留 11 个 UI 探针（unit-param/clip/doodad/loc-draw/brush-pattern/menu/
+    menu-cmd/view/trigger-modal/dialog-audit/brush）。
+  - `app.cpp` 从约 5.9k 行降到约 3.2k 行；无头测试不再创建主窗口。
+  - `tools/regression.ps1` 分流：无头测试走 `SCMDTests.exe`，UI 探针走 `SCMDPlus.exe`；
+    四配置构建同时产出两个可执行文件。
+  - 回归结果与迁移前一致：25 项中 21 项通过，4 项为已知测试地图缺段
+    （player/decor/sprite/radar）。
 - [x] **Win32 UI 薄层：事件绑定 + 表单描述（155 垂直切片）**
   - 新增 `src/ui/ui_bind.*`：`EventBinder` 按（控件 ID，通知码）注册处理函数；
     `FormSpec` 用字段表统一“加载 / 提交 / 重置默认”，数值字段提交时钳制到范围。

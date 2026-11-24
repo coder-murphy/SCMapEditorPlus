@@ -1,0 +1,103 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{D9A6F4C3-5E7B-6C8D-BF80-3B4C5D6E7F80}</ProjectGuid>
+    <RootNamespace>SCMDTests</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)build\$(Platform)\$(Configuration)\SCMDTests\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>UNICODE;_UNICODE;WIN32_LEAN_AND_MEAN;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>user32.lib;gdi32.lib;comdlg32.lib;comctl32.lib;shell32.lib;advapi32.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="tests\headless_main.cpp" />
+    <ClCompile Include="tests\headless_tests.cpp" />
+    <ClCompile Include="app\app_settings.cpp" />
+    <ClCompile Include="app\backups.cpp" />
+    <ClCompile Include="archive\mpq_archive.cpp" />
+    <ClCompile Include="archive\mpq_codec.cpp" />
+    <ClCompile Include="chk\chk_document.cpp" />
+    <ClCompile Include="common\log.cpp" />
+    <ClCompile Include="common\string_util.cpp" />
+    <ClCompile Include="map\edit_history.cpp" />
+    <ClCompile Include="map\map_document.cpp" />
+    <ClCompile Include="map\decor_model.cpp" />
+    <ClCompile Include="map\map_switches.cpp" />
+    <ClCompile Include="map\scenario_tables.cpp" />
+    <ClCompile Include="players\player_model.cpp" />
+    <ClCompile Include="players\restriction_model.cpp" />
+    <ClCompile Include="terrain\tileset.cpp" />
+    <ClCompile Include="terrain\brush.cpp" />
+    <ClCompile Include="terrain\terrain_renderer.cpp" />
+    <ClCompile Include="terrain\tileset_export.cpp" />
+    <ClCompile Include="terrain\edge_placer.cpp" />
+    <ClCompile Include="triggers\trigger_model.cpp" />
+    <ClCompile Include="units\iscript.cpp" />
+    <ClCompile Include="units\stat_txt.cpp" />
+    <ClCompile Include="units\unit_data.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="tests\headless_tests.h" />
+  </ItemGroup>
+  <!-- NewMap 的默认 VCOD/TRIG 模板来自内嵌资源，测试需要与 GUI 相同的资源 -->
+  <ItemGroup>
+    <ResourceCompile Include="res\resources.rc" />
+  </ItemGroup>
+  <!-- 地形集随构建复制到输出目录，测试与 GUI 共用同一套资源 -->
+  <Target Name="CopyTilesets" AfterTargets="Build">
+    <ItemGroup>
+      <TilesetFiles Include="$(ProjectDir)..\ts\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TilesetFiles)" DestinationFolder="$(OutDir)ts" SkipUnchangedFiles="true" />
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

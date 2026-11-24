@@ -11,6 +11,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SCMDCli", "src\SCMDCli.vcxp
 		{B7E4D2A1-3C5F-4A8B-9D6E-1F2A3B4C5D6E} = {B7E4D2A1-3C5F-4A8B-9D6E-1F2A3B4C5D6E}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SCMDTests", "src\SCMDTests.vcxproj", "{D9A6F4C3-5E7B-6C8D-BF80-3B4C5D6E7F80}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -43,6 +45,14 @@ Global
 		{C8F5E3B2-4D6A-5B9C-AE7F-2A3B4C5D6E7F}.Debug|x64.Build.0 = Debug|x64
 		{C8F5E3B2-4D6A-5B9C-AE7F-2A3B4C5D6E7F}.Release|x64.ActiveCfg = Release|x64
 		{C8F5E3B2-4D6A-5B9C-AE7F-2A3B4C5D6E7F}.Release|x64.Build.0 = Release|x64
+		{D9A6F4C3-5E7B-6C8D-BF80-3B4C5D6E7F80}.Debug|Win32.ActiveCfg = Debug|Win32
+		{D9A6F4C3-5E7B-6C8D-BF80-3B4C5D6E7F80}.Debug|Win32.Build.0 = Debug|Win32
+		{D9A6F4C3-5E7B-6C8D-BF80-3B4C5D6E7F80}.Release|Win32.ActiveCfg = Release|Win32
+		{D9A6F4C3-5E7B-6C8D-BF80-3B4C5D6E7F80}.Release|Win32.Build.0 = Release|Win32
+		{D9A6F4C3-5E7B-6C8D-BF80-3B4C5D6E7F80}.Debug|x64.ActiveCfg = Debug|x64
+		{D9A6F4C3-5E7B-6C8D-BF80-3B4C5D6E7F80}.Debug|x64.Build.0 = Debug|x64
+		{D9A6F4C3-5E7B-6C8D-BF80-3B4C5D6E7F80}.Release|x64.ActiveCfg = Release|x64
+		{D9A6F4C3-5E7B-6C8D-BF80-3B4C5D6E7F80}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
