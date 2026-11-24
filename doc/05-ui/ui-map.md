@@ -788,3 +788,14 @@ dimOk=1 tileMove=1 borderZero=1 unitsInBounds=1 units=144->33
 dirty=1 saved=1 reopened=1 reopenDim=1 reopenTile=1
 ```
 
+## UI 薄层（事件绑定 / 表单描述）
+
+- `src/ui/ui_bind.h`：
+  - `EventBinder`：按（控件 ID，通知码）注册 `std::function<void(HWND)>`，
+    `Dispatch` 返回是否已消费；处理函数内 `EndDialog` 销毁对话框也安全（先复制回调再调用）。
+  - `FormSpec`：`AddInt / AddText / AddCheck` 描述字段当前值、范围与默认值；
+    `Load` / `Commit` / `ResetDefaults` 统一处理，数值提交时钳制；文本字段重置时保持用户输入。
+- 已迁移：155 基本设置（`dlg_basic.cpp`）。15 个字段（8 数值 + 1 文本 + 6 开关）由一张表驱动，
+  事件改为注册式；新增设置项只需在字段表加一行。
+- 原则：宿主原生控件，不引入 MVVM/通用绑定引擎，不改变 `.rc` 像素布局。
+
