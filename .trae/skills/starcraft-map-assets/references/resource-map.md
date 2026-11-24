@@ -56,7 +56,7 @@ VERSIONINFO.
 | `assets/bin_193.bin` | 9 600 B | Default TRIG (4 triggers) |
 | `assets/bitmap_134.bmp` | 16×16 4bpp | Original small bitmap |
 | `assets/bitmap_151.bmp` | 500×300 | Original splash/help image |
-| `assets/bitmap_152.bmp` | 128×128 | Original icon image; also `IDB_START_BANNER` 209 shown when no map is open |
+| `assets/bitmap_152.bmp` | 128×128 | Startup banner (`IDB_START_BANNER` 209) shown when no map is open; content replaced with custom artwork, no longer the original bitmap |
 | `assets/toolbar_icons.bmp` | 176×16, 24bpp, magenta transparent | 11 toolbar icons extracted from a screenshot |
 | `assets/menu_icon.bmp` | 16×16 | Menu banner icon |
 
