@@ -1375,6 +1375,7 @@ bool MainWindow::OpenMap(const std::wstring& path) {    if (!map_.Open(path, til
     RefreshBrushPalette();
     RefreshDoodadPalette();
     RefreshSceneTree();
+    SyncMenuChecks();
     CheckCompatibility();
     return true;
 }
@@ -1571,6 +1572,7 @@ void MainWindow::NewMap() {
     RefreshBrushPalette();
     RefreshDoodadPalette();
     RefreshSceneTree();
+    SyncMenuChecks();
 }
 
 void MainWindow::CloseMap() {
@@ -1590,6 +1592,7 @@ void MainWindow::CloseMap() {
     RefreshBrushPalette();
     RefreshDoodadPalette();
     RefreshSceneTree();
+    SyncMenuChecks();
     ::InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
@@ -2877,11 +2880,13 @@ void MainWindow::ToggleDisplay(int commandId) {
 void MainWindow::SyncMenuChecks() {
     HMENU bar = ::GetMenu(hwnd_);
     if (!bar) return;
-    // 勾选状态由命令表统一提供，菜单遍历只负责落到具体子菜单
+    // 勾选与可用状态由命令表统一提供，菜单遍历只负责落到具体子菜单
     commands_.VisitStates([&](int id, const CommandState& state) {
         if (HMENU menu = FindMenuContaining(bar, id)) {
             ::CheckMenuItem(menu, id, MF_BYCOMMAND |
                             (state.checked ? MF_CHECKED : MF_UNCHECKED));
+            ::EnableMenuItem(menu, id, MF_BYCOMMAND |
+                             (state.enabled ? MF_ENABLED : MF_GRAYED));
         }
     });
     ::DrawMenuBar(hwnd_);
@@ -4265,6 +4270,7 @@ void MainWindow::CommitEdit(const wchar_t* label) {
     mbrfSnapshot_.clear();
     RefreshSceneTree();
     UpdateTitle();
+    SyncMenuChecks();
 }
 
 void MainWindow::RefreshAfterHistory(const Buffer& oldTiles) {
@@ -4329,6 +4335,7 @@ bool MainWindow::Undo() {
     if (!history_.Undo(map_)) return false;
     RefreshAfterHistory(before);
     UpdateTitle();
+    SyncMenuChecks();
     return true;
 }
 
@@ -4337,6 +4344,7 @@ bool MainWindow::Redo() {
     if (!history_.Redo(map_)) return false;
     RefreshAfterHistory(before);
     UpdateTitle();
+    SyncMenuChecks();
     return true;
 }
 
@@ -5069,6 +5077,29 @@ void MainWindow::RegisterCommandStates() {
 
     commands_.SetState(kAutoCheckUpdate, [] {
         return CommandState{AppSettings::Instance().autoCheckUpdate()};
+    });
+
+    // 需要打开地图 / 存在历史的命令：控制菜单可用状态
+    commands_.SetState(kFileClose, [this] {
+        return CommandState{false, map_.IsOpen()};
+    });
+    commands_.SetState(kFileSave, [this] {
+        return CommandState{false, map_.IsOpen()};
+    });
+    commands_.SetState(kFileSaveAs, [this] {
+        return CommandState{false, map_.IsOpen()};
+    });
+    commands_.SetState(kFileSaveImage, [this] {
+        return CommandState{false, map_.IsOpen()};
+    });
+    commands_.SetState(kMpqFileManager, [this] {
+        return CommandState{false, map_.IsOpen()};
+    });
+    commands_.SetState(kEditUndo, [this] {
+        return CommandState{false, history_.CanUndo()};
+    });
+    commands_.SetState(kEditRedo, [this] {
+        return CommandState{false, history_.CanRedo()};
     });
 }
 

@@ -213,6 +213,7 @@ bool HasSwitchArg(const wchar_t* name) {
 
 // --view-test：校验启动时从 settings.ini 恢复视图状态（--settings-dir 预置）
 bool ItemChecked(HWND hwnd, int id);
+bool ItemEnabled(HWND hwnd, int id);
 void WriteDiag(const std::wstring& text);
 
 int RunViewTest(HWND hwnd, const MainWindow& win) {
@@ -1869,6 +1870,13 @@ bool ItemChecked(HWND hwnd, int id) {
     return state != 0xFFFFFFFFu && (state & MF_CHECKED) != 0;
 }
 
+bool ItemEnabled(HWND hwnd, int id) {
+    HMENU menu = FindMenuWithItem(::GetMenu(hwnd), id);
+    if (!menu) return false;
+    const UINT state = ::GetMenuState(menu, static_cast<UINT>(id), MF_BYCOMMAND);
+    return state != 0xFFFFFFFFu && (state & (MF_GRAYED | MF_DISABLED)) == 0;
+}
+
 // 关闭当前进程内除 keep 之外的 SCMDPlus 主窗口（多窗口回归用）
 struct CloseOthersCtx {
     HWND keep = nullptr;
@@ -1892,6 +1900,10 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     };
 
     const bool layerInit = ItemChecked(hwnd, 0x803A);
+
+    // 命令状态：有地图时保存/关闭可用；历史为空时撤销/恢复灰显
+    const bool enabledInit = ItemEnabled(hwnd, 0x8087) && ItemEnabled(hwnd, 0x8007) &&
+                             !ItemEnabled(hwnd, 0x807F) && !ItemEnabled(hwnd, 0x8080);
 
     cmd(0x803D);   // 编辑层 → 单位
     const bool layerUnits = ItemChecked(hwnd, 0x803D) && !ItemChecked(hwnd, 0x803A);
@@ -2057,13 +2069,14 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
 
     wchar_t msg[512];
     ::wsprintfW(msg,
-        L"layerInit=%d\nlayerUnits=%d\nlayerLoc=%d\nlayerBack=%d\n"
+        L"layerInit=%d\nenabledInit=%d\nlayerUnits=%d\nlayerLoc=%d\nlayerBack=%d\n"
         L"gridLarge=%d\ngridOff=%d\ngridBack=%d\ngridRed=%d\n"
         L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\nzoom=%d\nminimapOff=%d\nminimapOn=%d\n"
         L"fogAlias=%d\nfogExplored=%d\nallColors=%d\neffects=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n"
         L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\ndoodadAny=%d\nlocMode=%d\n"
         L"spAlign=%d\nautoUpdate=%d\noutput=%d\ncache=%d\nwindow=%d\n",
-        layerInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0, layerBack ? 1 : 0,
+        layerInit ? 1 : 0, enabledInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0,
+        layerBack ? 1 : 0,
         gridLarge ? 1 : 0, gridOff ? 1 : 0, gridBack ? 1 : 0, gridRed ? 1 : 0,
         unitsOff ? 1 : 0, unitsOn ? 1 : 0, fogOn ? 1 : 0, zoomOk ? 1 : 0,
         minimapOff ? 1 : 0, minimapOn ? 1 : 0, fogAlias ? 1 : 0, fogExplored ? 1 : 0,
@@ -2077,7 +2090,7 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         outputOk ? 1 : 0, cacheOk ? 1 : 0, windowOk ? 1 : 0);
     WriteDiag(msg);
 
-    const bool ok = layerInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
+    const bool ok = layerInit && enabledInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
                     gridBack && gridRed && unitsOff && unitsOn && fogOn && zoomOk &&
                     minimapOff && minimapOn && fogAlias && fogExplored && allColorsOn &&
                     effectsOk && debugOn &&

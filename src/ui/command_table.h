@@ -5,9 +5,11 @@
 
 namespace scmd {
 
-// 命令的界面状态（当前用于菜单勾选；后续可扩展 enabled）
+// 命令的界面状态。字段顺序保持 checked 在前，
+// 既有 CommandState{checked} 写法无需改动。
 struct CommandState {
     bool checked = false;
+    bool enabled = true;
 };
 
 // 命令表：把命令 ID 映射到处理函数和状态查询。

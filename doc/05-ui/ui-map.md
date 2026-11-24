@@ -801,8 +801,11 @@ dirty=1 saved=1 reopened=1 reopenDim=1 reopenTile=1
   `RegisterAll` 服务一组命令；`Execute` 先复制处理器，命令内关闭窗口也安全。
   `MainWindow::RegisterCommands()` 集中注册 150+ 个命令，`OnCommand` 仅保留
   小雷达/迷雾范围预判与未注册日志。
-- `CommandTable::SetState` 注册勾选查询，`RegisterCommandStates()` 描述编辑层 / 方格 /
-  颜色 / Locations / 缩放 / 输出 / 显示 / 调试 / 放置等互斥或开关状态；
-  `SyncMenuChecks` 只遍历命令表并勾选菜单，不再维护硬编码分组。
+- `CommandTable::SetState` 注册状态查询（`CommandState{checked, enabled}`），
+  `RegisterCommandStates()` 描述编辑层 / 方格 / 颜色 / Locations / 缩放 / 输出 /
+  显示 / 调试 / 放置等互斥或开关状态；`SyncMenuChecks` 只遍历命令表并应用勾选与灰显，
+  不再维护硬编码分组。
+- enabled 规则：无地图时保存 / 另存为 / 保存图像 / 关闭 / MPQ 管理灰显；
+  撤销 / 恢复按历史栈灰显。开图、新建、关闭、提交编辑、撤销、重做后刷新菜单。
 - 原则：宿主原生控件，不引入 MVVM/通用绑定引擎，不改变 `.rc` 像素布局。
 
