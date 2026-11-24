@@ -42,10 +42,20 @@ constexpr const wchar_t* kWindowTitle = L"SCMD Plus 3.0";
 // 布局常量：左侧栏宽度 / 状态栏高度 / 场景树控件 ID
 constexpr int kSidebarWidth = 140;
 constexpr int kStatusBarHeight = 22;
+constexpr int kToolbarHeight = 28;
 constexpr int kSceneTreeId = 0x8FF0;
 constexpr int kHScrollId = 0x8FF1;
 constexpr int kVScrollId = 0x8FF2;
 constexpr int kStatusBarId = 0x8FF3;
+// 工具栏右侧控件（顺序与原版一致）
+constexpr int kToolLayerId = 0x8FE1;
+constexpr int kToolPlayerId = 0x8FE2;
+constexpr int kToolZoomId = 0x8FE3;
+constexpr int kToolTerrainId = 0x8FE4;
+constexpr int kToolIndexId = 0x8FE5;
+constexpr int kToolMirrorXId = 0x8FE6;
+constexpr int kToolMirrorYId = 0x8FE7;
+constexpr int kToolMirrorXYId = 0x8FE8;
 
 constexpr const wchar_t* kMapFilter =
     L"StarCraft 地图 (*.scx;*.scm)\0*.scx;*.scm\0所有文件 (*.*)\0*.*\0\0";
@@ -864,6 +874,7 @@ void MainWindow::ApplyZoomPercent(int percent) {
     if (px == pxPerTile_) return;
     if (!RebuildView(px)) BeepWarning();
     SyncMenuChecks();
+    SyncToolbarControls();
 }
 
 bool MainWindow::RebuildView(int pxPerTile) {
@@ -940,8 +951,166 @@ void MainWindow::UpdateScrollBars() {
     }
 }
 
+void MainWindow::CreateToolbar() {
+    if (toolbar_) return;
+    toolbar_ = ::CreateWindowExW(
+        0, TOOLBARCLASSNAMEW, L"",
+        WS_CHILD | WS_VISIBLE | TBSTYLE_FLAT | TBSTYLE_LIST | TBSTYLE_TOOLTIPS | CCS_NODIVIDER |
+            CCS_NORESIZE,
+        0, 0, 10, 10, hwnd_, nullptr, hInstance_, nullptr);
+    if (!toolbar_) return;
+    ::SendMessageW(toolbar_, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
+    ::SendMessageW(toolbar_, TB_SETBUTTONSIZE, 0, MAKELPARAM(38, 24));
+    static const wchar_t kLabels[] =
+        L"新建\0打开\0保存\0图像\0撤销\0重做\0属性\0删除\0复制\0剪切\0粘贴\0";
+    const LRESULT base = ::SendMessageW(toolbar_, TB_ADDSTRINGW, 0,
+                                        reinterpret_cast<LPARAM>(kLabels));
+    struct BtnDef { int cmd; int str; bool sep; };
+    const BtnDef defs[] = {
+        {kFileNew, 0, false}, {kFileOpen, 1, false}, {kFileSave, 2, false},
+        {kFileSaveImage, 3, false}, {0, 0, true},
+        {kEditUndo, 4, false}, {kEditRedo, 5, false},
+        {kEditProperties, 6, false}, {kEditDelete, 7, false}, {0, 0, true},
+        {kEditCopy, 8, false}, {kEditCut, 9, false}, {kEditPaste, 10, false},
+        {0, 0, true},
+    };
+    const int count = static_cast<int>(sizeof(defs) / sizeof(defs[0]));
+    std::vector<TBBUTTON> buttons(static_cast<std::size_t>(count));
+    for (int i = 0; i < count; i++) {
+        TBBUTTON& b = buttons[static_cast<std::size_t>(i)];
+        b = TBBUTTON{};
+        b.iBitmap = I_IMAGENONE;
+        b.idCommand = defs[i].cmd;
+        b.fsState = TBSTATE_ENABLED;
+        b.fsStyle = defs[i].sep ? BTNS_SEP : BTNS_BUTTON;
+        b.iString = defs[i].sep ? -1 : static_cast<INT_PTR>(base) + defs[i].str;
+    }
+    ::SendMessageW(toolbar_, TB_ADDBUTTONSW, static_cast<WPARAM>(count),
+                   reinterpret_cast<LPARAM>(buttons.data()));
+
+    auto makeCombo = [this](int id, int width) {
+        return ::CreateWindowExW(
+            0, L"ComboBox", L"",
+            WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL, 0, 0, width, 220, hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), hInstance_, nullptr);
+    };
+    layerCombo_ = makeCombo(kToolLayerId, 68);
+    static const wchar_t* kLayerItems[] = {L"地形", L"装饰物", L"迷雾", L"Locations",
+                                           L"单位", L"SP单位"};
+    for (const wchar_t* item : kLayerItems) {
+        ::SendMessageW(layerCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(item));
+    }
+
+    playerCombo_ = makeCombo(kToolPlayerId, 68);
+    for (int i = 0; i < 8; i++) {
+        wchar_t label[32];
+        ::wsprintfW(label, L"Player %d", i + 1);
+        const LRESULT at = ::SendMessageW(playerCombo_, CB_ADDSTRING, 0,
+                                          reinterpret_cast<LPARAM>(label));
+        if (at != CB_ERR) ::SendMessageW(playerCombo_, CB_SETITEMDATA, at, i);
+    }
+    {
+        const LRESULT at = ::SendMessageW(playerCombo_, CB_ADDSTRING, 0,
+                                          reinterpret_cast<LPARAM>(L"中立"));
+        if (at != CB_ERR) ::SendMessageW(playerCombo_, CB_SETITEMDATA, at, 11);
+    }
+
+    zoomCombo_ = makeCombo(kToolZoomId, 68);
+    const int kZooms[] = {25, 33, 50, 66, 100, 150, 200, 300, 400};
+    for (int percent : kZooms) {
+        wchar_t label[16];
+        ::wsprintfW(label, L"%d%%", percent);
+        const LRESULT at = ::SendMessageW(zoomCombo_, CB_ADDSTRING, 0,
+                                          reinterpret_cast<LPARAM>(label));
+        if (at != CB_ERR) ::SendMessageW(zoomCombo_, CB_SETITEMDATA, at, percent);
+    }
+
+    terrainCombo_ = makeCombo(kToolTerrainId, 84);
+    ::SendMessageW(terrainCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"标准地形"));
+    ::SendMessageW(terrainCombo_, CB_SETCURSEL, 0, 0);
+    ::EnableWindow(terrainCombo_, FALSE);
+
+    indexCombo_ = makeCombo(kToolIndexId, 38);
+    ::SendMessageW(indexCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"01"));
+    ::SendMessageW(indexCombo_, CB_SETCURSEL, 0, 0);
+    ::EnableWindow(indexCombo_, FALSE);
+
+    static const wchar_t* kMirror[] = {L"镜像-X", L"镜像-Y", L"镜像-XY"};
+    const int kMirrorIds[] = {kToolMirrorXId, kToolMirrorYId, kToolMirrorXYId};
+    for (int i = 0; i < 3; i++) {
+        mirrorButtons_[i] = ::CreateWindowExW(
+            0, L"Button", kMirror[i], WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+            0, 0, 10, 10, hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kMirrorIds[i])), hInstance_, nullptr);
+        ::EnableWindow(mirrorButtons_[i], FALSE);
+    }
+}
+
+void MainWindow::SyncToolbarControls() {
+    if (layerCombo_) ::SendMessageW(layerCombo_, CB_SETCURSEL, static_cast<WPARAM>(layer_), 0);
+    if (playerCombo_) {
+        const LRESULT n = ::SendMessageW(playerCombo_, CB_GETCOUNT, 0, 0);
+        for (LRESULT i = 0; i < n; i++) {
+            if (::SendMessageW(playerCombo_, CB_GETITEMDATA, static_cast<WPARAM>(i), 0) ==
+                static_cast<LRESULT>(unitOwner_)) {
+                ::SendMessageW(playerCombo_, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
+                break;
+            }
+        }
+    }
+    if (zoomCombo_) {
+        const int percent = pxPerTile_ * 100 / kTilePixels;
+        const LRESULT n = ::SendMessageW(zoomCombo_, CB_GETCOUNT, 0, 0);
+        for (LRESULT i = 0; i < n; i++) {
+            if (::SendMessageW(zoomCombo_, CB_GETITEMDATA, static_cast<WPARAM>(i), 0) ==
+                percent) {
+                ::SendMessageW(zoomCombo_, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
+                break;
+            }
+        }
+    }
+}
+
+bool MainWindow::OnToolbarCommand(int id, int code) {
+    if (id == kToolLayerId) {
+        if (code == CBN_SELCHANGE) {
+            const LRESULT sel = ::SendMessageW(layerCombo_, CB_GETCURSEL, 0, 0);
+            if (sel != CB_ERR) SetLayer(static_cast<EditLayer>(sel));
+        }
+        return true;
+    }
+    if (id == kToolPlayerId) {
+        if (code == CBN_SELCHANGE) {
+            const LRESULT sel = ::SendMessageW(playerCombo_, CB_GETCURSEL, 0, 0);
+            if (sel != CB_ERR) {
+                const LRESULT owner = ::SendMessageW(playerCombo_, CB_GETITEMDATA,
+                                                     static_cast<WPARAM>(sel), 0);
+                SetUnitPlacement(unitType_, static_cast<u8>(owner), unitResource_);
+            }
+        }
+        return true;
+    }
+    if (id == kToolZoomId) {
+        if (code == CBN_SELCHANGE) {
+            const LRESULT sel = ::SendMessageW(zoomCombo_, CB_GETCURSEL, 0, 0);
+            if (sel != CB_ERR) {
+                const LRESULT percent = ::SendMessageW(zoomCombo_, CB_GETITEMDATA,
+                                                       static_cast<WPARAM>(sel), 0);
+                if (percent > 0) ApplyZoomPercent(static_cast<int>(percent));
+            }
+        }
+        return true;
+    }
+    if (id == kToolTerrainId || id == kToolIndexId || id == kToolMirrorXId ||
+        id == kToolMirrorYId || id == kToolMirrorXYId) {
+        return true;
+    }
+    return false;
+}
+
 void MainWindow::CreateChrome() {
     if (!hwnd_) return;
+    CreateToolbar();
     if (!hScroll_) {
         hScroll_ = ::CreateWindowExW(
             0, L"SCROLLBAR", L"", WS_CHILD | WS_VISIBLE | SBS_HORZ, 0, 0, 10, 10, hwnd_,
@@ -960,10 +1129,42 @@ void MainWindow::CreateChrome() {
     }
     LayoutChrome();
     UpdateStatusBar();
+    SyncToolbarControls();
 }
 
 void MainWindow::LayoutChrome() {
     if (!hwnd_) return;
+    if (toolbar_) {
+        const RECT tr = ToolbarRect();
+        ::SetWindowPos(toolbar_, nullptr, tr.left, tr.top, tr.right - tr.left,
+                       tr.bottom - tr.top, SWP_NOZORDER | SWP_NOACTIVATE);
+        // 下拉框起点按按钮实际占位动态计算，避免窄按钮尺寸下与最后一个按钮重叠
+        int x = 460;
+        const int buttonCount = static_cast<int>(::SendMessageW(toolbar_, TB_BUTTONCOUNT, 0, 0));
+        if (buttonCount > 0) {
+            RECT last{};
+            if (::SendMessageW(toolbar_, TB_GETITEMRECT,
+                                static_cast<WPARAM>(buttonCount - 1),
+                                reinterpret_cast<LPARAM>(&last))) {
+                x = std::max(x, static_cast<int>(last.right) + 12);
+            }
+        }
+        const int y = 2;
+        const int h = 22;
+        auto place = [&](HWND w, int width) {
+            if (!w) return;
+            ::SetWindowPos(w, nullptr, x, y, width, h, SWP_NOZORDER | SWP_NOACTIVATE);
+            x += width + 4;
+        };
+        place(layerCombo_, 68);
+        place(playerCombo_, 68);
+        place(zoomCombo_, 68);
+        place(terrainCombo_, 84);
+        place(indexCombo_, 38);
+        place(mirrorButtons_[0], 66);
+        place(mirrorButtons_[1], 66);
+        place(mirrorButtons_[2], 74);
+    }
     if (statusBar_) {
         const RECT st = StatusRect();
         ::SetWindowPos(statusBar_, nullptr, st.left, st.top, st.right - st.left,
@@ -1036,9 +1237,22 @@ RECT MainWindow::MapViewRect() const {
     const int sbH = ::GetSystemMetrics(SM_CYHSCROLL);
     const int maxSide = std::max(0, static_cast<int>(rc.right - rc.left)) / 3;
     const int sideW = std::min(kSidebarWidth, maxSide);
-    RECT r = {sideW, 0, rc.right - sbW, rc.bottom - kStatusBarHeight - sbH - logH};
+    RECT r = {sideW, kToolbarHeight, rc.right - sbW,
+              rc.bottom - kStatusBarHeight - sbH - logH};
     if (r.right < r.left) r.right = r.left;
     if (r.bottom < r.top) r.bottom = r.top;
+    return r;
+}
+
+RECT MainWindow::ToolbarRect() const {
+    RECT r = {0, 0, 0, 0};
+    if (!hwnd_) return r;
+    RECT rc;
+    ::GetClientRect(hwnd_, &rc);
+    r.left = 0;
+    r.right = rc.right;
+    r.top = 0;
+    r.bottom = kToolbarHeight;
     return r;
 }
 
@@ -1049,7 +1263,7 @@ RECT MainWindow::SideRect() const {
     ::GetClientRect(hwnd_, &rc);
     const RECT view = MapViewRect();
     side.left = 0;
-    side.top = 0;
+    side.top = kToolbarHeight;
     side.right = view.left;
     side.bottom = rc.bottom - kStatusBarHeight;
     if (side.right < side.left) side.right = side.left;
@@ -1106,7 +1320,7 @@ RECT MainWindow::VScrollRect() const {
     const int sbW = ::GetSystemMetrics(SM_CXVSCROLL);
     r.left = rc.right - sbW;
     r.right = rc.right;
-    r.top = 0;
+    r.top = kToolbarHeight;
     r.bottom = HScrollRect().top;
     return r;
 }
@@ -1901,6 +2115,7 @@ void MainWindow::SetUnitPlacement(u16 type, u8 owner, u32 resource) {
     unitType_ = type;
     unitOwner_ = owner;
     unitResource_ = resource;
+    SyncToolbarControls();
 }
 
 void MainWindow::OpenUnitPlacement() {
@@ -2583,6 +2798,7 @@ void MainWindow::SetLayer(EditLayer layer) {
     else if (layer == EditLayer::kDoodads) showDoodads_ = true;
     else if (layer == EditLayer::kFog) showFog_ = true;
     SyncMenuChecks();
+    SyncToolbarControls();
     UpdateStatusBar();
     ::InvalidateRect(hwnd_, nullptr, TRUE);
 }
@@ -4956,6 +5172,7 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             SyncMenuChecks();
             return 0;
         case WM_COMMAND:
+            if (OnToolbarCommand(LOWORD(wParam), HIWORD(wParam))) return 0;
             OnCommand(LOWORD(wParam));
             return 0;
         case WM_PAINT: {

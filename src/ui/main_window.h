@@ -194,9 +194,13 @@ private:
     RECT StatusRect() const;
     RECT HScrollRect() const;
     RECT VScrollRect() const;
-    void CreateChrome();     // 地图滚动条 + 底部状态栏
+    RECT ToolbarRect() const;
+    void CreateChrome();     // 顶部工具栏 + 地图滚动条 + 底部状态栏
     void LayoutChrome();
     void UpdateStatusBar();
+    void CreateToolbar();
+    void SyncToolbarControls();
+    bool OnToolbarCommand(int id, int code);
     int LogHeight() const;
     bool PointInMapView(int mx, int my) const;
     void CreateSceneTree();
@@ -245,6 +249,13 @@ private:
     HINSTANCE hInstance_ = nullptr;
     HWND hwnd_ = nullptr;
     HWND sceneTree_ = nullptr;
+    HWND toolbar_ = nullptr;
+    HWND layerCombo_ = nullptr;
+    HWND playerCombo_ = nullptr;
+    HWND zoomCombo_ = nullptr;
+    HWND terrainCombo_ = nullptr;
+    HWND indexCombo_ = nullptr;
+    HWND mirrorButtons_[3] = {nullptr, nullptr, nullptr};
     HWND hScroll_ = nullptr;
     HWND vScroll_ = nullptr;
     HWND statusBar_ = nullptr;   // 右侧栏下方场景树（TreeView 子窗口）
