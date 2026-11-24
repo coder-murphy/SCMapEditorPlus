@@ -18,7 +18,7 @@
 | `src/res/` | Dialogs, menu, accelerators, embedded assets |
 | `reverse/scmdraft2/` | Original editor dump (read-only evidence) |
 | `mpq/` | `StarDat.mpq`, `BrooDat.mpq` |
-| `ts/` | 8 exported tilesets (32 files) |
+| `ts/` | 8 exported tilesets (32 files) + `stat_txt.tbl` (unit names for the scene tree) |
 | `tools/` | Dump/regression/UI-audit scripts and repro maps |
 | `doc/` | Verified format and UI documentation |
 

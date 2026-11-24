@@ -113,6 +113,7 @@ bool StatTextTable::LoadAuto(StatTextTable& out, std::wstring& source) {
 
     for (const std::wstring& dir : dirs) {
         const std::wstring files[] = {dir + L"\\rez\\stat_txt.tbl", dir + L"\\arr\\stat_txt.tbl",
+                                      dir + L"\\ts\\stat_txt.tbl",
                                       dir + L"\\stat_txt.tbl"};
         for (const std::wstring& file : files) {
             if (::GetFileAttributesW(file.c_str()) == INVALID_FILE_ATTRIBUTES) continue;

@@ -23,6 +23,7 @@
 #include "platform/file_dialog.h"
 #include "map/map_switches.h"
 #include "terrain/edge_placer.h"
+#include "units/stat_txt.h"
 #include "res/resource.h"
 #include "ui/command_ids.h"
 #include "ui/dialog_registry.h"
@@ -76,6 +77,18 @@ const wchar_t* const kEraNamesStatus[8] = {
 std::wstring FileNameOf(const std::wstring& path) {
     const std::size_t at = path.find_last_of(L"\\/");
     return at == std::wstring::npos ? path : path.substr(at + 1);
+}
+
+// 场景树单位名：stat_txt.tbl 懒加载（游戏目录 / mpq 副本），失败时退回类型号
+const StatTextTable& SceneUnitNames() {
+    static StatTextTable table;
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        std::wstring source;
+        StatTextTable::LoadAuto(table, source);
+    }
+    return table;
 }
 
 // 工具栏按钮的工具提示：iItem 可能是按钮索引或命令 ID，两种都覆盖
@@ -749,10 +762,6 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
             item.hbmpItem = menuIconBitmap_;
             ::SetMenuItemInfoW(bar, 0, TRUE, &item);
         }
-        if (HMENU help = ::GetSubMenu(bar, 8)) {
-            ::AppendMenuW(help, MF_SEPARATOR, 0, nullptr);
-            ::AppendMenuW(help, MF_STRING, kDebugDialogs, L"恢复的界面...");
-        }
         // 原程序把显示选项里的 4 项灰掉了；本工程可用，解除灰显
         const int kEnableIds[] = {kDispAllColors, kDispUnits, kDispDoodads, kDispSpUnits,
                                   kWindowSpUnits, kEditConvertTerrain,
@@ -772,8 +781,11 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
             ::AppendMenuW(file, MF_SEPARATOR, 0, nullptr);
             ::AppendMenuW(file, MF_STRING, kMpqFileManager, L"MPQ 文件管理...");
         }
+        // 去掉「帮助」菜单（关于/主页/在线帮助/论坛/错误与建议/捐款及自测入口）
+        ::RemoveMenu(bar, 8, MF_BYPOSITION);
+        ::DrawMenuBar(hwnd_);
         // 「调试」菜单追加本工程的崖壁自动铺设
-        if (HMENU debug = ::GetSubMenu(bar, 9)) {
+        if (HMENU debug = FindMenuContaining(bar, kDebugEnable)) {
             ::AppendMenuW(debug, MF_SEPARATOR, 0, nullptr);
             ::AppendMenuW(debug, MF_STRING, kAutoEdgeCliffs, L"自动铺设崖壁");
         }
@@ -1118,14 +1130,38 @@ void MainWindow::SyncToolbarControls() {
         }
     }
     if (zoomCombo_) {
-        const int percent = pxPerTile_ * 100 / kTilePixels;
+        // 与 ApplyZoomPercent 使用同一换算（percent→px），33%/66% 等非整除档位也能匹配
+        if (zoomTempItem_ >= 0) {
+            ::SendMessageW(zoomCombo_, CB_DELETESTRING, static_cast<WPARAM>(zoomTempItem_), 0);
+            zoomTempItem_ = -1;
+        }
+        LRESULT match = -1;
         const LRESULT n = ::SendMessageW(zoomCombo_, CB_GETCOUNT, 0, 0);
         for (LRESULT i = 0; i < n; i++) {
-            if (::SendMessageW(zoomCombo_, CB_GETITEMDATA, static_cast<WPARAM>(i), 0) ==
-                percent) {
-                ::SendMessageW(zoomCombo_, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
+            const LRESULT itemPercent =
+                ::SendMessageW(zoomCombo_, CB_GETITEMDATA, static_cast<WPARAM>(i), 0);
+            if (itemPercent <= 0) continue;
+            const int itemPx = (kTilePixels * static_cast<int>(itemPercent) + 50) / 100;
+            if (itemPx == pxPerTile_) {
+                match = i;
                 break;
             }
+        }
+        if (match < 0) {
+            // 滚轮档位（6%/12% 等）不在固定列表里，临时追加一项显示实际比例
+            wchar_t label[16];
+            ::wsprintfW(label, L"%d%%", pxPerTile_ * 100 / kTilePixels);
+            const LRESULT at = ::SendMessageW(zoomCombo_, CB_ADDSTRING, 0,
+                                              reinterpret_cast<LPARAM>(label));
+            if (at != CB_ERR) {
+                ::SendMessageW(zoomCombo_, CB_SETITEMDATA, static_cast<WPARAM>(at),
+                               static_cast<LPARAM>(pxPerTile_ * 100 / kTilePixels));
+                match = at;
+                zoomTempItem_ = static_cast<int>(at);
+            }
+        }
+        if (match >= 0) {
+            ::SendMessageW(zoomCombo_, CB_SETCURSEL, static_cast<WPARAM>(match), 0);
         }
     }
 }
@@ -4237,12 +4273,19 @@ void MainWindow::RefreshSceneTree() {
         addGroup(L"单位", static_cast<int>(map_.units().size()), 1,
                  [this](int i, std::wstring& out) {
                      const UnitRecord& u = map_.units()[static_cast<std::size_t>(i)];
-                     wchar_t buf[128];
-                     ::wsprintfW(buf, L"#%u 类型 %u @ 格 %d,%d  玩家 %u",
-                                 static_cast<unsigned>(u.serial), static_cast<unsigned>(u.type),
-                                 static_cast<int>(u.x) / kTilePixels,
-                                 static_cast<int>(u.y) / kTilePixels,
-                                 static_cast<unsigned>(u.owner));
+                     const int tx = static_cast<int>(u.x) / kTilePixels;
+                     const int ty = static_cast<int>(u.y) / kTilePixels;
+                     const std::wstring& name = SceneUnitNames().Name(u.type);
+                     wchar_t buf[192];
+                     if (!name.empty()) {
+                         // 名称放在最前：左侧栏较窄，避免被坐标/编号挤掉
+                         ::wsprintfW(buf, L"%s  (%d,%d) 玩家 %u", name.c_str(), tx, ty,
+                                     static_cast<unsigned>(u.owner));
+                     } else {
+                         ::wsprintfW(buf, L"类型 %u  (%d,%d) 玩家 %u",
+                                     static_cast<unsigned>(u.type), tx, ty,
+                                     static_cast<unsigned>(u.owner));
+                     }
                      out = buf;
                  });
         addGroup(L"SP单位", static_cast<int>(map_.sprites().Count()), 2,
@@ -5500,7 +5543,10 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             if (!PointInMapView(pt.x, pt.y)) return 0;
             const int delta = GET_WHEEL_DELTA_WPARAM(wParam);
             const int next = NextZoom(pxPerTile_, delta > 0 ? 1 : -1);
-            if (next != pxPerTile_ && map_.IsOpen()) RebuildView(next);
+            if (next != pxPerTile_ && map_.IsOpen() && RebuildView(next)) {
+                SyncMenuChecks();
+                SyncToolbarControls();
+            }
             return 0;
         }
         case WM_HSCROLL: {

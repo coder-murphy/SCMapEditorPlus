@@ -268,6 +268,7 @@ private:
     HWND layerCombo_ = nullptr;
     HWND playerCombo_ = nullptr;
     HWND zoomCombo_ = nullptr;
+    int zoomTempItem_ = -1;   // 滚轮缩放档位不在固定列表时临时追加的项
     HWND terrainCombo_ = nullptr;
     HWND indexCombo_ = nullptr;
     HWND mirrorButtons_[3] = {nullptr, nullptr, nullptr};
