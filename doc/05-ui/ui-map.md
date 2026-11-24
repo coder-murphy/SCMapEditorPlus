@@ -612,14 +612,15 @@ minimapOff=1 minimapOn=1 fogAlias=1 allColors=1 effects=1 output=1 cache=1 windo
 GUI 探针：155（映射/禁用/应用不关闭/添加 MPQ）、166/172（置灰）、188（255+禁用）、
 189（行号 1/2/3 + 预览转义 + 显隐）、182（启动加载 `probe [1x1]`）。
 
-自动化回归：`SCMDPlus.exe --dialog-audit-test`（无窗口）创建全部 28 个独立对话框，
-校验初始化出子控件，并断言 155/166/172/188/189/169/175/182 的上述语义；
+自动化回归：`SCMDPlus.exe --dialog-audit-test`（无窗口）创建全部 28 个独立对话框，校验初始化出子控件，并断言 155/166/172/188/189/169/175/182 的上述语义；
 另构造临时文档覆盖 167 添加/改名/删除、179 设置/还原、198 设置/清除、
 199 更新文本、173 备份列表、181 新建/复制/修改/删除、193/194 字段确认、
 196 玩家/控制者/队伍切换与 197 升级/玩家/全局默认
 （`mpq167/switch179/sound198/brief199/backup173/trigger181/cond193/act194/player196/restriction197`）；
 交互快照共 20 对 before/after，连续两次运行逐字节一致。
 181 触发列表与 185/186 子面板列表已从 owner-draw 改为标准 ListBox（原样式下文本不生效）。
+一键脚本 `tools/regression.ps1` 串起四配置构建、四配置审计与 11 个自包含无头测试；
+`-Map <地图>` 追加依赖输入地图的测试（undo/trig/edit/player 等）。
 报告写入 `%TEMP%\scmdplus_mpq.txt`（`createAll=1 snapshot=1 snapshotControls=414 ... audit=1`）。
 同时输出控件快照 `%TEMP%\scmdplus_dialog_snapshot.txt`：每个对话框的控件 ID/类/
 可用状态/自身可见性/文本/列表项（列表与下拉最多 20 项）。
