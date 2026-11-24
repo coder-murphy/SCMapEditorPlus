@@ -1010,7 +1010,8 @@ void MainWindow::OpenHelpUrl(const wchar_t* url) {
 }
 
 // 163：开图后检测兼容性问题；有问题才弹列表，「保存」自动修复可修复项
-void MainWindow::CheckCompatibility() {    if (!map_.IsOpen()) return;
+void MainWindow::CheckCompatibility() {
+    if (!map_.IsOpen()) return;
     const int w = map_.width();
     const int h = map_.height();
     if (w <= 0 || h <= 0) return;
