@@ -4648,6 +4648,44 @@ int RunDialogAuditTest(HWND owner) {
         record(L"compat163", ok);
     }
 
+    // 4a-1) 163：自动修复路径（越界/非法单位、装饰物、SP、地点矩形）
+    {
+        MapDocument doc;
+        bool ok = doc.CreateNew(16, 16, 0, std::wstring());
+        if (ok) {
+            UnitRecord outOfBounds;
+            outOfBounds.serial = 1;
+            outOfBounds.type = 0;
+            outOfBounds.x = 600;   // 16 格 = 512 px
+            doc.mutableUnits().push_back(outOfBounds);
+            UnitRecord badType;
+            badType.serial = 2;
+            badType.type = 300;    // ≥ 228
+            badType.x = 32;
+            badType.y = 32;
+            doc.mutableUnits().push_back(badType);
+            Location badLoc;
+            badLoc.left = 10;
+            badLoc.top = 10;
+            badLoc.right = 5;      // 反向矩形
+            badLoc.bottom = 5;
+            doc.mutableLocations().MutableItems().push_back(badLoc);
+            doc.mutableDoodads().MutableItems().push_back(Doodad{1, 600, 0, 0, 0});
+            SpriteRecord badSprite;
+            badSprite.type = 1;
+            badSprite.x = 600;
+            doc.mutableSprites().MutableItems().push_back(badSprite);
+
+            const int fixed = RepairCompatibilityIssues(doc);
+            const auto& locs = doc.locations().Items();
+            ok = fixed >= 5 && doc.units().empty() && locs.size() == 1 &&
+                 locs[0].right > locs[0].left && locs[0].bottom > locs[0].top &&
+                 doc.doodads().Count() == 0 && doc.sprites().Count() == 0 &&
+                 RepairCompatibilityIssues(doc) == 0;   // 再次调用应为幂等
+        }
+        record(L"compat163Fix", ok);
+    }
+
     // 4b) 180：状态位回填 + 位序映射（无敌=bit4 / 幻影=bit3 / 钻地=bit1 / 隐形=bit0 / 升起=bit2）
     {
         UnitProps seed;

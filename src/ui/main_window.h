@@ -37,6 +37,10 @@ enum class LocationDrawMode {
     kAnywhere = 2,  // 任意描绘：像素精度
 };
 
+// 163：应用可自动修复的兼容性问题（越界单位/装饰物/SP、非法地点矩形）。
+// 返回修复项数；有改动时把地图标记为脏。供主窗口与无头回归共用。
+int RepairCompatibilityIssues(MapDocument& map);
+
 // 主窗口：菜单命令分发 + 地形视图 + 基础编辑
 class MainWindow {
 public:

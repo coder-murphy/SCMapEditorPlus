@@ -1009,6 +1009,55 @@ void MainWindow::OpenHelpUrl(const wchar_t* url) {
     }
 }
 
+// 163：删除越界/类型非法单位与 SP 单位、纠正装饰物、修正非法地点矩形
+int RepairCompatibilityIssues(MapDocument& map) {
+    if (!map.IsOpen()) return 0;
+    const int w = map.width();
+    const int h = map.height();
+    if (w <= 0 || h <= 0) return 0;
+    const u32 mapPxW = static_cast<u32>(w) * kTilePixels;
+    const u32 mapPxH = static_cast<u32>(h) * kTilePixels;
+
+    int fixed = map.RemoveInvalidUnits();
+    fixed += map.mutableDoodads().FixErrors(w, h);
+    {
+        auto& units = map.mutableUnits();
+        const std::size_t before = units.size();
+        units.erase(std::remove_if(units.begin(), units.end(),
+                                   [&](const UnitRecord& u) {
+                                       return u.x >= mapPxW || u.y >= mapPxH || u.type >= 228;
+                                   }),
+                    units.end());
+        fixed += static_cast<int>(before - units.size());
+    }
+    {
+        auto& locs = map.mutableLocations().MutableItems();
+        for (Location& l : locs) {
+            if (l.right > l.left && l.bottom > l.top && l.right <= mapPxW &&
+                l.bottom <= mapPxH) {
+                continue;
+            }
+            if (l.left >= mapPxW) l.left = mapPxW > 32 ? mapPxW - 32 : 0;
+            if (l.top >= mapPxH) l.top = mapPxH > 32 ? mapPxH - 32 : 0;
+            if (l.right <= l.left) l.right = std::min<u32>(l.left + 32, mapPxW);
+            if (l.bottom <= l.top) l.bottom = std::min<u32>(l.top + 32, mapPxH);
+            fixed++;
+        }
+    }
+    {
+        auto& sprites = map.mutableSprites().MutableItems();
+        const std::size_t before = sprites.size();
+        sprites.erase(std::remove_if(sprites.begin(), sprites.end(),
+                                     [&](const SpriteRecord& s) {
+                                         return s.x >= mapPxW || s.y >= mapPxH;
+                                     }),
+                      sprites.end());
+        fixed += static_cast<int>(before - sprites.size());
+    }
+    if (fixed > 0) map.MarkDirty();
+    return fixed;
+}
+
 // 163：开图后检测兼容性问题；有问题才弹列表，「保存」自动修复可修复项
 void MainWindow::CheckCompatibility() {
     if (!map_.IsOpen()) return;
@@ -1102,44 +1151,8 @@ void MainWindow::CheckCompatibility() {
 
     // 自动修复：删除越界/类型非法单位与 SP 单位、纠正装饰物、修正地点矩形
     BeginEdit();
-    int fixed = map_.RemoveInvalidUnits();
-    fixed += map_.mutableDoodads().FixErrors(w, h);
-    {
-        auto& units = map_.mutableUnits();
-        const std::size_t before = units.size();
-        units.erase(std::remove_if(units.begin(), units.end(),
-                                   [&](const UnitRecord& u) {
-                                       return u.x >= mapPxW || u.y >= mapPxH || u.type >= 228;
-                                   }),
-                    units.end());
-        fixed += static_cast<int>(before - units.size());
-    }
-    {
-        auto& locs = map_.mutableLocations().MutableItems();
-        for (Location& l : locs) {
-            if (l.right > l.left && l.bottom > l.top && l.right <= mapPxW &&
-                l.bottom <= mapPxH) {
-                continue;
-            }
-            if (l.left >= mapPxW) l.left = mapPxW > 32 ? mapPxW - 32 : 0;
-            if (l.top >= mapPxH) l.top = mapPxH > 32 ? mapPxH - 32 : 0;
-            if (l.right <= l.left) l.right = std::min<u32>(l.left + 32, mapPxW);
-            if (l.bottom <= l.top) l.bottom = std::min<u32>(l.top + 32, mapPxH);
-            fixed++;
-        }
-    }
-    {
-        auto& sprites = map_.mutableSprites().MutableItems();
-        const std::size_t before = sprites.size();
-        sprites.erase(std::remove_if(sprites.begin(), sprites.end(),
-                                     [&](const SpriteRecord& s) {
-                                         return s.x >= mapPxW || s.y >= mapPxH;
-                                     }),
-                      sprites.end());
-        fixed += static_cast<int>(before - sprites.size());
-    }
+    const int fixed = RepairCompatibilityIssues(map_);
     if (fixed > 0) {
-        map_.MarkDirty();
         CommitEdit(L"兼容性修复");
     } else {
         editOpen_ = false;

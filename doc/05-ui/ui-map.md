@@ -214,7 +214,7 @@ MSBuild SCMDPlus.sln /t:Rebuild /p:Configuration=Release /p:Platform=Win32 ^
 ## 后续
 
 1. ~~185/186 的列表内容接到 `TriggerSection` / `LocationTable` / `StringTable`~~（P3-11d 已完成）；
-2. 帮助菜单的外链项（主页/论坛/在线帮助/错误与建议/捐款）仍记录日志，未接 URL；
+2. ~~帮助菜单的外链项（主页/论坛/在线帮助/错误与建议/捐款）仍记录日志，未接 URL~~（已接 `ShellExecuteW`，见「帮助菜单外链」）；
 3. 已用控件语义别名接入触发编辑器；其余控件保留原程序数值，便于与二进制对照；
 4. ~~位图 134/151/152 尚未导出~~（P3-12 已导出到 `src/res/assets/`）。
 
