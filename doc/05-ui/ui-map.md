@@ -800,6 +800,9 @@ dirty=1 saved=1 reopened=1 reopenDim=1 reopenTile=1
 - `src/ui/command_table.h`：`CommandTable` 按命令 ID 注册 `std::function<void(int)>`，
   `RegisterAll` 服务一组命令；`Execute` 先复制处理器，命令内关闭窗口也安全。
   `MainWindow::RegisterCommands()` 集中注册 150+ 个命令，`OnCommand` 仅保留
-  小雷达/迷雾范围预判与未注册日志；勾选/启用状态仍在 `SyncMenuChecks`，下一步再收编。
+  小雷达/迷雾范围预判与未注册日志。
+- `CommandTable::SetState` 注册勾选查询，`RegisterCommandStates()` 描述编辑层 / 方格 /
+  颜色 / Locations / 缩放 / 输出 / 显示 / 调试 / 放置等互斥或开关状态；
+  `SyncMenuChecks` 只遍历命令表并勾选菜单，不再维护硬编码分组。
 - 原则：宿主原生控件，不引入 MVVM/通用绑定引擎，不改变 `.rc` 像素布局。
 

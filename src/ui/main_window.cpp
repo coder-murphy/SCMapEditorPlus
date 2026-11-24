@@ -590,22 +590,8 @@ bool DiffTileRect(const Buffer& before, const Buffer& after, int width, int heig
     return true;
 }
 
-// 在一组互斥命令中只勾选 checkedId
-void CheckOnly(HMENU bar, const int* ids, int count, int checkedId) {
-    for (int i = 0; i < count; i++) {
-        if (HMENU menu = FindMenuContaining(bar, ids[i])) {
-            ::CheckMenuItem(menu, ids[i], MF_BYCOMMAND |
-                            (ids[i] == checkedId ? MF_CHECKED : MF_UNCHECKED));
-        }
-    }
-}
-
 // 最近地图弹窗使用的一次性命令 ID（不进入菜单资源）
 constexpr int kRecentMenuBase = 0x9000;
-
-const int kLayerIds[] = {0x803A, 0x803B, 0x803E, 0x803C, 0x803D, 0x803F};
-const int kGridIds[] = {0x80AF, 0x800E, 0x800D, 0x80A5, 0x80AA, 0x80CF, 0x80D6};
-const int kGridColorIds[] = {0x8036, 0x80B1, 0x8037, 0x8038, 0x8039, 0x80B2, 0x80D0};
 
 int GridPresetOf(bool enabled, int cellX, int cellY) {
     if (!enabled) return 0x80D6;      // 禁止
@@ -720,6 +706,7 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
     if (!hwnd_) return false;
 
     RegisterCommands();
+    RegisterCommandStates();
 
     // 主菜单加速键：原始 RT_ACCELERATOR 109（Ctrl+N/O/S/Z/Y、Alt+网格尺寸…）
     hAccel_ = ::LoadAcceleratorsW(hInstance, MAKEINTRESOURCEW(IDR_ACCEL_MAIN));
@@ -2890,91 +2877,13 @@ void MainWindow::ToggleDisplay(int commandId) {
 void MainWindow::SyncMenuChecks() {
     HMENU bar = ::GetMenu(hwnd_);
     if (!bar) return;
-
-    CheckOnly(bar, kLayerIds, 6, kLayerIds[static_cast<int>(layer_)]);
-    CheckOnly(bar, kGridIds, 7, GridPresetOf(gridEnabled_, gridCellX_, gridCellY_));
-    CheckOnly(bar, kGridColorIds, 7, gridColorCommand_);
-    {
-        static const int kLocModeIds[] = {kLocDrawNeat, kLocDrawGrid, kLocDrawAnywhere};
-        CheckOnly(bar, kLocModeIds, 3, kLocModeIds[static_cast<int>(locationDrawMode_)]);
-    }
-
-    static const int kZoomIds[] = {kZoom25, kZoom33, kZoom50, kZoom66, kZoom100,
-                                   kZoom150, kZoom200, kZoom300, kZoom400};
-    static const int kZoomPercents[] = {25, 33, 50, 66, 100, 150, 200, 300, 400};
-    int checkedZoom = 0;
-    for (int i = 0; i < 9; i++) {
-        if ((kTilePixels * kZoomPercents[i] + 50) / 100 == pxPerTile_) {
-            checkedZoom = kZoomIds[i];
-            break;
+    // 勾选状态由命令表统一提供，菜单遍历只负责落到具体子菜单
+    commands_.VisitStates([&](int id, const CommandState& state) {
+        if (HMENU menu = FindMenuContaining(bar, id)) {
+            ::CheckMenuItem(menu, id, MF_BYCOMMAND |
+                            (state.checked ? MF_CHECKED : MF_UNCHECKED));
         }
-    }
-    CheckOnly(bar, kZoomIds, 9, checkedZoom);
-
-    const int kDebugDataIds[] = {kDebugDataNormal, kDebugDataExact, kDebugDataFinal};
-    CheckOnly(bar, kDebugDataIds, 3,
-              debugMode_ ? kDebugDataIds[debugDataMode_ % 3] : 0);
-
-    // 输出面板：显示 / 字体大小 / 提示详细度
-    if (HMENU menu = FindMenuContaining(bar, kOutputShow)) {
-        ::CheckMenuItem(menu, kOutputShow,
-                        MF_BYCOMMAND | (outputVisible_ ? MF_CHECKED : MF_UNCHECKED));
-    }
-    {
-        const int kFontIds[] = {kOutputFont8, kOutputFont10, kOutputFont12, kOutputFont14,
-                                kOutputFont16};
-        const int kFontPoints[] = {8, 10, 12, 14, 16};
-        int checkedFont = kOutputFont12;
-        for (int i = 0; i < 5; i++) {
-            if (kFontPoints[i] == outputFontPt_) checkedFont = kFontIds[i];
-        }
-        CheckOnly(bar, kFontIds, 5, checkedFont);
-
-        const int kVerbIds[] = {kOutputVerbOff, kOutputVerbSimple, kOutputVerbNormal,
-                                kOutputVerbHigh, kOutputVerbDebug};
-        CheckOnly(bar, kVerbIds, 5, kVerbIds[std::clamp(outputVerbosity_, 0, 4)]);
-    }
-
-    struct Toggle { int id; bool on; };
-    const Toggle toggles[] = {
-        {kDispAllColors, showAllColors_}, {kDispUnits, showUnits_},
-        {kDispDoodads, showDoodads_}, {kDispSpUnits, showSpUnits_},
-        {kDispZergGround, showZergGround_}, {kDispSpecialStates, showSpecialStates_},
-        {kDispHideMinimap, hideMinimap_}, {kDispColorCycle, allowColorCycle_},
-        {kDispDeathFx, showDeathFx_}, {kDispFog, showFog_},
-        {kDispFogExplored, showFog_}, {kLayerFogToggle, showFog_},
-        {kDispLocations, showLocations_},
-        {kDebugEnable, debugMode_}, {kDebugOverlaps, showOverlapMarkers_},
-        {kDebugCpu, showCpuTiming_}, {kDebugImageSize, showDebugImageSize_},
-        {kDebugImageSizeAlways, showImageSizeAlways_},
-        {kDebugCompare, showCompareData_}, {kDebugUnitConflict, showUnitConflict_},
-        {kEnableSound, soundEnabled_},
-        {kAutoCheckUpdate, AppSettings::Instance().autoCheckUpdate()},
-    };
-    for (const Toggle& t : toggles) {
-        if (HMENU menu = FindMenuContaining(bar, t.id)) {
-            ::CheckMenuItem(menu, t.id, MF_BYCOMMAND | (t.on ? MF_CHECKED : MF_UNCHECKED));
-        }
-    }
-
-    const Toggle placementToggles[] = {
-        {kPlaceBuildNormal, buildNormalRules_},
-        {kPlaceUnitGrid, unitGridDisplay_},
-        {kPlaceGroundOverlap, allowGroundOverlap_},
-        {kPlaceAirOverlap, allowAirOverlap_},
-        {kPlaceUnitAnywhere, placeUnitsAnywhere_},
-        {kPlaceBuildingAnywhere, placeBuildingsAnywhere_},
-        {kPlaceAutoAddon, autoConnectAddon_},
-        {kPlaceMineralDistance, mineralBaseDistance_},
-        {kDoodadAnywhere, placeDoodadsAnywhere_},
-        {kSpAlignGrid, spAlignGrid_},
-        {kClipboardDoodads, clipboardDoodads_},
-    };
-    for (const Toggle& t : placementToggles) {
-        if (HMENU menu = FindMenuContaining(bar, t.id)) {
-            ::CheckMenuItem(menu, t.id, MF_BYCOMMAND | (t.on ? MF_CHECKED : MF_UNCHECKED));
-        }
-    }
+    });
     ::DrawMenuBar(hwnd_);
 }
 
@@ -4998,6 +4907,168 @@ void MainWindow::RegisterCommands() {
     commands_.Register(kHelpDonate, [this](int) {
         ::MessageBoxW(hwnd_, L"本工程为免费开源工具，不接受捐款。", kWindowTitle,
                       MB_ICONINFORMATION);
+    });
+}
+
+void MainWindow::RegisterCommandStates() {
+    // 编辑层（互斥）
+    struct LayerState {
+        int id;
+        EditLayer layer;
+    };
+    static const LayerState kLayers[] = {
+        {kLayerTerrain, EditLayer::kTerrain},
+        {kLayerDoodads, EditLayer::kDoodads},
+        {kLayerFog, EditLayer::kFog},
+        {kLayerLocations, EditLayer::kLocations},
+        {kLayerUnits, EditLayer::kUnits},
+        {kLayerSpUnits, EditLayer::kSpUnits},
+    };
+    for (const LayerState& s : kLayers) {
+        commands_.SetState(s.id, [this, s] { return CommandState{layer_ == s.layer}; });
+    }
+
+    // 方格尺寸（互斥；非正方形时为“自定义”）
+    static const int kGridIds[] = {kGridTiny,  kGridSmall, kGridNormal, kGridLarge,
+                                   kGridHuge,  kGridCustom, kGridOff};
+    for (int id : kGridIds) {
+        commands_.SetState(id, [this, id] {
+            return CommandState{GridPresetOf(gridEnabled_, gridCellX_, gridCellY_) == id};
+        });
+    }
+
+    // 方格颜色（互斥）
+    static const int kGridColorIds[] = {kGridColorBlack, kGridColorGray, kGridColorWhite,
+                                        kGridColorGreen, kGridColorRed, kGridColorBlue,
+                                        kGridColorOther};
+    for (int id : kGridColorIds) {
+        commands_.SetState(id, [this, id] {
+            return CommandState{gridColorCommand_ == id};
+        });
+    }
+
+    // Locations 描绘模式（互斥）
+    struct LocModeState {
+        int id;
+        LocationDrawMode mode;
+    };
+    static const LocModeState kLocModes[] = {
+        {kLocDrawNeat, LocationDrawMode::kNeat},
+        {kLocDrawGrid, LocationDrawMode::kGrid},
+        {kLocDrawAnywhere, LocationDrawMode::kAnywhere},
+    };
+    for (const LocModeState& s : kLocModes) {
+        commands_.SetState(s.id, [this, s] {
+            return CommandState{locationDrawMode_ == s.mode};
+        });
+    }
+
+    // 缩放档位（互斥）
+    struct ZoomState {
+        int id;
+        int percent;
+    };
+    static const ZoomState kZooms[] = {
+        {kZoom25, 25},   {kZoom33, 33},   {kZoom50, 50},   {kZoom66, 66},
+        {kZoom100, 100}, {kZoom150, 150}, {kZoom200, 200}, {kZoom300, 300},
+        {kZoom400, 400},
+    };
+    for (const ZoomState& s : kZooms) {
+        commands_.SetState(s.id, [this, s] {
+            return CommandState{(kTilePixels * s.percent + 50) / 100 == pxPerTile_};
+        });
+    }
+
+    // 调试数据显示（互斥，且只在“允许调试”时勾选）
+    struct DataState {
+        int id;
+        int mode;
+    };
+    static const DataState kDebugData[] = {
+        {kDebugDataNormal, 0},
+        {kDebugDataExact, 1},
+        {kDebugDataFinal, 2},
+    };
+    for (const DataState& s : kDebugData) {
+        commands_.SetState(s.id, [this, s] {
+            return CommandState{debugMode_ && debugDataMode_ == s.mode};
+        });
+    }
+
+    // 输出面板
+    commands_.SetState(kOutputShow, [this] { return CommandState{outputVisible_}; });
+    struct FontState {
+        int id;
+        int points;
+    };
+    static const FontState kFonts[] = {
+        {kOutputFont8, 8},   {kOutputFont10, 10}, {kOutputFont12, 12},
+        {kOutputFont14, 14}, {kOutputFont16, 16},
+    };
+    for (const FontState& s : kFonts) {
+        commands_.SetState(s.id, [this, s] {
+            return CommandState{outputFontPt_ == s.points};
+        });
+    }
+    struct VerbState {
+        int id;
+        int level;
+    };
+    static const VerbState kVerbs[] = {
+        {kOutputVerbOff, 0},  {kOutputVerbSimple, 1}, {kOutputVerbNormal, 2},
+        {kOutputVerbHigh, 3}, {kOutputVerbDebug, 4},
+    };
+    for (const VerbState& s : kVerbs) {
+        commands_.SetState(s.id, [this, s] {
+            return CommandState{std::clamp(outputVerbosity_, 0, 4) == s.level};
+        });
+    }
+
+    // 显示 / 调试 / 放置开关：命令直接映射到成员变量
+    struct FlagState {
+        int id;
+        bool MainWindow::* flag;
+    };
+    static const FlagState kFlags[] = {
+        {kDispAllColors, &MainWindow::showAllColors_},
+        {kDispUnits, &MainWindow::showUnits_},
+        {kDispDoodads, &MainWindow::showDoodads_},
+        {kDispSpUnits, &MainWindow::showSpUnits_},
+        {kDispZergGround, &MainWindow::showZergGround_},
+        {kDispSpecialStates, &MainWindow::showSpecialStates_},
+        {kDispHideMinimap, &MainWindow::hideMinimap_},
+        {kDispColorCycle, &MainWindow::allowColorCycle_},
+        {kDispDeathFx, &MainWindow::showDeathFx_},
+        {kDispFog, &MainWindow::showFog_},
+        {kDispFogExplored, &MainWindow::showFog_},
+        {kLayerFogToggle, &MainWindow::showFog_},
+        {kDispLocations, &MainWindow::showLocations_},
+        {kDebugEnable, &MainWindow::debugMode_},
+        {kDebugOverlaps, &MainWindow::showOverlapMarkers_},
+        {kDebugCompare, &MainWindow::showCompareData_},
+        {kDebugUnitConflict, &MainWindow::showUnitConflict_},
+        {kDebugCpu, &MainWindow::showCpuTiming_},
+        {kDebugImageSize, &MainWindow::showDebugImageSize_},
+        {kDebugImageSizeAlways, &MainWindow::showImageSizeAlways_},
+        {kPlaceBuildNormal, &MainWindow::buildNormalRules_},
+        {kPlaceUnitGrid, &MainWindow::unitGridDisplay_},
+        {kPlaceGroundOverlap, &MainWindow::allowGroundOverlap_},
+        {kPlaceAirOverlap, &MainWindow::allowAirOverlap_},
+        {kPlaceUnitAnywhere, &MainWindow::placeUnitsAnywhere_},
+        {kPlaceBuildingAnywhere, &MainWindow::placeBuildingsAnywhere_},
+        {kPlaceAutoAddon, &MainWindow::autoConnectAddon_},
+        {kPlaceMineralDistance, &MainWindow::mineralBaseDistance_},
+        {kDoodadAnywhere, &MainWindow::placeDoodadsAnywhere_},
+        {kSpAlignGrid, &MainWindow::spAlignGrid_},
+        {kClipboardDoodads, &MainWindow::clipboardDoodads_},
+        {kEnableSound, &MainWindow::soundEnabled_},
+    };
+    for (const FlagState& s : kFlags) {
+        commands_.SetState(s.id, [this, s] { return CommandState{this->*(s.flag)}; });
+    }
+
+    commands_.SetState(kAutoCheckUpdate, [] {
+        return CommandState{AppSettings::Instance().autoCheckUpdate()};
     });
 }
 

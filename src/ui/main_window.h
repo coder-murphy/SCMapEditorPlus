@@ -88,7 +88,8 @@ public:
     const EditHistory& history() const { return history_; }
 
     void OnCommand(int id);
-    void RegisterCommands();   // 创建窗口后一次性建立命令表
+    void RegisterCommands();        // 创建窗口后一次性建立命令表
+    void RegisterCommandStates();   // 可勾选命令的状态查询
 
     // 单位放置参数（也用于无头回归）
     void SetUnitPlacement(u16 type, u8 owner, u32 resource);

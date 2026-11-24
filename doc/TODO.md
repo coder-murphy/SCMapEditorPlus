@@ -33,11 +33,13 @@
     命令内关闭窗口（文件→退出）也安全。
   - `MainWindow::RegisterCommands()` 接管原 `OnCommand` 的 switch：文件 / 编辑 / 剧本 /
     触发 / 窗口 / 放置规则 / 显示选项 / 调试 / 帮助等命令全部改由命令表分发。
-  - `OnCommand` 只保留小雷达/迷雾范围命令的预判，以及未注册命令的日志；
-    `main_window.cpp` 减少约 130 行。
-  - 回归：`menu`、`menu-cmd`、对话框审计通过；25 项地图回归 21 项通过，
+  - `OnCommand` 只保留小雷达/迷雾范围命令的预判，以及未注册命令的日志。
+  - 命令状态：`CommandTable::SetState` 注册勾选查询，`SyncMenuChecks` 改为遍历命令表，
+    原先约 90 行的硬编码分组（编辑层 / 方格 / 颜色 / Locations / 缩放 / 输出 /
+    显示 / 调试 / 放置）全部删除。
+  - 回归：`menu`、`menu-cmd`（33 项断言）、对话框审计通过；25 项地图回归 21 项通过，
     4 项为已知测试地图缺段（player/decor/sprite/radar）。
-  - 后续：把 enabled/checked 状态从 `SyncMenuChecks` 收进命令元数据；再迁测试出 GUI。
+  - 后续：如需动态 enabled 状态可继续扩展 `CommandState`；再迁测试出 GUI。
 
 ## P0 编辑核心
 

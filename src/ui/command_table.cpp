@@ -14,6 +14,19 @@ void CommandTable::RegisterAll(std::initializer_list<int> ids, Handler handler) 
     }
 }
 
+void CommandTable::SetState(int id, StateProvider provider) {
+    states_[id] = std::move(provider);
+}
+
+void CommandTable::VisitStates(
+    const std::function<void(int, const CommandState&)>& visitor) const {
+    for (const auto& entry : states_) {
+        // 状态查询可能读取当前窗口数据；先求值再回调，避免回调期间数据变化。
+        const CommandState state = entry.second();
+        visitor(entry.first, state);
+    }
+}
+
 bool CommandTable::Execute(int id) const {
     const auto it = handlers_.find(id);
     if (it == handlers_.end()) return false;
