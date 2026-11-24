@@ -709,6 +709,11 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
             ::AppendMenuW(debug, MF_SEPARATOR, 0, nullptr);
             ::AppendMenuW(debug, MF_STRING, kAutoEdgeCliffs, L"自动铺设崖壁");
         }
+        // 「触发」菜单追加只读文本视图
+        if (HMENU trig = ::GetSubMenu(bar, 6)) {
+            ::AppendMenuW(trig, MF_SEPARATOR, 0, nullptr);
+            ::AppendMenuW(trig, MF_STRING, kTriggerTextView, L"文本视图...");
+        }
         // 原资源把「字体大小」整个 POPUP 灰掉了，这里解除
         if (HMENU fonts = FindMenuContaining(bar, kOutputFont8)) {
             HMENU parent = nullptr;
@@ -4698,6 +4703,15 @@ void MainWindow::OnCommand(int id) {
             CommitEdit(L"编辑触发");
             UpdateTitle();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
+            break;
+        case kTriggerTextView:
+            if (!map_.IsOpen()) {
+                BeepWarning();
+                break;
+            }
+            SetDialogDocument(&map_);
+            ShowRecoveredDialog(IDD_TRIG_TEXT, hwnd_);
+            SetDialogDocument(nullptr);
             break;
         case kIscriptGrpDebug:
             ShowRecoveredDialog(IDD_ISCRIPT, hwnd_);

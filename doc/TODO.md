@@ -224,8 +224,7 @@
     同一基准在四配置下均 `snapshotMatch=1`。
   - 基准入库：`doc/05-ui/dialog-snapshot-baseline.txt`（UTF-8 BOM / LF，
     617 行 / 21 KB）；`tools/dialog-ui-check.ps1` 提供 check/update 两种模式，
-    `.github/workflows/dialog-ui.yml` 在 windows-latest 构建 Debug Win32 后自动校验，
-    失败时上传快照 diff 作为 artifact。
+    本地按配置执行（CI 暂不启用）。
   - 四配置运行均 `audit=1`（快照约 39 KB / 414 控件）。
 - [x] **快照基准按环境分组**
   - 基准命名：`doc/05-ui/dialog-snapshot-baseline.<环境标签>.txt`，存在时优先于通用基准。
@@ -343,12 +342,10 @@
   - 无头回归：`--menu-cmd-test` 改为使用临时 settings 目录并重置默认视图
     （新增 `MainWindow::ReloadViewState`），避免用户 settings.ini 导致断言漂移。
   - 四配置构建通过，审计 `snapshotMatch=1 interactionMatch=1`，`--menu-cmd-test` exit=0。
-- [x] **CI 四配置矩阵**
-  - `.github/workflows/dialog-ui.yml` 改为矩阵：Debug/Release × Win32/x64 四个并行 job，
-    各自构建后运行 `tools/dialog-ui-check.ps1`（共用仓库内两份基准）。
-  - 失败时按 `dialog-snapshot-diff-<platform>-<config>` 分别上传两份 diff artifact。
-  - 本地已用同一脚本验证四配置 `snapshotMatch=1 interactionMatch=1`；
-    GitHub 托管 runner 尚未实际执行。
+- [x] **四配置本地校验（CI 暂不启用）**
+  - 已按“CI 暂不做”的约定移除 `.github/workflows/dialog-ui.yml`；
+    四配置（Debug/Release × Win32/x64）由 `tools/dialog-ui-check.ps1 -Exe <exe>` 本地校验。
+  - 本地四配置均 `snapshotMatch=1 interactionMatch=1`。
 - [x] **MPQ 文件管理（167）**
   - 文件 →「MPQ 文件管理...」（运行时追加 0x8FFC）打开 167；列出当前地图除 scenario.chk
     以外的附加文件（名称与大小）。
@@ -476,6 +473,12 @@
   - 条件与行动对话框按类型启用/禁用无关输入（矩阵见 `doc/05-ui/ui-map.md`）；
     行动只收窄 4 种确定类型，其余保持全开，自定义类型全部启用。
   - 回归：`cond193`（类型 1 / 22 / 自定义）、`act194`（类型 49 / 4）。
+- [x] **触发文本视图（206，只读）**
+  - 触发菜单运行时追加「文本视图...」（0x8FF9），打开 206：把当前地图的全部触发
+    按「触发头 + 条件 + 行动」的文本格式显示在只读多行编辑框中。
+  - 无地图时提示“未打开地图”；视图不修改数据，不进入撤销栈。
+  - 回归：`--dialog-audit-test` 新增 `triggerTextView`
+    （1 触发 × 1 条件 × 1 行动 + 文本 "Hello" → 文本含「触发 1/1」「条件 1」「显示文本」「Hello」）。
 - [x] **四配置验证**
   - Debug/Release × Win32/x64 全部构建通过；`tools/dialog-ui-check.ps1`
     四配置均 `audit=1 snapshotMatch=1 interactionMatch=1`，`unitNames172/163/cond193/act194` 全绿。

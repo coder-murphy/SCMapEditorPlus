@@ -1001,6 +1001,63 @@ INT_PTR HandleTriggerListEditor(HWND dlg, UINT msg, WPARAM wParam) {
     return HandleListEditor(dlg, msg, wParam);
 }
 
+// 206：触发文本视图（只读）。格式为本工程自定义，便于快速浏览/对照。
+namespace {
+
+std::wstring BuildTriggerText(const MapDocument& doc) {
+    const auto& items = doc.triggers().Items();
+    if (items.empty()) return L"（当前地图没有触发）\r\n";
+    std::wstring out;
+    for (std::size_t i = 0; i < items.size(); i++) {
+        const Trigger& t = items[i];
+        wchar_t head[256];
+        ::wsprintfW(head, L"# 触发 %u/%u  [%s]  条件 %d / 行动 %d%s%s\r\n",
+                    static_cast<unsigned>(i) + 1, static_cast<unsigned>(items.size()),
+                    PlayerSummary(t).c_str(), t.ConditionCount(), t.ActionCount(),
+                    (t.executionFlags & 0x1u) ? L"  [仅一次]" : L"",
+                    (t.executionFlags & 0x8u) ? L"  [禁用]" : L"");
+        out += head;
+        for (int c = 0; c < t.ConditionCount(); c++) {
+            out += L"    条件 " + std::to_wstring(c + 1) + L": " +
+                   ConditionText(doc, t.conditions[c]) + L"\r\n";
+        }
+        for (int a = 0; a < t.ActionCount(); a++) {
+            out += L"    行动 " + std::to_wstring(a + 1) + L": " +
+                   ActionText(doc, t.actions[a]) + L"\r\n";
+        }
+        out += L"\r\n";
+    }
+    return out;
+}
+
+}  // namespace
+
+INT_PTR CALLBACK ProcTriggerTextView(HWND dlg, UINT msg, WPARAM wParam, LPARAM) {
+    switch (msg) {
+        case WM_INITDIALOG: {
+            CenterDialog(dlg);
+            MapDocument* doc = DialogDocument();
+            const std::wstring text =
+                doc ? BuildTriggerText(*doc) : std::wstring(L"（未打开地图）\r\n");
+            ::SetDlgItemTextW(dlg, IDC_D206_TEXT, text.c_str());
+            return TRUE;
+        }
+        case WM_COMMAND:
+            if (LOWORD(wParam) == IDC_D206_CLOSE || LOWORD(wParam) == IDOK ||
+                LOWORD(wParam) == IDCANCEL) {
+                ::EndDialog(dlg, IDOK);
+                return TRUE;
+            }
+            break;
+        case WM_CLOSE:
+            ::EndDialog(dlg, IDCANCEL);
+            return TRUE;
+        default:
+            break;
+    }
+    return FALSE;
+}
+
 // 171：编辑 Location。六个地形高度按钮 + 四边坐标 + 名称/STR 下标。
 namespace {
 

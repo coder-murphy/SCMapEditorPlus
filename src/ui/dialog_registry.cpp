@@ -42,6 +42,7 @@ const DialogEntry kEntries[] = {
     {198, L"编辑声音", "impl", false, &ProcSoundList},
     {199, L"任务简报", "impl", false, &ProcMissionBriefing},
     {205, L"Iscript / Grp 调试", "impl", false, &ProcIscriptGrpDebug},
+    {206, L"触发文本视图（只读）", "impl", false, &ProcTriggerTextView},
 };
 
 int g_lastDialogError = 0;

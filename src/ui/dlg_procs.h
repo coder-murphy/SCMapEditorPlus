@@ -49,6 +49,7 @@ INT_PTR HandleTriggerListEditor(HWND dlg, UINT msg, WPARAM wParam);
 INT_PTR CALLBACK ProcRichText(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 富文本（187）
 INT_PTR CALLBACK ProcTriggerCondition(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);  // 条件编辑（193）
 INT_PTR CALLBACK ProcTriggerAction(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);     // 行动编辑（194）
+INT_PTR CALLBACK ProcTriggerTextView(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam);    // 触发文本视图（206，只读）
 
 // 对话框返回值缓存
 int LastInputValue();                 // 188 / 191

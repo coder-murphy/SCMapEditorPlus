@@ -23,7 +23,7 @@
 | 167 | `IDD_DLG_167` | Scmdraft 2.0.8.0 [CsgA]NaKa汉化版 | MPQ 附加文件管理：列出/导入/导出/改名/添加/删除 | `src/map/` |
 | 169 | `IDD_DLG_169` | 新建地图 | 新建：尺寸预设（64/96/128/192/256）/ 8 种地形集 / 默认触发组 | `src/map/` |
 | 171 | `IDD_DLG_171` | 编辑Location | 地点（区域）编辑：双击矩形 / 0x8108 | `src/triggers/` |
-| 172 | `IDD_DLG_172` | 单位名字 | units.dat 属性表（228 项） | `src/units/` |
+| 172 | `IDD_DLG_172` | 单位名字 | 有图时按类型编辑单位实例；无图时 units.dat 只读预览 | `src/units/` |
 | 173 | `IDD_DLG_173` | 查看备份数据 | 备份数据查看 | `src/tools/` |
 | 174 | `IDD_DLG_174` | 在线升级 | 更新检查 | `src/tools/` |
 | 175 | `IDD_DLG_175` | 重设地图大小 | 重设地图尺寸 | `src/map/` |
@@ -41,6 +41,7 @@
 | 191 | `IDD_DLG_191` | 重叠单位 | 重叠单位处理 | `src/units/` |
 | 192 | `IDD_DLG_192` | Iscript测试 | 动画/操作码查看 + 线性模拟 Play + GRP 动画预览 | `src/units/` |
 | 205 | `IDD_ISCRIPT` | Iscript / Grp 调试 | 解析 iscript.bin 并按 ID/动画反汇编；GRP 头校验 | `src/units/` |
+| 206 | `IDD_TRIG_TEXT` | 触发文本视图（只读） | 触发/条件/行动的文本化浏览（本工程新增） | `src/triggers/` |
 | 195 | `IDD_UNIT_PLACE` | 单位放置参数 | 单位面板：类型/玩家/资源 | `src/units/` |
 | 196 | `IDD_PLAYER_ROSTER` | 玩家 / 势力设定 | OWNR/SIDE/FORC/COLR 编辑 | `src/players/` |
 | 197 | `IDD_RESTRICTIONS` | 升级 / 科技限制 | UPGR/PTEC/PUPx/PTEx 编辑 | `src/players/` |
@@ -629,10 +630,9 @@ GUI 探针：155（映射/禁用/应用不关闭/添加 MPQ）、166/172（置�
 仓库基准：`doc/05-ui/dialog-snapshot-baseline.txt`（UTF-8 BOM / LF）。
 环境分组：若存在 `dialog-snapshot-baseline.<环境标签>.txt` 则优先使用，
 标签默认 `win<主版本>.<构建号>`（`-EnvTag` 可覆盖）；字体只影响像素，不纳入标签。
-本地/CI 校验脚本：`tools/dialog-ui-check.ps1`（`-Mode update` 重建通用基准，
+本地校验脚本：`tools/dialog-ui-check.ps1`（`-Mode update` 重建通用基准，
 `-Mode update -PerEnvironment` 重建环境基准，`-Exe` 指定配置）；
-`.github/workflows/dialog-ui.yml` 以 Debug/Release × Win32/x64 四配置矩阵构建并运行，
-失败时按配置分别上传两份 diff artifact。
+四配置由本地脚本分别运行（CI 暂不启用）。
 “应用设定”重定向到临时设置目录 `%TEMP%\scmdplus_dialog_audit`，不污染用户配置。
 
 ## 小地图（P2）
@@ -699,6 +699,7 @@ GUI 探针：155（映射/禁用/应用不关闭/添加 MPQ）、166/172（置�
 | 剧本设置 → 矿物外形随机 | 0x810D | UNIT 176..178 随机重排 |
 | 触发 → 编辑任务简报 | 0x8110 | 199 MBRF 文本/目标/传输行动 |
 | 触发编辑器 → 开关命名 | 1102 | 179 SWNM 256 项 |
+| 触发 → 文本视图 | 0x8FF9 | 206 只读文本视图（本工程新增，运行时追加菜单项） |
 | 选项 → 单位 | 0x8032/0x80E9/0x80EA 等 | 放置规则：任意放置影响可行走校验；附属自动连接把附属建筑吸附到宿主槽；矿物距离限制（≤12 格到出生点）；建筑正常规则按碰撞盒检查占地与建筑相交；地面/空中重叠按同层碰撞盒判断；0x80B5 在单位层显示方格 |
 | 选项 → 装饰物 | 0x8010 | 允许任意放置：关闭时装饰物只能放在可行走地形，开启后跳过校验；与装饰物窗口复选框同步 |
 | 选项 → Locations | 0x8013/0x80EB/0x80EC | 地点描绘模式：整齐（32 px）/ 按照方格 / 任意像素 |
@@ -732,6 +733,19 @@ GUI 探针：155（映射/禁用/应用不关闭/添加 MPQ）、166/172（置�
 - 位置名称取自 `MRGN.stringId` → `STR`，空名称回退为 `#下标`；
 - 子面板改动后通过 `WM_APP+181` 通知 181 统一刷新，避免多处状态分叉；
 - 对话框通过 `SetDialogDocument()` 拿到当前地图，关闭后清空。
+
+### 触发文本视图（206，只读）
+
+- 入口：触发菜单运行时追加「文本视图...」（0x8FF9），打开 206。
+- 内容格式（本工程自定义）：
+  ```
+  # 触发 1/13  [P1,P2]  条件 2 / 行动 1  [仅一次] [禁用]
+      条件 1: 倒计时  玩家 0  数量 100  单位 0  地点 #0  比较 至少
+      行动 1: 显示文本  玩家 0  数量 0  单位 0  地点 #0  文本「Hello」
+  ```
+  逐条列出 `TriggerSection` 的全部触发；条件/行动沿用 185/186 的文本化函数。
+- 只读：不修改地图、不进入撤销栈；无地图时显示“未打开地图”。
+- 回归：`triggerTextView`（合成 1 触发 → 断言文本包含「触发 1/1」「条件 1」「显示文本」「Hello」）。
 
 GUI 自动化验证（`(2) Friends In Jungle.scx`）：
 

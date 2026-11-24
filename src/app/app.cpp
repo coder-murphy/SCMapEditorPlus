@@ -4686,6 +4686,36 @@ int RunDialogAuditTest(HWND owner) {
         record(L"compat163Fix", ok);
     }
 
+    // 4a-2) 206：触发文本视图（只读，需地图文档）
+    {
+        MapDocument doc;
+        bool ok = doc.CreateNew(16, 16, 0, std::wstring(), 0);
+        if (ok) {
+            Trigger t;
+            t.effectivePlayers[0] = 1;
+            t.conditions[0].type = 1;
+            t.conditions[0].amount = 100;
+            t.conditions[0].comparison = 0;
+            t.actions[0].type = 9;
+            t.actions[0].stringId = 1;
+            doc.mutableTriggers().MutableItems().push_back(t);
+            doc.mutableStrings().Set(1, "Hello");
+            SetDialogDocument(&doc);
+            HWND dlg = open(206);
+            ok = dlg != nullptr;
+            if (dlg) {
+                const std::wstring text = textOf(dlg, IDC_D206_TEXT);
+                ok = ok && text.find(L"触发 1/1") != std::wstring::npos &&
+                     text.find(L"条件 1") != std::wstring::npos &&
+                     text.find(L"显示文本") != std::wstring::npos &&
+                     text.find(L"Hello") != std::wstring::npos;
+                ::DestroyWindow(dlg);
+            }
+            SetDialogDocument(nullptr);
+        }
+        record(L"triggerTextView", ok);
+    }
+
     // 4b) 180：状态位回填 + 位序映射（无敌=bit4 / 幻影=bit3 / 钻地=bit1 / 隐形=bit0 / 升起=bit2）
     {
         UnitProps seed;

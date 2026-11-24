@@ -52,6 +52,8 @@
 #define IDD_BRIEFING 199
 // 本工程新增：Iscript / Grp 调试
 #define IDD_ISCRIPT 205
+// 本工程新增：触发文本视图（只读）
+#define IDD_TRIG_TEXT 206
 
 // 原版内嵌默认地图数据（RCDATA，见 res/assets.rc）
 #define IDR_ASSET_VCOD  148
