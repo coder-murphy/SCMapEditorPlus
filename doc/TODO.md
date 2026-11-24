@@ -396,7 +396,12 @@
     `ApplyZoomPercent`，并与菜单勾选、状态栏双向同步（`SyncToolbarControls`）。
   - 工具栏高 28px，全宽置顶（含左侧栏上方）；`MapViewRect` / `SideRect` / `VScrollRect`
     整体下移。工具栏加 `CCS_NORESIZE` 固定高度，控件起点按按钮实际宽度动态计算。
-  - 原版工具栏图标位图不在 exe 资源中（`RT_BITMAP` 仅 134/151/152），当前用文字按钮替代。
+  - 原版工具栏图标位图不在 exe 资源中；从原版运行截图提取 11 个 16×16 图标
+    （`assets/toolbar_icons.bmp`，品红透明），按钮仅显示图标，文本作为工具提示
+    （`TBN_GETINFOTIPW`）。
+  - 菜单栏「文件」前恢复原版 banner 小窗口图标（`assets/menu_icon.bmp`）。
+  - 小地图支持按住拖动平滑滚动（捕获鼠标、越界钳制）；方向键每次滚动约 1/8 视口。
+  - 回归：`--menu-cmd-test` 新增 `minimapDrag` / `arrowKeys`。
 - [x] **四配置本地校验（CI 暂不启用）**
   - 已按“CI 暂不做”的约定移除 `.github/workflows/dialog-ui.yml`；
     四配置（Debug/Release × Win32/x64）由 `tools/dialog-ui-check.ps1 -Exe <exe>` 本地校验。

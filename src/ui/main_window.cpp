@@ -77,6 +77,31 @@ std::wstring FileNameOf(const std::wstring& path) {
     return at == std::wstring::npos ? path : path.substr(at + 1);
 }
 
+// 工具栏按钮的工具提示：iItem 可能是按钮索引或命令 ID，两种都覆盖
+const wchar_t* ToolbarLabel(int item) {
+    static const wchar_t* const kByIndex[] = {
+        L"新建", L"打开", L"保存", L"图像", L"撤销", L"重做",
+        L"属性", L"删除", L"复制", L"剪切", L"粘贴",
+    };
+    if (item >= 0 && item < static_cast<int>(sizeof(kByIndex) / sizeof(kByIndex[0]))) {
+        return kByIndex[item];
+    }
+    switch (item) {
+        case kFileNew: return L"新建";
+        case kFileOpen: return L"打开";
+        case kFileSave: return L"保存";
+        case kFileSaveImage: return L"图像";
+        case kEditUndo: return L"撤销";
+        case kEditRedo: return L"重做";
+        case kEditProperties: return L"属性";
+        case kEditDelete: return L"删除";
+        case kEditCopy: return L"复制";
+        case kEditCut: return L"剪切";
+        case kEditPaste: return L"粘贴";
+        default: return nullptr;
+    }
+}
+
 int NextZoom(int current, int direction) {
     static const int kSteps[] = {2, 4, 8, 11, 16, 21, 32, 48, 64, 96, 128};
     constexpr int kCount = static_cast<int>(sizeof(kSteps) / sizeof(kSteps[0]));
@@ -713,6 +738,16 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
 
     // 原菜单没有“恢复的界面”入口，追加到「帮助」子菜单，方便逐个检查 25 个对话框
     if (HMENU bar = ::GetMenu(hwnd_)) {
+        // 原版菜单栏左侧的小窗口图标（banner）；作为「文件」项的位图显示
+        menuIconBitmap_ = static_cast<HBITMAP>(::LoadImageW(
+            hInstance_, MAKEINTRESOURCEW(IDB_MENU_ICON), IMAGE_BITMAP, 0, 0,
+            LR_DEFAULTCOLOR));
+        if (menuIconBitmap_) {
+            MENUITEMINFOW item = {sizeof(item)};
+            item.fMask = MIIM_BITMAP;
+            item.hbmpItem = menuIconBitmap_;
+            ::SetMenuItemInfoW(bar, 0, TRUE, &item);
+        }
         if (HMENU help = ::GetSubMenu(bar, 8)) {
             ::AppendMenuW(help, MF_SEPARATOR, 0, nullptr);
             ::AppendMenuW(help, MF_STRING, kDebugDialogs, L"恢复的界面...");
@@ -940,42 +975,71 @@ void MainWindow::UpdateScrollBars() {
     }
 }
 
+MainWindow::~MainWindow() {
+    if (toolbarImages_) {
+        ::ImageList_Destroy(toolbarImages_);
+        toolbarImages_ = nullptr;
+    }
+    if (menuIconBitmap_) {
+        ::DeleteObject(menuIconBitmap_);
+        menuIconBitmap_ = nullptr;
+    }
+}
+
 void MainWindow::CreateToolbar() {
     if (toolbar_) return;
     toolbar_ = ::CreateWindowExW(
         0, TOOLBARCLASSNAMEW, L"",
-        WS_CHILD | WS_VISIBLE | TBSTYLE_FLAT | TBSTYLE_LIST | TBSTYLE_TOOLTIPS | CCS_NODIVIDER |
-            CCS_NORESIZE,
+        WS_CHILD | WS_VISIBLE | TBSTYLE_FLAT | TBSTYLE_TOOLTIPS | CCS_NODIVIDER | CCS_NORESIZE,
         0, 0, 10, 10, hwnd_, nullptr, hInstance_, nullptr);
     if (!toolbar_) return;
     ::SendMessageW(toolbar_, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
-    ::SendMessageW(toolbar_, TB_SETBUTTONSIZE, 0, MAKELPARAM(38, 24));
-    static const wchar_t kLabels[] =
-        L"新建\0打开\0保存\0图像\0撤销\0重做\0属性\0删除\0复制\0剪切\0粘贴\0";
-    const LRESULT base = ::SendMessageW(toolbar_, TB_ADDSTRINGW, 0,
-                                        reinterpret_cast<LPARAM>(kLabels));
-    struct BtnDef { int cmd; int str; bool sep; };
+    ::SendMessageW(toolbar_, TB_SETBUTTONSIZE, 0, MAKELPARAM(24, 22));
+    ::SendMessageW(toolbar_, TB_SETBITMAPSIZE, 0, MAKELPARAM(16, 16));
+    ::SendMessageW(toolbar_, TB_SETMAXTEXTROWS, 0, 0);   // 只显示图标；文本仍用于工具提示
+
+    // 原版工具栏图标条（11 个 16×16，品红为透明色）
+    const HBITMAP strip = static_cast<HBITMAP>(::LoadImageW(
+        hInstance_, MAKEINTRESOURCEW(IDB_TOOLBAR_ICONS), IMAGE_BITMAP, 0, 0,
+        LR_DEFAULTCOLOR));
+    if (strip) {
+        HIMAGELIST images = ::ImageList_Create(16, 16, ILC_COLOR24 | ILC_MASK, 11, 1);
+        if (images) {
+            if (::ImageList_AddMasked(images, strip, RGB(255, 0, 255)) >= 0) {
+                toolbarImages_ = images;
+                ::SendMessageW(toolbar_, TB_SETIMAGELIST, 0,
+                               reinterpret_cast<LPARAM>(images));
+            } else {
+                ::ImageList_Destroy(images);
+            }
+        }
+        ::DeleteObject(strip);
+    }
+
+    struct BtnDef { int cmd; bool sep; int icon; };
     const BtnDef defs[] = {
-        {kFileNew, 0, false}, {kFileOpen, 1, false}, {kFileSave, 2, false},
-        {kFileSaveImage, 3, false}, {0, 0, true},
-        {kEditUndo, 4, false}, {kEditRedo, 5, false},
-        {kEditProperties, 6, false}, {kEditDelete, 7, false}, {0, 0, true},
-        {kEditCopy, 8, false}, {kEditCut, 9, false}, {kEditPaste, 10, false},
-        {0, 0, true},
+        {kFileNew, false, 0}, {kFileOpen, false, 1}, {kFileSave, false, 2},
+        {kFileSaveImage, false, 3}, {0, true, 0},
+        {kEditUndo, false, 4}, {kEditRedo, false, 5},
+        {kEditProperties, false, 6}, {kEditDelete, false, 7}, {0, true, 0},
+        {kEditCopy, false, 8}, {kEditCut, false, 9}, {kEditPaste, false, 10},
+        {0, true, 0},
     };
     const int count = static_cast<int>(sizeof(defs) / sizeof(defs[0]));
     std::vector<TBBUTTON> buttons(static_cast<std::size_t>(count));
     for (int i = 0; i < count; i++) {
         TBBUTTON& b = buttons[static_cast<std::size_t>(i)];
         b = TBBUTTON{};
-        b.iBitmap = I_IMAGENONE;
+        b.iBitmap = defs[i].sep ? I_IMAGENONE : defs[i].icon;
         b.idCommand = defs[i].cmd;
         b.fsState = TBSTATE_ENABLED;
         b.fsStyle = defs[i].sep ? BTNS_SEP : BTNS_BUTTON;
-        b.iString = defs[i].sep ? -1 : static_cast<INT_PTR>(base) + defs[i].str;
+        b.iString = -1;   // 仅图标；文本由 TBN_GETINFOTIPW 提供
     }
     ::SendMessageW(toolbar_, TB_ADDBUTTONSW, static_cast<WPARAM>(count),
                    reinterpret_cast<LPARAM>(buttons.data()));
+    // 文本仅用于工具提示；再次设置尺寸，避免按钮按文字宽度撑开
+    ::SendMessageW(toolbar_, TB_SETBUTTONSIZE, 0, MAKELPARAM(24, 22));
 
     auto makeCombo = [this](int id, int width) {
         return ::CreateWindowExW(
@@ -1128,7 +1192,7 @@ void MainWindow::LayoutChrome() {
         ::SetWindowPos(toolbar_, nullptr, tr.left, tr.top, tr.right - tr.left,
                        tr.bottom - tr.top, SWP_NOZORDER | SWP_NOACTIVATE);
         // 下拉框起点按按钮实际占位动态计算，避免窄按钮尺寸下与最后一个按钮重叠
-        int x = 460;
+        int x = 280;
         const int buttonCount = static_cast<int>(::SendMessageW(toolbar_, TB_BUTTONCOUNT, 0, 0));
         if (buttonCount > 0) {
             RECT last{};
@@ -3201,7 +3265,10 @@ void MainWindow::PaintTileToBuffer(int tx, int ty, u16 value) {
 
 void MainWindow::OnLButtonDown(int mx, int my) {
     if (PointInOutputPanel(mx, my)) return;
-    if (ClickMinimapAt(mx, my)) return;
+    if (ClickMinimapAt(mx, my)) {
+        minimapDragging_ = true;   // 按住后继续拖动可平滑滚动
+        return;
+    }
 
     int tx = -1, ty = -1;
     TileCoordsFromClient(mx, my, tx, ty);
@@ -3298,6 +3365,15 @@ void MainWindow::OnLButtonDblClk(int mx, int my) {
 }
 
 void MainWindow::OnMouseMove(int mx, int my, bool leftDown) {
+    if (minimapDragging_) {
+        if (leftDown) {
+            ScrollToMinimapPoint(mx, my);
+        } else {
+            minimapDragging_ = false;
+            ::ReleaseCapture();
+        }
+        return;
+    }
     int tx = -1, ty = -1;
     TileCoordsFromClient(mx, my, tx, ty);
     cursorTx_ = tx;
@@ -3375,6 +3451,19 @@ void MainWindow::OnKeyDown(int vk) {
         editOpen_ = false;
         ::InvalidateRect(hwnd_, nullptr, FALSE);
         return;
+    }
+    // 方向键滚动地图视口（每次约 1/8 视口，长按由 WM_KEYDOWN 自动重复）
+    {
+        const RECT view = MapViewRect();
+        const int stepX = std::max(8, static_cast<int>(view.right - view.left) / 8);
+        const int stepY = std::max(8, static_cast<int>(view.bottom - view.top) / 8);
+        switch (vk) {
+            case VK_LEFT: ScrollByPixels(-stepX, 0); return;
+            case VK_RIGHT: ScrollByPixels(stepX, 0); return;
+            case VK_UP: ScrollByPixels(0, -stepY); return;
+            case VK_DOWN: ScrollByPixels(0, stepY); return;
+            default: break;
+        }
     }
     switch (vk) {
         case '1': SetLayer(EditLayer::kTerrain); break;
@@ -3667,9 +3756,18 @@ bool MainWindow::ClickMinimapAt(int mx, int my) {
     const RECT mm = MinimapRect();
     if (mm.right <= mm.left || mm.bottom <= mm.top) return false;
     if (mx < mm.left || mx >= mm.right || my < mm.top || my >= mm.bottom) return false;
+    return ScrollToMinimapPoint(mx, my);
+}
 
+// 小地图点击/拖拽：按光标在地图上的相对位置居中，坐标越界时钳制到边缘
+bool MainWindow::ScrollToMinimapPoint(int mx, int my) {
+    if (!map_.IsOpen()) return false;
+    const RECT mm = MinimapRect();
+    if (mm.right <= mm.left || mm.bottom <= mm.top) return false;
     const int mmW = static_cast<int>(mm.right - mm.left);
     const int mmH = static_cast<int>(mm.bottom - mm.top);
+    mx = std::clamp(mx, static_cast<int>(mm.left), static_cast<int>(mm.right) - 1);
+    my = std::clamp(my, static_cast<int>(mm.top), static_cast<int>(mm.bottom) - 1);
     const int tx = std::clamp((mx - static_cast<int>(mm.left)) * map_.width() / mmW,
                               0, map_.width() - 1);
     const int ty = std::clamp((my - static_cast<int>(mm.top)) * map_.height() / mmH,
@@ -3684,6 +3782,17 @@ bool MainWindow::ClickMinimapAt(int mx, int my) {
     UpdateScrollBars();
     ::InvalidateRect(hwnd_, nullptr, FALSE);
     return true;
+}
+
+void MainWindow::ScrollByPixels(int dx, int dy) {
+    if (!map_.IsOpen() || image_.width <= 0) return;
+    const RECT view = MapViewRect();
+    const int viewW = static_cast<int>(view.right - view.left);
+    const int viewH = static_cast<int>(view.bottom - view.top);
+    scrollX_ = std::clamp(scrollX_ + dx, 0, std::max(0, image_.width - viewW));
+    scrollY_ = std::clamp(scrollY_ + dy, 0, std::max(0, image_.height - viewH));
+    UpdateScrollBars();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void MainWindow::DrawMinimap(HDC dc) const {
@@ -5206,6 +5315,10 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_LBUTTONUP:
             ::ReleaseCapture();
+            if (minimapDragging_) {
+                minimapDragging_ = false;
+                return 0;
+            }
             if (locationDrawing_) {
                 FinishLocationDraw();
                 UpdateTitle();
@@ -5295,6 +5408,14 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_NOTIFY: {
             const NMHDR* hdr = reinterpret_cast<const NMHDR*>(lParam);
+            if (hdr && hdr->hwndFrom == toolbar_ && hdr->code == TBN_GETINFOTIPW) {
+                auto* tip = reinterpret_cast<LPNMTBGETINFOTIPW>(
+                    const_cast<NMHDR*>(hdr));
+                if (const wchar_t* label = ToolbarLabel(static_cast<int>(tip->iItem))) {
+                    ::lstrcpynW(tip->pszText, label, tip->cchTextMax);
+                }
+                return 0;
+            }
             if (hdr && hdr->hwndFrom == sceneTree_ && hdr->code == NM_DBLCLK) {
                 OnSceneTreeDblClk();
                 return 0;

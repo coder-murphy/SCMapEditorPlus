@@ -55,6 +55,10 @@
 // 本工程新增：触发文本视图（只读）
 #define IDD_TRIG_TEXT 206
 
+// 顶部工具栏图标条（11 个 16×16 图标，从原版截图提取）
+#define IDB_TOOLBAR_ICONS 207
+#define IDB_MENU_ICON     208
+
 // 原版内嵌默认地图数据（RCDATA，见 res/assets.rc）
 #define IDR_ASSET_VCOD  148
 #define IDR_ASSET_TRIG3 183

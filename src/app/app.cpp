@@ -1242,6 +1242,8 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     // 地图显示比率（需要已打开地图；--menu-cmd-test 可配合 --open）
     bool zoomOk = true;
     bool minimapNav = true;
+    bool minimapDrag = true;
+    bool arrowKeys = true;
     if (win.map().IsOpen()) {
         cmd(0x80DD);   // 66% → 21 px/瓦片
         zoomOk = ItemChecked(hwnd, 0x80DD) && !ItemChecked(hwnd, 0x80D8) &&
@@ -1256,6 +1258,20 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         minimapNav = mm.right > mm.left && mm.bottom > mm.top &&
                      win.ClickMinimapAt((mm.left + mm.right) / 2, (mm.bottom + mm.top) / 2) &&
                      win.scrollY() > 0;
+
+        // 小地图拖拽：从中心拖到顶部，视口应上移；方向键下移应恢复
+        if (minimapNav) {
+            const int cx = (mm.left + mm.right) / 2;
+            const int cy = (mm.top + mm.bottom) / 2;
+            const int beforeDrag = win.scrollY();
+            ::SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(cx, cy));
+            ::SendMessageW(hwnd, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(cx, mm.top + 2));
+            ::SendMessageW(hwnd, WM_LBUTTONUP, 0, MAKELPARAM(cx, mm.top + 2));
+            minimapDrag = win.scrollY() < beforeDrag;
+            const int afterDrag = win.scrollY();
+            ::SendMessageW(hwnd, WM_KEYDOWN, VK_DOWN, 0);
+            arrowKeys = win.scrollY() > afterDrag;
+        }
     }
 
     // 窗口排列（单窗口也应安全）
@@ -1278,7 +1294,8 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         L"unitsOff=%d\nunitsOn=%d\nfogOn=%d\nzoom=%d\nminimapOff=%d\nminimapOn=%d\n"
         L"fogAlias=%d\nfogExplored=%d\nallColors=%d\neffects=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n"
         L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\ndoodadAny=%d\nlocMode=%d\n"
-        L"spAlign=%d\nautoUpdate=%d\noutput=%d\ncache=%d\nwindow=%d\n",
+        L"spAlign=%d\nautoUpdate=%d\noutput=%d\ncache=%d\nwindow=%d\n"
+        L"minimapDrag=%d\narrowKeys=%d\n",
         layerInit ? 1 : 0, enabledInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0,
         layerBack ? 1 : 0,
         gridLarge ? 1 : 0, gridOff ? 1 : 0, gridBack ? 1 : 0, gridRed ? 1 : 0,
@@ -1291,7 +1308,8 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         (soundOff && soundOn) ? 1 : 0, (doodadAnywhereOn && doodadAnywhereOff) ? 1 : 0,
         (locGrid && locAny && locNeat) ? 1 : 0, (spAlignOn && spAlignOff) ? 1 : 0,
         (autoUpdateOn && autoUpdateOff) ? 1 : 0,
-        outputOk ? 1 : 0, cacheOk ? 1 : 0, windowOk ? 1 : 0);
+        outputOk ? 1 : 0, cacheOk ? 1 : 0, windowOk ? 1 : 0,
+        minimapDrag ? 1 : 0, arrowKeys ? 1 : 0);
     WriteDiag(msg);
 
     const bool ok = layerInit && enabledInit && layerUnits && layerLoc && layerBack && gridLarge && gridOff &&
@@ -1302,7 +1320,7 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
                     conflictOn && minimapNav && soundOff && soundOn && doodadAnywhereOn &&
                     doodadAnywhereOff && locGrid && locAny && locNeat && spAlignOn &&
                     spAlignOff && autoUpdateOn && autoUpdateOff && outputOk && cacheOk &&
-                    windowOk;
+                    windowOk && minimapDrag && arrowKeys;
     return ok ? 0 : 2;
 }
 

@@ -4,6 +4,11 @@
 //  148  1040 B = VCOD（地图校验码）默认段
 //  183  7200 B = TRIG 默认触发（3 条，每条 2400 B）
 //  193  9600 B = TRIG 默认触发（4 条）
+// 顶部工具栏图标条：11 个 16×16 图标（品红为透明色）
+IDB_TOOLBAR_ICONS BITMAP "assets\\toolbar_icons.bmp"
+// 菜单栏左侧的小窗口图标（原版 banner 菜单图标）
+IDB_MENU_ICON     BITMAP "assets\\menu_icon.bmp"
+
 IDR_ASSET_VCOD  RCDATA "assets\\bin_148.bin"
 IDR_ASSET_TRIG3 RCDATA "assets\\bin_183.bin"
 IDR_ASSET_TRIG4 RCDATA "assets\\bin_193.bin"

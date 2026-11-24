@@ -2,6 +2,7 @@
 #include <string>
 
 #include <windows.h>
+#include <commctrl.h>
 
 #include "map/edit_history.h"
 #include "map/map_document.h"
@@ -45,6 +46,7 @@ int RepairCompatibilityIssues(MapDocument& map);
 // 主窗口：菜单命令分发 + 地形视图 + 基础编辑
 class MainWindow {
 public:
+    ~MainWindow();
     bool Create(HINSTANCE hInstance);
     HWND hwnd() const { return hwnd_; }
 
@@ -152,6 +154,8 @@ private:
     int SpriteIndexAtTile(int tx, int ty) const;
     bool ApplyRadarFogCommand(int id);   // 剧本设置 → 小雷达 / 迷雾
     void SyncMenuChecks();
+    bool ScrollToMinimapPoint(int mx, int my);   // 小地图拖拽：按光标位置滚动
+    void ScrollByPixels(int dx, int dy);         // 方向键滚动
     void DrawGrid(HDC dc, const RECT& client) const;
     void DrawLocations(HDC dc, const RECT& client) const;
     void DrawLocationPreview(HDC dc, const RECT& client) const;
@@ -253,6 +257,8 @@ private:
     HWND hwnd_ = nullptr;
     HWND sceneTree_ = nullptr;
     HWND toolbar_ = nullptr;
+    HIMAGELIST toolbarImages_ = nullptr;
+    HBITMAP menuIconBitmap_ = nullptr;
     HWND layerCombo_ = nullptr;
     HWND playerCombo_ = nullptr;
     HWND zoomCombo_ = nullptr;
@@ -398,6 +404,7 @@ private:
     static ClipboardData& SharedClipboard();
     bool hasSelection_ = false;
     bool selecting_ = false;
+    bool minimapDragging_ = false;   // 小地图按住拖动中
     int selAnchorX_ = 0;
     int selAnchorY_ = 0;
     int selX0_ = 0;
