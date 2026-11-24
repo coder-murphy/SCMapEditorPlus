@@ -796,6 +796,7 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
     CreateSceneTree();
     CreateChrome();
     UpdateTitle();
+    if (!map_.IsOpen()) Output(2, L"[提示]读取文件");
     ::ShowWindow(hwnd_, AppSettings::Instance().startMaximized() ? SW_MAXIMIZE : SW_SHOW);
     ::UpdateWindow(hwnd_);
     ::SetTimer(hwnd_, 1, 60000, nullptr);   // 每分钟检查一次自动备份
@@ -984,6 +985,10 @@ MainWindow::~MainWindow() {
         ::DeleteObject(menuIconBitmap_);
         menuIconBitmap_ = nullptr;
     }
+    if (startupBanner_) {
+        ::DeleteObject(startupBanner_);
+        startupBanner_ = nullptr;
+    }
 }
 
 void MainWindow::CreateToolbar() {
@@ -1163,6 +1168,11 @@ bool MainWindow::OnToolbarCommand(int id, int code) {
 
 void MainWindow::CreateChrome() {
     if (!hwnd_) return;
+    if (!startupBanner_) {
+        startupBanner_ = static_cast<HBITMAP>(::LoadImageW(
+            hInstance_, MAKEINTRESOURCEW(IDB_START_BANNER), IMAGE_BITMAP, 0, 0,
+            LR_DEFAULTCOLOR));
+    }
     CreateToolbar();
     if (!hScroll_) {
         hScroll_ = ::CreateWindowExW(
@@ -1398,9 +1408,22 @@ RECT MainWindow::MinimapRect() const {
     return r;
 }
 
+RECT MainWindow::StartupBannerRect() const {
+    RECT empty = {0, 0, 0, 0};
+    if (hideMinimap_ || map_.IsOpen()) return empty;
+    const RECT side = SideRect();
+    const int sideW = static_cast<int>(side.right - side.left);
+    if (sideW < 40) return empty;
+    const int avail = std::min(sideW - 12, 180);
+    if (avail < 32) return empty;
+    const int left = static_cast<int>(side.left) + (sideW - avail) / 2;
+    RECT r = {left, side.top + 6, left + avail, side.top + 6 + avail};
+    return r;
+}
+
 RECT MainWindow::SceneTreeRect() const {
     const RECT side = SideRect();
-    const RECT mm = MinimapRect();
+    const RECT mm = map_.IsOpen() ? MinimapRect() : StartupBannerRect();
     const int top = (mm.bottom > mm.top) ? static_cast<int>(mm.bottom) + 4
                                          : static_cast<int>(side.top) + 4;
     RECT r = {side.left + 4, top, side.right - 4, side.bottom - 4};
@@ -3668,7 +3691,11 @@ void MainWindow::DrawOutputPanel(HDC dc, const RECT&) const {
     const int top = static_cast<int>(log.top);
     const int panelH = static_cast<int>(log.bottom - log.top);
 
-    ::FillRect(dc, &log, reinterpret_cast<HBRUSH>(::GetStockObject(BLACK_BRUSH)));
+    // 未打开地图时原版输出面板为白底黑字，打开地图后为黑底彩色文字
+    const bool hasMap = map_.IsOpen();
+    HBRUSH back = ::CreateSolidBrush(hasMap ? RGB(0, 0, 0) : RGB(255, 255, 255));
+    ::FillRect(dc, &log, back);
+    ::DeleteObject(back);
 
     HPEN border = ::CreatePen(PS_SOLID, 1, RGB(96, 96, 96));
     HGDIOBJ oldPen = ::SelectObject(dc, border);
@@ -3692,8 +3719,8 @@ void MainWindow::DrawOutputPanel(HDC dc, const RECT&) const {
     int y = top + 4;
     for (std::size_t i = first; i < total; i++) {
         const OutputLine& line = outputLines_[i];
-        COLORREF color = RGB(220, 220, 220);
-        switch (line.severity) {
+        COLORREF color = hasMap ? RGB(220, 220, 220) : RGB(0, 0, 0);
+        if (hasMap) switch (line.severity) {
             case 0: color = RGB(255, 120, 120); break;
             case 1: color = RGB(255, 200, 120); break;
             case 3: color = RGB(160, 220, 255); break;
@@ -3963,6 +3990,13 @@ void MainWindow::Present(HDC dc, const RECT& client) {
     const int viewW = static_cast<int>(view.right - view.left);
     const int viewH = static_cast<int>(view.bottom - view.top);
 
+    // 未打开地图（或没有地形图）时，原版视口是中性灰，不是白底
+    if (!backBuffer_) {
+        HBRUSH gray = ::CreateSolidBrush(RGB(192, 192, 192));
+        ::FillRect(dc, &view, gray);
+        ::DeleteObject(gray);
+    }
+
     if (backBuffer_) {
         const HDC mem = ::CreateCompatibleDC(dc);
         if (mem) {
@@ -4015,7 +4049,7 @@ void MainWindow::DrawSidebar(HDC dc) const {
     const RECT side = SideRect();
     if (side.right <= side.left || side.bottom <= side.top) return;
 
-    HBRUSH back = ::CreateSolidBrush(RGB(30, 30, 30));
+    HBRUSH back = ::CreateSolidBrush(RGB(255, 255, 255));
     ::FillRect(dc, &side, back);
     ::DeleteObject(back);
 
@@ -4026,7 +4060,31 @@ void MainWindow::DrawSidebar(HDC dc) const {
     ::SelectObject(dc, oldPen);
     ::DeleteObject(border);
 
-    DrawMinimap(dc);
+    if (!map_.IsOpen()) {
+        // 原版未打开地图时，左侧栏显示启动图（bitmap 152）
+        const RECT banner = StartupBannerRect();
+        if (banner.right > banner.left) {
+            RECT box = {banner.left - 2, banner.top - 2, banner.right + 2, banner.bottom + 2};
+            HBRUSH black = ::CreateSolidBrush(RGB(0, 0, 0));
+            ::FillRect(dc, &box, black);
+            ::DeleteObject(black);
+            if (startupBanner_) {
+                const HDC mem = ::CreateCompatibleDC(dc);
+                if (mem) {
+                    const HGDIOBJ old = ::SelectObject(mem, startupBanner_);
+                    const int oldMode = ::SetStretchBltMode(dc, COLORONCOLOR);
+                    ::StretchBlt(dc, banner.left, banner.top,
+                                 banner.right - banner.left, banner.bottom - banner.top,
+                                 mem, 0, 0, 128, 128, SRCCOPY);
+                    ::SetStretchBltMode(dc, oldMode);
+                    ::SelectObject(mem, old);
+                    ::DeleteDC(mem);
+                }
+            }
+        }
+    } else {
+        DrawMinimap(dc);
+    }
 }
 
 // ── 场景树（右侧栏下方）──
@@ -4081,7 +4139,12 @@ void MainWindow::RefreshSceneTree() {
     TreeView_DeleteAllItems(sceneTree_);
 
     if (!map_.IsOpen()) {
-        InsertSceneItem(sceneTree_, nullptr, L"（未打开地图）", 0);
+        // 原版未打开地图时也显示场景分类，只是没有具体条目
+        InsertSceneItem(sceneTree_, nullptr, L"地形", 0);
+        InsertSceneItem(sceneTree_, nullptr, L"Locations", 0);
+        InsertSceneItem(sceneTree_, nullptr, L"单位", 0);
+        InsertSceneItem(sceneTree_, nullptr, L"SP单位", 0);
+        InsertSceneItem(sceneTree_, nullptr, L"装饰物", 0);
     } else {
         wchar_t rootText[220];
         ::wsprintfW(rootText, L"%s  %dx%d  ERA %u",

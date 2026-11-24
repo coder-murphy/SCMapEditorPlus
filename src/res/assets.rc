@@ -8,6 +8,8 @@
 IDB_TOOLBAR_ICONS BITMAP "assets\\toolbar_icons.bmp"
 // 菜单栏左侧的小窗口图标（原版 banner 菜单图标）
 IDB_MENU_ICON     BITMAP "assets\\menu_icon.bmp"
+// 未打开地图时左侧栏显示的启动图（原版 bitmap 152）
+IDB_START_BANNER  BITMAP "assets\\bitmap_152.bmp"
 
 IDR_ASSET_VCOD  RCDATA "assets\\bin_148.bin"
 IDR_ASSET_TRIG3 RCDATA "assets\\bin_183.bin"

@@ -196,6 +196,7 @@ private:
     RECT MapViewRect() const;
     RECT SideRect() const;
     RECT MinimapRect() const;
+    RECT StartupBannerRect() const;   // 未打开地图时的左侧启动图区域
     RECT LogRect() const;
     RECT SceneTreeRect() const;
     RECT StatusRect() const;
@@ -259,6 +260,7 @@ private:
     HWND toolbar_ = nullptr;
     HIMAGELIST toolbarImages_ = nullptr;
     HBITMAP menuIconBitmap_ = nullptr;
+    HBITMAP startupBanner_ = nullptr;
     HWND layerCombo_ = nullptr;
     HWND playerCombo_ = nullptr;
     HWND zoomCombo_ = nullptr;

@@ -35,7 +35,7 @@
 
 | File | Content | ID ranges |
 | --- | --- | --- |
-| `resource.h` | All resource IDs | dialogs 103–206, assets 148/183/193, toolbar 207, menu icon 208 |
+| `resource.h` | All resource IDs | dialogs 103–206, assets 148/183/193, toolbar 207, menu icon 208, startup banner 209 |
 | `dialogs.rc` | 25 recovered DIALOGEX templates + project dialogs 193–199/205/206 | 103–206 |
 | `menu.rc` | Original RT_MENU 109 (10 top-level menus, 226 items) | 0x8000+ command IDs, `0x68` about, `0x69` exit |
 | `accel.rc` | Original accelerators | 109, 176, 177, 178 |
@@ -56,7 +56,7 @@ VERSIONINFO.
 | `assets/bin_193.bin` | 9 600 B | Default TRIG (4 triggers) |
 | `assets/bitmap_134.bmp` | 16×16 4bpp | Original small bitmap |
 | `assets/bitmap_151.bmp` | 500×300 | Original splash/help image |
-| `assets/bitmap_152.bmp` | 128×128 | Original icon image |
+| `assets/bitmap_152.bmp` | 128×128 | Original icon image; also `IDB_START_BANNER` 209 shown when no map is open |
 | `assets/toolbar_icons.bmp` | 176×16, 24bpp, magenta transparent | 11 toolbar icons extracted from a screenshot |
 | `assets/menu_icon.bmp` | 16×16 | Menu banner icon |
 

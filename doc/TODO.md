@@ -404,6 +404,11 @@
   - 菜单栏「文件」前恢复原版 banner 小窗口图标（`assets/menu_icon.bmp`）。
   - 小地图支持按住拖动平滑滚动（捕获鼠标、越界钳制）；方向键每次滚动约 1/8 视口。
   - 回归：`--menu-cmd-test` 新增 `minimapDrag` / `arrowKeys`。
+- [x] **启动空状态对齐原版（无初始地图）**
+  - 实测原版首次启动**不会创建地图**：视口为中性灰，左侧栏显示 bitmap 152 启动图，
+    场景树显示分类空列表，输出面板为白底并显示「[提示]读取文件」。
+  - 本工程无地图时按此绘制；打开地图后恢复黑色彩色日志与微缩地图。
+  - 启动图使用 `IDB_START_BANNER`（209，`assets/bitmap_152.bmp`），尺寸随左侧栏缩放。
 - [x] **四配置本地校验（CI 暂不启用）**
   - 已按“CI 暂不做”的约定移除 `.github/workflows/dialog-ui.yml`；
     四配置（Debug/Release × Win32/x64）由 `tools/dialog-ui-check.ps1 -Exe <exe>` 本地校验。

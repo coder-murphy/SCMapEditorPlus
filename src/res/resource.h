@@ -58,6 +58,7 @@
 // 顶部工具栏图标条（11 个 16×16 图标，从原版截图提取）
 #define IDB_TOOLBAR_ICONS 207
 #define IDB_MENU_ICON     208
+#define IDB_START_BANNER  209   // 未打开地图时左侧栏的启动图（原版 bitmap 152）
 
 // 原版内嵌默认地图数据（RCDATA，见 res/assets.rc）
 #define IDR_ASSET_VCOD  148
