@@ -202,6 +202,10 @@ private:
     RECT StatusRect() const;
     RECT HScrollRect() const;
     RECT VScrollRect() const;
+    RECT LogVScrollRect() const;
+    int LogTop() const;
+    void UpdateLogScrollBar();
+    void ScrollLogLines(int delta);
     RECT ToolbarRect() const;
     void CreateChrome();     // 顶部工具栏 + 地图滚动条 + 底部状态栏
     void LayoutChrome();
@@ -269,6 +273,7 @@ private:
     HWND mirrorButtons_[3] = {nullptr, nullptr, nullptr};
     HWND hScroll_ = nullptr;
     HWND vScroll_ = nullptr;
+    HWND logVScroll_ = nullptr;
     HWND statusBar_ = nullptr;   // 右侧栏下方场景树（TreeView 子窗口）
     bool suppressDialogs_ = false;   // 无头运行：不弹开图兼容性提示
     HACCEL hAccel_ = nullptr;
@@ -337,6 +342,8 @@ private:
     std::vector<OutputLine> outputLines_;
     bool outputVisible_ = true;
     int outputFontPt_ = 12;
+    int logTopLine_ = 0;        // 日志首行索引
+    bool logFollow_ = true;     // 新输出时自动滚到末尾
     int outputVerbosity_ = 2;   // 0 关闭 / 1 简化 / 2 正常 / 3 高级 / 4 调试
     u16 brushTile_ = 0x0040;   // 默认：platform 甲板
     TerrainBrush brushPattern_;      // 当前刷子图案（1x1 即单格刷）

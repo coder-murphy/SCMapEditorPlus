@@ -382,7 +382,7 @@
   - 四配置构建通过，审计 `snapshotMatch=1 interactionMatch=1`，`--menu-cmd-test` exit=0。
 - [x] **主界面布局对齐原版（左侧栏 + 底部日志 + 状态栏）**
   - 按原版运行截图重排：左侧栏（上=微缩地图、下=场景树，宽 140px）→ 右侧地图视口；
-    日志面板只占地图视口下方，水平滚动条在日志下方、垂直滚动条贯穿地图+日志；
+    日志面板只占地图视口下方，水平滚动条在地图底部、垂直滚动条只贯穿地图；
     最底部为 5 段状态栏（坐标 / 编辑层 / 玩家 / 势力 / 地图+地形集）。
   - 去掉窗口级 `WS_HSCROLL/WS_VSCROLL`，改用 SCROLLBAR 子窗口，`MapViewRect` / `SideRect` /
     `LogRect` / `HScrollRect` / `VScrollRect` / `StatusRect` 统一布局；输出面板显隐、
@@ -407,8 +407,16 @@
 - [x] **启动空状态对齐原版（无初始地图）**
   - 实测原版首次启动**不会创建地图**：视口为中性灰，左侧栏显示 bitmap 152 启动图，
     场景树显示分类空列表，输出面板为白底并显示「[提示]读取文件」。
-  - 本工程无地图时按此绘制；打开地图后恢复黑色彩色日志与微缩地图。
+  - 本工程无地图时按此绘制；打开地图后日志仍为白底，仅微缩地图恢复显示。
   - 启动图使用 `IDB_START_BANNER`（209，`assets/bitmap_152.bmp`），尺寸随左侧栏缩放。
+- [x] **地图/日志视口分离与消除重绘白闪**
+  - 地图与日志改为两个独立视口：`HScrollRect` 挂在地图视口底部，`VScrollRect` 只贯穿
+    地图视口；新增 `logVScroll_` 日志垂直滚动条（`UpdateLogScrollBar` / `ScrollLogLines`，
+    支持拖动、滚轮、行/页滚动），日志行位置由 `logTopLine_` / `logFollow_` 控制。
+  - 日志面板始终白底深色文字，按严重度着色，加载地图后不再变黑。
+  - 状态栏高度按 comctl32 实际高度改为 26px（原 22px），日志滚动条不再与状态栏重叠。
+  - 防闪：主窗口加 `WS_CLIPCHILDREN`，`WM_PAINT` 全客户区内存 DC 双缓冲后一次 `BitBlt`。
+  - 四配置构建与审计通过（`snapshotMatch=1 interactionMatch=1`），Debug 全量回归与基线一致。
 - [x] **四配置本地校验（CI 暂不启用）**
   - 已按“CI 暂不做”的约定移除 `.github/workflows/dialog-ui.yml`；
     四配置（Debug/Release × Win32/x64）由 `tools/dialog-ui-check.ps1 -Exe <exe>` 本地校验。

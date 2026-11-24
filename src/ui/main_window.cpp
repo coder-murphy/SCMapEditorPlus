@@ -41,12 +41,13 @@ constexpr const wchar_t* kWindowTitle = L"SCMD Plus 3.0";
 
 // 布局常量：左侧栏宽度 / 状态栏高度 / 场景树控件 ID
 constexpr int kSidebarWidth = 140;
-constexpr int kStatusBarHeight = 22;
+constexpr int kStatusBarHeight = 26;
 constexpr int kToolbarHeight = 28;
 constexpr int kSceneTreeId = 0x8FF0;
 constexpr int kHScrollId = 0x8FF1;
 constexpr int kVScrollId = 0x8FF2;
 constexpr int kStatusBarId = 0x8FF3;
+constexpr int kLogVScrollId = 0x8FF4;
 // 工具栏右侧控件（顺序与原版一致）
 constexpr int kToolLayerId = 0x8FE1;
 constexpr int kToolPlayerId = 0x8FE2;
@@ -724,7 +725,7 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
     if (!::RegisterClassExW(&wc) && ::GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return false;
 
     hwnd_ = ::CreateWindowExW(0, kWindowClass, kWindowTitle,
-                              WS_OVERLAPPEDWINDOW,
+                              WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
                               CW_USEDEFAULT, CW_USEDEFAULT, 1180, 825,
                               nullptr, ::LoadMenuW(hInstance, MAKEINTRESOURCEW(IDR_MAINMENU)),
                               hInstance, this);
@@ -1184,6 +1185,11 @@ void MainWindow::CreateChrome() {
             0, L"SCROLLBAR", L"", WS_CHILD | WS_VISIBLE | SBS_VERT, 0, 0, 10, 10, hwnd_,
             reinterpret_cast<HMENU>(static_cast<INT_PTR>(kVScrollId)), hInstance_, nullptr);
     }
+    if (!logVScroll_) {
+        logVScroll_ = ::CreateWindowExW(
+            0, L"SCROLLBAR", L"", WS_CHILD | WS_VISIBLE | SBS_VERT, 0, 0, 10, 10, hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kLogVScrollId)), hInstance_, nullptr);
+    }
     if (!statusBar_) {
         statusBar_ = ::CreateWindowExW(
             0, STATUSCLASSNAMEW, L"", WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, 0, 0, 10, 10,
@@ -1251,6 +1257,13 @@ void MainWindow::LayoutChrome() {
         ::SetWindowPos(vScroll_, nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top,
                        SWP_NOZORDER | SWP_NOACTIVATE);
     }
+    if (logVScroll_) {
+        const RECT r = LogVScrollRect();
+        ::SetWindowPos(logVScroll_, nullptr, r.left, r.top, r.right - r.left,
+                       std::max(0L, r.bottom - r.top), SWP_NOZORDER | SWP_NOACTIVATE);
+        ::ShowWindow(logVScroll_, r.bottom > r.top ? SW_SHOW : SW_HIDE);
+    }
+    UpdateLogScrollBar();
 }
 
 void MainWindow::UpdateStatusBar() {
@@ -1334,6 +1347,13 @@ RECT MainWindow::SideRect() const {
     return side;
 }
 
+int MainWindow::LogTop() const {
+    if (!hwnd_) return kToolbarHeight;
+    RECT rc;
+    ::GetClientRect(hwnd_, &rc);
+    return rc.bottom - kStatusBarHeight - LogHeight();
+}
+
 RECT MainWindow::LogRect() const {
     RECT r = {0, 0, 0, 0};
     if (!hwnd_) return r;
@@ -1341,12 +1361,58 @@ RECT MainWindow::LogRect() const {
     ::GetClientRect(hwnd_, &rc);
     const RECT view = MapViewRect();
     const int sbW = ::GetSystemMetrics(SM_CXVSCROLL);
-    const int sbH = ::GetSystemMetrics(SM_CYHSCROLL);
     r.left = view.left;
     r.right = rc.right - sbW;
-    r.bottom = rc.bottom - kStatusBarHeight - sbH;
-    r.top = view.bottom;
+    r.top = LogTop();
+    r.bottom = rc.bottom - kStatusBarHeight;
     return r;
+}
+
+RECT MainWindow::LogVScrollRect() const {
+    RECT r = {0, 0, 0, 0};
+    if (!hwnd_) return r;
+    RECT rc;
+    ::GetClientRect(hwnd_, &rc);
+    const int sbW = ::GetSystemMetrics(SM_CXVSCROLL);
+    r.left = rc.right - sbW;
+    r.right = rc.right;
+    r.top = LogTop();
+    r.bottom = rc.bottom - kStatusBarHeight;
+    return r;
+}
+
+void MainWindow::UpdateLogScrollBar() {
+    if (!logVScroll_) return;
+    const RECT log = LogRect();
+    const int lineH = std::max(1, outputFontPt_ * 4 / 3 + 2);
+    const int visible = std::max(1, static_cast<int>(log.bottom - log.top - 8) / lineH);
+    const int total = static_cast<int>(outputLines_.size());
+    const int maxTop = std::max(0, total - visible);
+    if (logFollow_) logTopLine_ = maxTop;
+    logTopLine_ = std::clamp(logTopLine_, 0, maxTop);
+    SCROLLINFO si = {sizeof(si)};
+    si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+    si.nMin = 0;
+    si.nMax = std::max(0, total - 1);
+    si.nPage = static_cast<UINT>(visible);
+    si.nPos = logTopLine_;
+    ::SetScrollInfo(logVScroll_, SB_CTL, &si, TRUE);
+    ::EnableWindow(logVScroll_, log.bottom > log.top && maxTop > 0);
+}
+
+void MainWindow::ScrollLogLines(int delta) {
+    if (!logVScroll_) return;
+    SCROLLINFO si = {sizeof(si)};
+    si.fMask = SIF_ALL;
+    ::GetScrollInfo(logVScroll_, SB_CTL, &si);
+    const int visible = std::max(1, static_cast<int>(si.nPage));
+    const int maxTop = std::max(0, static_cast<int>(si.nMax) - visible + 1);
+    logTopLine_ = std::clamp(logTopLine_ + delta, 0, maxTop);
+    logFollow_ = logTopLine_ >= maxTop;
+    si.fMask = SIF_POS;
+    si.nPos = logTopLine_;
+    ::SetScrollInfo(logVScroll_, SB_CTL, &si, TRUE);
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 RECT MainWindow::StatusRect() const {
@@ -1364,27 +1430,24 @@ RECT MainWindow::StatusRect() const {
 RECT MainWindow::HScrollRect() const {
     RECT r = {0, 0, 0, 0};
     if (!hwnd_) return r;
-    RECT rc;
-    ::GetClientRect(hwnd_, &rc);
     const RECT view = MapViewRect();
     const int sbH = ::GetSystemMetrics(SM_CYHSCROLL);
     r.left = view.left;
-    r.right = rc.right - ::GetSystemMetrics(SM_CXVSCROLL);
-    r.bottom = rc.bottom - kStatusBarHeight;
-    r.top = r.bottom - sbH;
+    r.right = view.right;
+    r.top = view.bottom;
+    r.bottom = view.bottom + sbH;
     return r;
 }
 
 RECT MainWindow::VScrollRect() const {
     RECT r = {0, 0, 0, 0};
     if (!hwnd_) return r;
-    RECT rc;
-    ::GetClientRect(hwnd_, &rc);
+    const RECT view = MapViewRect();
     const int sbW = ::GetSystemMetrics(SM_CXVSCROLL);
-    r.left = rc.right - sbW;
-    r.right = rc.right;
-    r.top = kToolbarHeight;
-    r.bottom = HScrollRect().top;
+    r.left = view.right;
+    r.right = view.right + sbW;
+    r.top = view.top;
+    r.bottom = view.bottom;
     return r;
 }
 
@@ -3670,6 +3733,7 @@ void MainWindow::Output(int severity, const std::wstring& text) {
         outputLines_.erase(outputLines_.begin(),
                            outputLines_.begin() + (outputLines_.size() - kMaxLines));
     }
+    UpdateLogScrollBar();
     if (outputVisible_ && hwnd_) ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -3691,9 +3755,8 @@ void MainWindow::DrawOutputPanel(HDC dc, const RECT&) const {
     const int top = static_cast<int>(log.top);
     const int panelH = static_cast<int>(log.bottom - log.top);
 
-    // 未打开地图时原版输出面板为白底黑字，打开地图后为黑底彩色文字
-    const bool hasMap = map_.IsOpen();
-    HBRUSH back = ::CreateSolidBrush(hasMap ? RGB(0, 0, 0) : RGB(255, 255, 255));
+    // 原版输出面板始终白底深色文字；加载地图后不改变背景
+    HBRUSH back = ::CreateSolidBrush(RGB(255, 255, 255));
     ::FillRect(dc, &log, back);
     ::DeleteObject(back);
 
@@ -3713,18 +3776,18 @@ void MainWindow::DrawOutputPanel(HDC dc, const RECT&) const {
     const int oldMode = ::SetBkMode(dc, TRANSPARENT);
     const int lineH = outputFontPt_ * dpi / 72 + 2;
     const int maxLines = std::max(0, (panelH - 8) / lineH);
-    const std::size_t total = outputLines_.size();
-    const std::size_t first =
-        total > static_cast<std::size_t>(maxLines) ? total - static_cast<std::size_t>(maxLines) : 0;
+    const int total = static_cast<int>(outputLines_.size());
+    const int first = std::clamp(logTopLine_, 0, std::max(0, total - maxLines));
+    const int last = std::min(total, first + maxLines);
     int y = top + 4;
-    for (std::size_t i = first; i < total; i++) {
-        const OutputLine& line = outputLines_[i];
-        COLORREF color = hasMap ? RGB(220, 220, 220) : RGB(0, 0, 0);
-        if (hasMap) switch (line.severity) {
-            case 0: color = RGB(255, 120, 120); break;
-            case 1: color = RGB(255, 200, 120); break;
-            case 3: color = RGB(160, 220, 255); break;
-            case 4: color = RGB(150, 150, 150); break;
+    for (int i = first; i < last; i++) {
+        const OutputLine& line = outputLines_[static_cast<std::size_t>(i)];
+        COLORREF color = RGB(0, 0, 0);
+        switch (line.severity) {
+            case 0: color = RGB(190, 0, 0); break;      // 错误
+            case 1: color = RGB(170, 100, 0); break;    // 警告
+            case 3: color = RGB(0, 90, 160); break;     // 详细
+            case 4: color = RGB(110, 110, 110); break;  // 调试
             default: break;
         }
         ::SetTextColor(dc, color);
@@ -4906,6 +4969,7 @@ void MainWindow::RegisterCommands() {
         outputFontPt_ = kPoints[id - kOutputFont8];
         SyncMenuChecks();
         LayoutChrome();
+        UpdateLogScrollBar();
         LayoutSceneTree();
         UpdateScrollBars();
         ::InvalidateRect(hwnd_, nullptr, FALSE);
@@ -4929,6 +4993,9 @@ void MainWindow::RegisterCommands() {
     });
     commands_.Register(kOutputClear, [this](int) {
         outputLines_.clear();
+        logTopLine_ = 0;
+        logFollow_ = true;
+        UpdateLogScrollBar();
         ::InvalidateRect(hwnd_, nullptr, FALSE);
     });
 
@@ -5332,7 +5399,21 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             const HDC dc = ::BeginPaint(hwnd_, &ps);
             RECT rc;
             ::GetClientRect(hwnd_, &rc);
-            Present(dc, rc);
+            const int w = static_cast<int>(rc.right - rc.left);
+            const int h = static_cast<int>(rc.bottom - rc.top);
+            // 双缓冲：拖动/滚动地图时避免白闪
+            if (w > 0 && h > 0) {
+                const HDC mem = ::CreateCompatibleDC(dc);
+                const HBITMAP bmp = ::CreateCompatibleBitmap(dc, w, h);
+                if (mem && bmp) {
+                    const HGDIOBJ old = ::SelectObject(mem, bmp);
+                    Present(mem, rc);
+                    ::BitBlt(dc, 0, 0, w, h, mem, 0, 0, SRCCOPY);
+                    ::SelectObject(mem, old);
+                }
+                if (bmp) ::DeleteObject(bmp);
+                if (mem) ::DeleteDC(mem);
+            }
             ::EndPaint(hwnd_, &ps);
             return 0;
         }
@@ -5412,6 +5493,10 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             // 仅在左上地图视口内滚动才缩放；右栏/日志区滚轮不改变地图
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ::ScreenToClient(hwnd_, &pt);
+            if (PointInOutputPanel(pt.x, pt.y)) {
+                ScrollLogLines(GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? -3 : 3);
+                return 0;
+            }
             if (!PointInMapView(pt.x, pt.y)) return 0;
             const int delta = GET_WHEEL_DELTA_WPARAM(wParam);
             const int next = NextZoom(pxPerTile_, delta > 0 ? 1 : -1);
@@ -5441,6 +5526,30 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
         case WM_VSCROLL: {
+            if (reinterpret_cast<HWND>(lParam) == logVScroll_) {
+                SCROLLINFO si = {sizeof(si)};
+                si.fMask = SIF_ALL;
+                ::GetScrollInfo(logVScroll_, SB_CTL, &si);
+                const int visible = std::max(1, static_cast<int>(si.nPage));
+                const int maxTop =
+                    std::max(0, static_cast<int>(si.nMax) - visible + 1);
+                int pos = si.nPos;
+                switch (LOWORD(wParam)) {
+                    case SB_LINEUP: pos -= 1; break;
+                    case SB_LINEDOWN: pos += 1; break;
+                    case SB_PAGEUP: pos -= visible; break;
+                    case SB_PAGEDOWN: pos += visible; break;
+                    case SB_THUMBTRACK: pos = si.nTrackPos; break;
+                    default: break;
+                }
+                logTopLine_ = std::clamp(pos, 0, maxTop);
+                logFollow_ = logTopLine_ >= maxTop;
+                si.fMask = SIF_POS;
+                si.nPos = logTopLine_;
+                ::SetScrollInfo(logVScroll_, SB_CTL, &si, TRUE);
+                ::InvalidateRect(hwnd_, nullptr, FALSE);
+                return 0;
+            }
             if (!vScroll_) return 0;
             SCROLLINFO si = {sizeof(si)};
             si.fMask = SIF_ALL;
