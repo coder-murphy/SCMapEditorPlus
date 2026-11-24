@@ -45,6 +45,26 @@ python tools/export_res.py --exe "<星际安装目录>/[CN]ScmDraft2.exe"
 
 脚本只补写 BMP 的 14 字节文件头，像素数据保持原样。
 
+## 全量资源导出（2026-11-24）
+
+`tools/dump_original.ps1` 从原版 `[CN]ScmDraft2.exe` 导出全部 PE 资源到仓库根目录
+`reverse/scmdraft2/`（独立目录，便于与 `src/` 对照）：
+
+- 来源：`F:\Games\单机游戏\starcraft\[CN]ScmDraft2.exe`
+- 大小：1 289 216 B；SHA-256：`7B17D5AA71B9024438A54963870561DB0854270567A170FF9900CDE772B7802D`
+- 版本：0.8.0.0（OriginalFilename `Scmdraft.exe`）
+- 汇总：42 个资源；`raw/` 全量原始字节，`converted/` 含
+  3 BMP、1 ICO、2 STRING 文本、1 VERSION 文本；`resources.csv` 为清单。
+- 自定义 `BIN` 4 项（148/170/183/193）已确认可枚举，大小与上表一致。
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\dump_original.ps1
+```
+
+注意：`RT_BITMAP` 原始数据是 DIB，转换脚本会补 BMP 文件头；图标/光标组会合并对应
+`RT_ICON`/`RT_CURSOR`（光标额外读取热点）。菜单/对话框/加速键的可读 `.rc` 仍以
+`src/res/` 为准。
+
 ## BIN 用途确认（反汇编，VERIFIED）
 
 对 `[CN]ScmDraft2.exe` 反汇编后按资源 ID 定位：

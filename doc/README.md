@@ -18,3 +18,7 @@
 
 - **VERIFIED** —— 在本机实测过（有数据、有复现步骤），可直接作为实现依据。
 - **TODO** —— 尚未验证，不要当结论用。
+
+原始程序的完整 PE 资源反解产物在仓库根目录 `reverse/scmdraft2/`
+（`raw/` 原始字节 + `converted/` 位图/图标/字符串/版本 + `resources.csv`），
+可用 `tools/dump_original.ps1` 重新生成。

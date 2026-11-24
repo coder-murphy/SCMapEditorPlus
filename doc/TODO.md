@@ -487,6 +487,13 @@
   - 关闭对话框后由主窗口 `CommitEdit(L"编辑触发文本")` 进入撤销栈。
   - 回归：`--dialog-audit-test` 新增 `triggerTextView`
     （初始文本 → 原样应用逐字节一致 → 改玩家/条件后断言字段 → 非法文本不改地图）。
+- [x] **原版 exe 全量资源反解（reverse/scmdraft2）**
+  - 新增 `tools/dump_original.ps1`：枚举原版 `[CN]ScmDraft2.exe` 的全部 PE 资源，
+    输出 `reverse/scmdraft2/raw/<类型>/`、`converted/{bitmap,icon,cursor,string,version,manifest}/`
+    与 `resources.csv`，并生成带来源/哈希/版本的 README。
+  - 实测 42 个资源：25 对话框、1 菜单、4 加速键、2 字符串表、3 位图、1 图标组、
+    1 版本、4 自定义 BIN（148/170/183/193，大小与既有记录一致）。
+  - 该构建没有 RT_CURSOR / RT_MANIFEST，光标使用系统默认形状。
 - [x] **一键回归脚本（tools/regression.ps1）**
   - 默认四配置构建 + 四配置对话框审计 + 11 个自包含无头测试（unit-data/unit-param/clip/
     doodad/loc-draw/brush-pattern/tileset-render/file/mpq-compress/edge/menu）。
@@ -501,7 +508,7 @@
 ## 建议顺序
 
 本轮清单已全部完成。剩余可继续项（按优先级）：
-1. 与原始 `.exe` 资源逐项对比的细节（菜单图标、光标形状、默认值、快捷键）
+1. 基于 `reverse/scmdraft2/` 与原始 `.exe` 资源逐项对比细节（菜单图标、光标、默认值、快捷键）
 2. 测试地图入库（`-Map` 相关测试需要含完整段的样本，仓库目前只有 `tools/repro/crash_repro.scm`）
 3. 174 实际检查/下载逻辑（等 CDN 与包格式确定；当前只预留 `updateCdn`）
 4. （可选）经典 MDI 子窗口/停靠模型（当前为同进程多顶层窗口）

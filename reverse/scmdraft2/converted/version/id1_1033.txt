@@ -1,0 +1,23 @@
+VS_VERSION_INFO
+StringFileInfo
+040904b0
+Comments
+http://www.stormcoast-fortress.net/                    汉化:[CsgA]NaKa  http://www.nauni.cn/
+CompanyName
+Stormcoast Fortress
+FileDescription
+Scmdraft 2
+FileVersion
+0, 8, 0, 0
+InternalName
+Scmdraft
+LegalCopyright
+Copyright (C) 2003-2007
+OriginalFilename
+Scmdraft.exe
+ProductName
+" Scmdraft Application"
+ProductVersion
+0, 8, 0, 0
+VarFileInfo
+Translation
