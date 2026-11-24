@@ -185,12 +185,18 @@ private:
     void OpenCustomBrush();
 
     void UpdateScrollBars();
-    // 布局：上部左=地图视口，上部右=侧栏（上=微缩地图，下=场景树），下部=日志
+    // 布局：左侧=微缩地图+场景树，右侧上部=地图视口、下部=日志，底部=状态栏
     RECT MapViewRect() const;
     RECT SideRect() const;
     RECT MinimapRect() const;
     RECT LogRect() const;
     RECT SceneTreeRect() const;
+    RECT StatusRect() const;
+    RECT HScrollRect() const;
+    RECT VScrollRect() const;
+    void CreateChrome();     // 地图滚动条 + 底部状态栏
+    void LayoutChrome();
+    void UpdateStatusBar();
     int LogHeight() const;
     bool PointInMapView(int mx, int my) const;
     void CreateSceneTree();
@@ -238,7 +244,10 @@ private:
 
     HINSTANCE hInstance_ = nullptr;
     HWND hwnd_ = nullptr;
-    HWND sceneTree_ = nullptr;   // 右侧栏下方场景树（TreeView 子窗口）
+    HWND sceneTree_ = nullptr;
+    HWND hScroll_ = nullptr;
+    HWND vScroll_ = nullptr;
+    HWND statusBar_ = nullptr;   // 右侧栏下方场景树（TreeView 子窗口）
     bool suppressDialogs_ = false;   // 无头运行：不弹开图兼容性提示
     HACCEL hAccel_ = nullptr;
     MapDocument map_;

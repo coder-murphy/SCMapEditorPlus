@@ -19,6 +19,7 @@
 #include "common/string_util.h"
 #include "app/app_settings.h"
 #include "app/backups.h"
+#include "players/player_model.h"
 #include "platform/file_dialog.h"
 #include "map/map_switches.h"
 #include "terrain/edge_placer.h"
@@ -38,9 +39,13 @@ namespace {
 constexpr const wchar_t* kWindowClass = L"SCMDPlusMainWindow";
 constexpr const wchar_t* kWindowTitle = L"SCMD Plus 3.0";
 
-// 布局常量：右侧栏宽度 / 场景树控件 ID
-constexpr int kSidebarWidth = 236;
+// 布局常量：左侧栏宽度 / 状态栏高度 / 场景树控件 ID
+constexpr int kSidebarWidth = 140;
+constexpr int kStatusBarHeight = 22;
 constexpr int kSceneTreeId = 0x8FF0;
+constexpr int kHScrollId = 0x8FF1;
+constexpr int kVScrollId = 0x8FF2;
+constexpr int kStatusBarId = 0x8FF3;
 
 constexpr const wchar_t* kMapFilter =
     L"StarCraft 地图 (*.scx;*.scm)\0*.scx;*.scm\0所有文件 (*.*)\0*.*\0\0";
@@ -50,6 +55,12 @@ std::vector<MainWindow*>& LiveWindows() {
     static std::vector<MainWindow*> windows;
     return windows;
 }
+
+// 状态栏用的地形集名称（与 MapDocument 内部顺序一致）
+const wchar_t* const kEraNamesStatus[8] = {
+    L"Badlands", L"Space", L"Installation", L"Ashworld",
+    L"Jungle", L"Desert", L"Ice", L"Twilight",
+};
 
 std::wstring FileNameOf(const std::wstring& path) {
     const std::size_t at = path.find_last_of(L"\\/");
@@ -692,8 +703,8 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
     if (!::RegisterClassExW(&wc) && ::GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return false;
 
     hwnd_ = ::CreateWindowExW(0, kWindowClass, kWindowTitle,
-                              WS_OVERLAPPEDWINDOW | WS_HSCROLL | WS_VSCROLL,
-                              CW_USEDEFAULT, CW_USEDEFAULT, 1100, 760,
+                              WS_OVERLAPPEDWINDOW,
+                              CW_USEDEFAULT, CW_USEDEFAULT, 1180, 825,
                               nullptr, ::LoadMenuW(hInstance, MAKEINTRESOURCEW(IDR_MAINMENU)),
                               hInstance, this);
     if (!hwnd_) return false;
@@ -749,6 +760,7 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
     SyncMenuChecks();
 
     CreateSceneTree();
+    CreateChrome();
     UpdateTitle();
     ::ShowWindow(hwnd_, AppSettings::Instance().startMaximized() ? SW_MAXIMIZE : SW_SHOW);
     ::UpdateWindow(hwnd_);
@@ -908,10 +920,102 @@ void MainWindow::UpdateScrollBars() {
     const int maxY = std::max(0, image_.height - viewH);
     scrollX_ = std::min(scrollX_, maxX);
     scrollY_ = std::min(scrollY_, maxY);
-    ::SetScrollRange(hwnd_, SB_HORZ, 0, maxX, TRUE);
-    ::SetScrollPos(hwnd_, SB_HORZ, scrollX_, TRUE);
-    ::SetScrollRange(hwnd_, SB_VERT, 0, maxY, TRUE);
-    ::SetScrollPos(hwnd_, SB_VERT, scrollY_, TRUE);
+
+    SCROLLINFO si = {sizeof(si)};
+    si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+    si.nMin = 0;
+    si.nMax = std::max(0, image_.width - 1);
+    si.nPage = static_cast<UINT>(std::max(0, viewW));
+    si.nPos = scrollX_;
+    if (hScroll_) {
+        ::SetScrollInfo(hScroll_, SB_CTL, &si, TRUE);
+        ::EnableWindow(hScroll_, maxX > 0);
+    }
+    si.nMax = std::max(0, image_.height - 1);
+    si.nPage = static_cast<UINT>(std::max(0, viewH));
+    si.nPos = scrollY_;
+    if (vScroll_) {
+        ::SetScrollInfo(vScroll_, SB_CTL, &si, TRUE);
+        ::EnableWindow(vScroll_, maxY > 0);
+    }
+}
+
+void MainWindow::CreateChrome() {
+    if (!hwnd_) return;
+    if (!hScroll_) {
+        hScroll_ = ::CreateWindowExW(
+            0, L"SCROLLBAR", L"", WS_CHILD | WS_VISIBLE | SBS_HORZ, 0, 0, 10, 10, hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kHScrollId)), hInstance_, nullptr);
+    }
+    if (!vScroll_) {
+        vScroll_ = ::CreateWindowExW(
+            0, L"SCROLLBAR", L"", WS_CHILD | WS_VISIBLE | SBS_VERT, 0, 0, 10, 10, hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kVScrollId)), hInstance_, nullptr);
+    }
+    if (!statusBar_) {
+        statusBar_ = ::CreateWindowExW(
+            0, STATUSCLASSNAMEW, L"", WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, 0, 0, 10, 10,
+            hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kStatusBarId)), hInstance_,
+            nullptr);
+    }
+    LayoutChrome();
+    UpdateStatusBar();
+}
+
+void MainWindow::LayoutChrome() {
+    if (!hwnd_) return;
+    if (statusBar_) {
+        const RECT st = StatusRect();
+        ::SetWindowPos(statusBar_, nullptr, st.left, st.top, st.right - st.left,
+                       st.bottom - st.top, SWP_NOZORDER | SWP_NOACTIVATE);
+        RECT rc;
+        ::GetClientRect(hwnd_, &rc);
+        const int w = std::max(0L, rc.right);
+        int edges[5] = {w * 16 / 100, w * 26 / 100, w * 44 / 100, w * 54 / 100, w};
+        for (int i = 1; i < 5; i++) {
+            if (edges[i] < edges[i - 1]) edges[i] = edges[i - 1];
+        }
+        ::SendMessageW(statusBar_, SB_SETPARTS, 5, reinterpret_cast<LPARAM>(edges));
+    }
+    if (hScroll_) {
+        const RECT r = HScrollRect();
+        ::SetWindowPos(hScroll_, nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                       SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    if (vScroll_) {
+        const RECT r = VScrollRect();
+        ::SetWindowPos(vScroll_, nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                       SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+void MainWindow::UpdateStatusBar() {
+    if (!statusBar_) return;
+    wchar_t coords[96] = L"";
+    if (map_.IsOpen() && cursorTx_ >= 0 && cursorTy_ >= 0) {
+        ::wsprintfW(coords, L"%d, %d (%d,%d)", cursorTx_ * kTilePixels, cursorTy_ * kTilePixels,
+                    cursorTx_, cursorTy_);
+    }
+    const wchar_t* layers[] = {L"地形", L"装饰物", L"迷雾", L"Locations", L"单位", L"SP单位"};
+    const wchar_t* layer = layers[std::clamp(static_cast<int>(layer_), 0, 5)];
+
+    wchar_t player[128] = L"";
+    wchar_t force[64] = L"";
+    wchar_t mapInfo[160] = L"";
+    if (map_.IsOpen()) {
+        const PlayerSlot& p = map_.players().player(0);
+        ::wsprintfW(player, L"Player 1: %s %s", PlayerColorName(p.color),
+                    PlayerRaceName(p.race));
+        ::wsprintfW(force, L"Force %u", static_cast<unsigned>(p.force) + 1);
+        const unsigned era = map_.era() < 8 ? map_.era() : 0;
+        ::wsprintfW(mapInfo, L"%dx%d  ERA %u  %s", map_.width(), map_.height(), era,
+                    kEraNamesStatus[era]);
+    }
+    ::SendMessageW(statusBar_, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(coords));
+    ::SendMessageW(statusBar_, SB_SETTEXTW, 1, reinterpret_cast<LPARAM>(layer));
+    ::SendMessageW(statusBar_, SB_SETTEXTW, 2, reinterpret_cast<LPARAM>(player));
+    ::SendMessageW(statusBar_, SB_SETTEXTW, 3, reinterpret_cast<LPARAM>(force));
+    ::SendMessageW(statusBar_, SB_SETTEXTW, 4, reinterpret_cast<LPARAM>(mapInfo));
 }
 
 int MainWindow::LogHeight() const {
@@ -919,7 +1023,8 @@ int MainWindow::LogHeight() const {
     if (h <= 0 || !hwnd_) return 0;
     RECT rc;
     ::GetClientRect(hwnd_, &rc);
-    return std::min(h, std::max(0, static_cast<int>(rc.bottom - rc.top)) / 3);
+    const int content = std::max(0, static_cast<int>(rc.bottom - rc.top) - kStatusBarHeight);
+    return std::min(h, content / 3);
 }
 
 RECT MainWindow::MapViewRect() const {
@@ -927,11 +1032,14 @@ RECT MainWindow::MapViewRect() const {
     if (!hwnd_) return rc;
     ::GetClientRect(hwnd_, &rc);
     const int logH = LogHeight();
+    const int sbW = ::GetSystemMetrics(SM_CXVSCROLL);
+    const int sbH = ::GetSystemMetrics(SM_CYHSCROLL);
     const int maxSide = std::max(0, static_cast<int>(rc.right - rc.left)) / 3;
     const int sideW = std::min(kSidebarWidth, maxSide);
-    rc.right = static_cast<LONG>(std::max(0, static_cast<int>(rc.right) - sideW));
-    rc.bottom = static_cast<LONG>(std::max(0, static_cast<int>(rc.bottom) - logH));
-    return rc;
+    RECT r = {sideW, 0, rc.right - sbW, rc.bottom - kStatusBarHeight - sbH - logH};
+    if (r.right < r.left) r.right = r.left;
+    if (r.bottom < r.top) r.bottom = r.top;
+    return r;
 }
 
 RECT MainWindow::SideRect() const {
@@ -940,10 +1048,10 @@ RECT MainWindow::SideRect() const {
     RECT rc;
     ::GetClientRect(hwnd_, &rc);
     const RECT view = MapViewRect();
-    side.left = view.right;
+    side.left = 0;
     side.top = 0;
-    side.right = rc.right;
-    side.bottom = rc.bottom - LogHeight();
+    side.right = view.left;
+    side.bottom = rc.bottom - kStatusBarHeight;
     if (side.right < side.left) side.right = side.left;
     if (side.bottom < side.top) side.bottom = side.top;
     return side;
@@ -954,10 +1062,52 @@ RECT MainWindow::LogRect() const {
     if (!hwnd_) return r;
     RECT rc;
     ::GetClientRect(hwnd_, &rc);
+    const RECT view = MapViewRect();
+    const int sbW = ::GetSystemMetrics(SM_CXVSCROLL);
+    const int sbH = ::GetSystemMetrics(SM_CYHSCROLL);
+    r.left = view.left;
+    r.right = rc.right - sbW;
+    r.bottom = rc.bottom - kStatusBarHeight - sbH;
+    r.top = view.bottom;
+    return r;
+}
+
+RECT MainWindow::StatusRect() const {
+    RECT r = {0, 0, 0, 0};
+    if (!hwnd_) return r;
+    RECT rc;
+    ::GetClientRect(hwnd_, &rc);
     r.left = 0;
     r.right = rc.right;
     r.bottom = rc.bottom;
-    r.top = rc.bottom - LogHeight();
+    r.top = rc.bottom - kStatusBarHeight;
+    return r;
+}
+
+RECT MainWindow::HScrollRect() const {
+    RECT r = {0, 0, 0, 0};
+    if (!hwnd_) return r;
+    RECT rc;
+    ::GetClientRect(hwnd_, &rc);
+    const RECT view = MapViewRect();
+    const int sbH = ::GetSystemMetrics(SM_CYHSCROLL);
+    r.left = view.left;
+    r.right = rc.right - ::GetSystemMetrics(SM_CXVSCROLL);
+    r.bottom = rc.bottom - kStatusBarHeight;
+    r.top = r.bottom - sbH;
+    return r;
+}
+
+RECT MainWindow::VScrollRect() const {
+    RECT r = {0, 0, 0, 0};
+    if (!hwnd_) return r;
+    RECT rc;
+    ::GetClientRect(hwnd_, &rc);
+    const int sbW = ::GetSystemMetrics(SM_CXVSCROLL);
+    r.left = rc.right - sbW;
+    r.right = rc.right;
+    r.top = 0;
+    r.bottom = HScrollRect().top;
     return r;
 }
 
@@ -967,7 +1117,7 @@ RECT MainWindow::MinimapRect() const {
     const RECT side = SideRect();
     const int sideW = static_cast<int>(side.right - side.left);
     if (sideW < 40) return empty;
-    const int avail = std::min(sideW - 16, 180);
+    const int avail = std::min(sideW - 12, 180);
     if (avail < 32) return empty;
     int mw = avail;
     int mh = avail;
@@ -976,18 +1126,17 @@ RECT MainWindow::MinimapRect() const {
     } else {
         mw = std::max(16, avail * map_.width() / map_.height());
     }
-    const int cx = static_cast<int>(side.left + side.right) / 2;
-    RECT r = {cx - mw / 2, side.top + 22, cx - mw / 2 + mw, side.top + 22 + mh};
+    const int left = static_cast<int>(side.left) + (sideW - mw) / 2;
+    RECT r = {left, side.top + 6, left + mw, side.top + 6 + mh};
     return r;
 }
 
 RECT MainWindow::SceneTreeRect() const {
     const RECT side = SideRect();
     const RECT mm = MinimapRect();
-    // 微缩地图可见时紧随其下（留 26px 给“场景树”标题）；隐藏时整体上移
-    const int top = (mm.bottom > mm.top) ? static_cast<int>(mm.bottom) + 26
-                                         : static_cast<int>(side.top) + 42;
-    RECT r = {side.left + 6, top, side.right - 6, side.bottom - 6};
+    const int top = (mm.bottom > mm.top) ? static_cast<int>(mm.bottom) + 4
+                                         : static_cast<int>(side.top) + 4;
+    RECT r = {side.left + 4, top, side.right - 4, side.bottom - 4};
     if (r.right < r.left) r.right = r.left;
     if (r.bottom < r.top) r.bottom = r.top;
     return r;
@@ -1018,6 +1167,8 @@ bool MainWindow::OpenMap(const std::wstring& path) {    if (!map_.Open(path, til
     AppSettings::Instance().Save();
     UpdateTitle();
     RebuildView(LoadZoom());
+    LayoutSceneTree();
+    UpdateStatusBar();
     RefreshBrushPalette();
     RefreshDoodadPalette();
     RefreshSceneTree();
@@ -1212,6 +1363,8 @@ void MainWindow::NewMap() {
     ClearSelection();
     UpdateTitle();
     RebuildView(LoadZoom());
+    LayoutSceneTree();
+    UpdateStatusBar();
     RefreshBrushPalette();
     RefreshDoodadPalette();
     RefreshSceneTree();
@@ -1229,6 +1382,8 @@ void MainWindow::CloseMap() {
     ClearSelection();
     ReleaseBackBuffer();
     UpdateTitle();
+    LayoutSceneTree();
+    UpdateStatusBar();
     RefreshBrushPalette();
     RefreshDoodadPalette();
     RefreshSceneTree();
@@ -2428,6 +2583,7 @@ void MainWindow::SetLayer(EditLayer layer) {
     else if (layer == EditLayer::kDoodads) showDoodads_ = true;
     else if (layer == EditLayer::kFog) showFog_ = true;
     SyncMenuChecks();
+    UpdateStatusBar();
     ::InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
@@ -2508,6 +2664,8 @@ void MainWindow::ToggleDisplay(int commandId) {
         default: return;
     }
     SyncMenuChecks();
+    LayoutSceneTree();
+    UpdateStatusBar();
     ::InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
@@ -3012,6 +3170,7 @@ void MainWindow::OnMouseMove(int mx, int my, bool leftDown) {
     TileCoordsFromClient(mx, my, tx, ty);
     cursorTx_ = tx;
     cursorTy_ = ty;
+    UpdateStatusBar();
     if (leftDown && layer_ == EditLayer::kFog && tx >= 0) {
         if (map_.mutableFog().SetFogged(tx, ty, fogPaint_)) {
             map_.MarkDirty();
@@ -3277,30 +3436,23 @@ int MainWindow::OutputPanelHeight() const {
 }
 
 bool MainWindow::PointInOutputPanel(int mx, int my) const {
-    const int h = OutputPanelHeight();
-    if (h <= 0 || !hwnd_) return false;
-    RECT rc;
-    ::GetClientRect(hwnd_, &rc);
-    return mx >= rc.left && mx < rc.right && my >= rc.bottom - h && my < rc.bottom;
+    const RECT r = LogRect();
+    if (r.right <= r.left || r.bottom <= r.top) return false;
+    return mx >= r.left && mx < r.right && my >= r.top && my < r.bottom;
 }
 
-void MainWindow::DrawOutputPanel(HDC dc, const RECT& client) const {
-    const int h = OutputPanelHeight();
-    if (h <= 0) return;
-    const int clientH = static_cast<int>(client.bottom - client.top);
-    const int panelH = std::min(h, std::max(0, clientH) / 3);
-    if (panelH <= 0) return;
-    const int top = client.bottom - panelH;
+void MainWindow::DrawOutputPanel(HDC dc, const RECT&) const {
+    const RECT log = LogRect();
+    if (log.right <= log.left || log.bottom <= log.top) return;
+    const int top = static_cast<int>(log.top);
+    const int panelH = static_cast<int>(log.bottom - log.top);
 
-    RECT bg = {client.left, top, client.right, client.bottom};
-    HBRUSH back = ::CreateSolidBrush(RGB(24, 24, 24));
-    ::FillRect(dc, &bg, back);
-    ::DeleteObject(back);
+    ::FillRect(dc, &log, reinterpret_cast<HBRUSH>(::GetStockObject(BLACK_BRUSH)));
 
     HPEN border = ::CreatePen(PS_SOLID, 1, RGB(96, 96, 96));
     HGDIOBJ oldPen = ::SelectObject(dc, border);
-    ::MoveToEx(dc, client.left, top, nullptr);
-    ::LineTo(dc, client.right, top);
+    ::MoveToEx(dc, log.left, top, nullptr);
+    ::LineTo(dc, log.right, top);
     ::SelectObject(dc, oldPen);
     ::DeleteObject(border);
 
@@ -3328,7 +3480,7 @@ void MainWindow::DrawOutputPanel(HDC dc, const RECT& client) const {
             default: break;
         }
         ::SetTextColor(dc, color);
-        RECT r = {client.left + 8, y, client.right - 8, y + lineH};
+        RECT r = {log.left + 8, y, log.right - 8, y + lineH};
         ::DrawTextW(dc, line.text.c_str(), -1, &r, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
         y += lineH;
     }
@@ -3462,6 +3614,10 @@ void MainWindow::DrawMinimap(HDC dc) const {
 }
 
 void MainWindow::DrawHud(HDC dc) const {
+    // 默认不显示调试 HUD（与原版一致）；任一调试选项开启后才绘制
+    if (!debugMode_ && !showCompareData_ && !showDebugImageSize_ && !showImageSizeAlways_) {
+        return;
+    }
     wchar_t text[1024];
     const wchar_t* toolName = L"地形刷";
     if (tool_ == Tool::kUnit) toolName = L"单位";
@@ -3613,7 +3769,7 @@ void MainWindow::Present(HDC dc, const RECT& client) {
     DrawOutputPanel(dc, client);
 }
 
-// 右侧栏：上=微缩地图，下=场景树（场景树是 TreeView 子窗口，这里只画背景/分隔线与标题）
+// 左侧栏：上=微缩地图，下=场景树（场景树是 TreeView 子窗口，这里只画背景/分隔线）
 void MainWindow::DrawSidebar(HDC dc) const {
     const RECT side = SideRect();
     if (side.right <= side.left || side.bottom <= side.top) return;
@@ -3624,30 +3780,10 @@ void MainWindow::DrawSidebar(HDC dc) const {
 
     HPEN border = ::CreatePen(PS_SOLID, 1, RGB(96, 96, 96));
     const HGDIOBJ oldPen = ::SelectObject(dc, border);
-    ::MoveToEx(dc, side.left, side.top, nullptr);
-    ::LineTo(dc, side.left, side.bottom);
+    ::MoveToEx(dc, side.right - 1, side.top, nullptr);
+    ::LineTo(dc, side.right - 1, side.bottom);
     ::SelectObject(dc, oldPen);
     ::DeleteObject(border);
-
-    const int oldMode = ::SetBkMode(dc, TRANSPARENT);
-    const COLORREF oldColor = ::SetTextColor(dc, RGB(205, 205, 205));
-    const HGDIOBJ oldFont = ::SelectObject(dc, ::GetStockObject(DEFAULT_GUI_FONT));
-
-    const RECT mm = MinimapRect();
-    RECT title = {side.left + 8, side.top + 4, side.right - 8, side.top + 18};
-    ::DrawTextW(dc, (mm.right > mm.left) ? L"微缩地图" : L"微缩地图（已隐藏）", -1, &title,
-                DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
-
-    const RECT tree = SceneTreeRect();
-    if (tree.top > side.top + 20) {
-        RECT treeTitle = {side.left + 8, tree.top - 20, side.right - 8, tree.top - 6};
-        ::DrawTextW(dc, L"场景树", -1, &treeTitle,
-                    DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
-    }
-
-    ::SelectObject(dc, oldFont);
-    ::SetTextColor(dc, oldColor);
-    ::SetBkMode(dc, oldMode);
 
     DrawMinimap(dc);
 }
@@ -4371,6 +4507,9 @@ void MainWindow::OnCommand(int id) {
         case kOutputShow:
             outputVisible_ = !outputVisible_;
             SyncMenuChecks();
+            LayoutChrome();
+            LayoutSceneTree();
+            UpdateScrollBars();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         case kOutputFont8:
@@ -4381,6 +4520,9 @@ void MainWindow::OnCommand(int id) {
             static const int kPoints[] = {8, 10, 12, 14, 16};
             outputFontPt_ = kPoints[id - kOutputFont8];
             SyncMenuChecks();
+            LayoutChrome();
+            LayoutSceneTree();
+            UpdateScrollBars();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         }
@@ -4398,6 +4540,9 @@ void MainWindow::OnCommand(int id) {
             }
             outputVerbosity_ = level;
             SyncMenuChecks();
+            LayoutChrome();
+            LayoutSceneTree();
+            UpdateScrollBars();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         }
@@ -4901,9 +5046,10 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
         case WM_HSCROLL: {
+            if (!hScroll_) return 0;
             SCROLLINFO si = {sizeof(si)};
             si.fMask = SIF_ALL;
-            ::GetScrollInfo(hwnd_, SB_HORZ, &si);
+            ::GetScrollInfo(hScroll_, SB_CTL, &si);
             int pos = si.nPos;
             switch (LOWORD(wParam)) {
                 case SB_LINELEFT: pos -= 32; break;
@@ -4913,15 +5059,19 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
                 case SB_THUMBTRACK: pos = si.nTrackPos; break;
                 default: break;
             }
-            scrollX_ = std::max(0, std::min(pos, static_cast<int>(si.nMax)));
-            ::SetScrollPos(hwnd_, SB_HORZ, scrollX_, TRUE);
+            const int maxPos = std::max(0, si.nMax - static_cast<int>(si.nPage) + 1);
+            scrollX_ = std::clamp(pos, 0, maxPos);
+            si.fMask = SIF_POS;
+            si.nPos = scrollX_;
+            ::SetScrollInfo(hScroll_, SB_CTL, &si, TRUE);
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             return 0;
         }
         case WM_VSCROLL: {
+            if (!vScroll_) return 0;
             SCROLLINFO si = {sizeof(si)};
             si.fMask = SIF_ALL;
-            ::GetScrollInfo(hwnd_, SB_VERT, &si);
+            ::GetScrollInfo(vScroll_, SB_CTL, &si);
             int pos = si.nPos;
             switch (LOWORD(wParam)) {
                 case SB_LINEUP: pos -= 32; break;
@@ -4931,14 +5081,19 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
                 case SB_THUMBTRACK: pos = si.nTrackPos; break;
                 default: break;
             }
-            scrollY_ = std::max(0, std::min(pos, static_cast<int>(si.nMax)));
-            ::SetScrollPos(hwnd_, SB_VERT, scrollY_, TRUE);
+            const int maxPos = std::max(0, si.nMax - static_cast<int>(si.nPage) + 1);
+            scrollY_ = std::clamp(pos, 0, maxPos);
+            si.fMask = SIF_POS;
+            si.nPos = scrollY_;
+            ::SetScrollInfo(vScroll_, SB_CTL, &si, TRUE);
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             return 0;
         }
         case WM_SIZE:
-            UpdateScrollBars();
+            LayoutChrome();
             LayoutSceneTree();
+            UpdateScrollBars();
+            UpdateStatusBar();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             return 0;
         case WM_NOTIFY: {

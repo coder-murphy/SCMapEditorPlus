@@ -345,6 +345,16 @@
   - 无头回归：`--menu-cmd-test` 改为使用临时 settings 目录并重置默认视图
     （新增 `MainWindow::ReloadViewState`），避免用户 settings.ini 导致断言漂移。
   - 四配置构建通过，审计 `snapshotMatch=1 interactionMatch=1`，`--menu-cmd-test` exit=0。
+- [x] **主界面布局对齐原版（左侧栏 + 底部日志 + 状态栏）**
+  - 按原版运行截图重排：左侧栏（上=微缩地图、下=场景树，宽 140px）→ 右侧地图视口；
+    日志面板只占地图视口下方，水平滚动条在日志下方、垂直滚动条贯穿地图+日志；
+    最底部为 5 段状态栏（坐标 / 编辑层 / 玩家 / 势力 / 地图+地形集）。
+  - 去掉窗口级 `WS_HSCROLL/WS_VSCROLL`，改用 SCROLLBAR 子窗口，`MapViewRect` / `SideRect` /
+    `LogRect` / `HScrollRect` / `VScrollRect` / `StatusRect` 统一布局；输出面板显隐、
+    字号、详细度变化都会重新布局。
+  - 默认不再绘制调试 HUD（仅“允许调试/显示对比数据/图像大小”开启时显示），与原版一致。
+  - 窗口默认 1180×825；`--menu-cmd-test` 的 `miniNav` 改为点击小地图中心。
+  - 尚未实现：顶部工具栏（原版为图标按钮 + 7 个下拉/复选框）。
 - [x] **四配置本地校验（CI 暂不启用）**
   - 已按“CI 暂不做”的约定移除 `.github/workflows/dialog-ui.yml`；
     四配置（Debug/Release × Win32/x64）由 `tools/dialog-ui-check.ps1 -Exe <exe>` 本地校验。
@@ -508,7 +518,7 @@
 ## 建议顺序
 
 本轮清单已全部完成。剩余可继续项（按优先级）：
-1. 基于 `reverse/scmdraft2/` 与原始 `.exe` 资源逐项对比细节（菜单图标、光标、默认值、快捷键）
+1. 原版顶部工具栏（图标按钮 + 7 个下拉/复选框）与其余细节（菜单图标、默认值、快捷键）
 2. 测试地图入库（`-Map` 相关测试需要含完整段的样本，仓库目前只有 `tools/repro/crash_repro.scm`）
 3. 174 实际检查/下载逻辑（等 CDN 与包格式确定；当前只预留 `updateCdn`）
 4. （可选）经典 MDI 子窗口/停靠模型（当前为同进程多顶层窗口）
