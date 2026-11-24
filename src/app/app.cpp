@@ -1869,6 +1869,23 @@ bool ItemChecked(HWND hwnd, int id) {
     return state != 0xFFFFFFFFu && (state & MF_CHECKED) != 0;
 }
 
+// 关闭当前进程内除 keep 之外的 SCMDPlus 主窗口（多窗口回归用）
+struct CloseOthersCtx {
+    HWND keep = nullptr;
+    int closed = 0;
+};
+
+BOOL CALLBACK CloseOtherMainWindow(HWND w, LPARAM lp) {
+    auto* ctx = reinterpret_cast<CloseOthersCtx*>(lp);
+    wchar_t cls[64] = L"";
+    ::GetClassNameW(w, cls, 64);
+    if (std::wcscmp(cls, L"SCMDPlusMainWindow") == 0 && w != ctx->keep) {
+        ::SendMessageW(w, WM_CLOSE, 0, 0);
+        ctx->closed++;
+    }
+    return TRUE;
+}
+
 int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
     auto cmd = [hwnd](int id) {
         ::SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(id, 0), 0);
@@ -2018,17 +2035,25 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         cmd(0x80DA);   // 25% → 8 px/瓦片
         zoomOk = zoomOk && ItemChecked(hwnd, 0x80DA) && win.pxPerTile() == 8;
 
-        // 小地图点击定位：点击右下角应滚动到地图右下
-        RECT client = {};
-        ::GetClientRect(hwnd, &client);
-        minimapNav = win.ClickMinimapAt(client.right - 20, client.bottom - 20) &&
+        // 小地图点击定位：点击小地图中心应滚动到地图中部
+        const RECT mm = win.minimapRect();
+        minimapNav = mm.right > mm.left && mm.bottom > mm.top &&
+                     win.ClickMinimapAt((mm.left + mm.right) / 2, (mm.bottom + mm.top) / 2) &&
                      win.scrollY() > 0;
     }
 
-    // 窗口排列（单窗口也应安全；不测试新建/关闭）
+    // 窗口排列（单窗口也应安全）
     cmd(0x80EF);   // 水平排列
     cmd(0x80F0);   // 垂直排列
-    const bool windowOk = ::IsWindow(hwnd) != 0;
+    // 同进程多窗口：新建后计数 +1，关闭新窗口后恢复
+    const int windowsBefore = MainWindow::LiveWindowCount();
+    cmd(0x80ED);   // 新建窗口
+    const bool windowCreated = MainWindow::LiveWindowCount() == windowsBefore + 1;
+    CloseOthersCtx closeCtx;
+    closeCtx.keep = hwnd;
+    ::EnumWindows(&CloseOtherMainWindow, reinterpret_cast<LPARAM>(&closeCtx));
+    const bool windowOk = ::IsWindow(hwnd) != 0 && windowCreated && closeCtx.closed == 1 &&
+                          MainWindow::LiveWindowCount() == windowsBefore;
 
     wchar_t msg[512];
     ::wsprintfW(msg,
@@ -5863,7 +5888,7 @@ int App::Run(HINSTANCE hInstance) {
 
     MSG msg;
     while (::GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (mainWindow_.TranslateAccel(msg)) continue;
+        if (MainWindow::TranslateAccelForMessage(msg)) continue;
         ::TranslateMessage(&msg);
         ::DispatchMessageW(&msg);
     }

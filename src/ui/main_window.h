@@ -64,11 +64,18 @@ public:
     void ApplyZoomPercent(int percent);   // 地图显示比率菜单（25%..400%）
     int pxPerTile() const { return pxPerTile_; }
     bool ClickMinimapAt(int mx, int my);  // 小地图点击定位（返回是否命中）
+    RECT minimapRect() const { return MinimapRect(); }   // 回归定位用
     int scrollX() const { return scrollX_; }
     int scrollY() const { return scrollY_; }
 
     // 主菜单加速键（Ctrl+N/O/S/Z/Y 等），由消息循环调用
     bool TranslateAccel(MSG& msg) const;
+    // 同进程多窗口共用一条消息循环：按目标窗口分派加速键
+    static bool TranslateAccelForMessage(MSG& msg);
+    // 当前进程内仍存活的主窗口数量（回归断言用）
+    static int LiveWindowCount();
+    // NewWindow 动态创建的窗口在 WM_NCDESTROY 时自删除
+    void SetSelfOwned(bool owned) { selfOwned_ = owned; }
     // 从 AppSettings 重新应用视图状态（无头回归重置用）
     void ReloadViewState();
     // 无头回归/工具模式：抑制打开地图后自动弹出的提示框（163）
@@ -363,6 +370,8 @@ private:
         std::vector<Doodad> doodads;     // 仅在“包括装饰物”开启时复制；x/y 同样归一化
         bool Empty() const { return width <= 0 || height <= 0; }
     };
+    // 进程级共享剪贴板（跨窗口/跨地图粘贴）
+    static ClipboardData& SharedClipboard();
     bool hasSelection_ = false;
     bool selecting_ = false;
     int selAnchorX_ = 0;
@@ -371,7 +380,7 @@ private:
     int selY0_ = 0;
     int selX1_ = 0;
     int selY1_ = 0;
-    ClipboardData clipboard_;
+    bool selfOwned_ = false;
 };
 
 }  // namespace scmd

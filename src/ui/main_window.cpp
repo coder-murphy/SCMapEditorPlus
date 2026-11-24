@@ -45,6 +45,12 @@ constexpr int kSceneTreeId = 0x8FF0;
 constexpr const wchar_t* kMapFilter =
     L"StarCraft 地图 (*.scx;*.scm)\0*.scx;*.scm\0所有文件 (*.*)\0*.*\0\0";
 
+// 同进程多窗口：记录所有存活主窗口（加速键分派与退出时机）
+std::vector<MainWindow*>& LiveWindows() {
+    static std::vector<MainWindow*> windows;
+    return windows;
+}
+
 std::wstring FileNameOf(const std::wstring& path) {
     const std::size_t at = path.find_last_of(L"\\/");
     return at == std::wstring::npos ? path : path.substr(at + 1);
@@ -648,6 +654,22 @@ PixelRectI BuildLocationRect(LocationDrawMode mode, int px0, int py0, int px1, i
 }
 }  // namespace
 
+MainWindow::ClipboardData& MainWindow::SharedClipboard() {
+    static ClipboardData data;
+    return data;
+}
+
+bool MainWindow::TranslateAccelForMessage(MSG& msg) {
+    for (MainWindow* win : LiveWindows()) {
+        if (win->hwnd_ == msg.hwnd && win->TranslateAccel(msg)) return true;
+    }
+    return false;
+}
+
+int MainWindow::LiveWindowCount() {
+    return static_cast<int>(LiveWindows().size());
+}
+
 bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
     brushPattern_.SetSingle(brushTile_, L"单格");
     renderer_.SetTileset(&map_.tileset());
@@ -667,7 +689,7 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
     wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
     wc.hIcon = ::LoadIconW(hInstance, MAKEINTRESOURCEW(IDI_APP));
     wc.hIconSm = wc.hIcon;
-    if (!::RegisterClassExW(&wc)) return false;
+    if (!::RegisterClassExW(&wc) && ::GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return false;
 
     hwnd_ = ::CreateWindowExW(0, kWindowClass, kWindowTitle,
                               WS_OVERLAPPEDWINDOW | WS_HSCROLL | WS_VSCROLL,
@@ -1592,24 +1614,19 @@ void MainWindow::AutoPlaceCliffs() {
     ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
+// 同进程多窗口：新窗口拥有独立的文档/撤销栈，剪贴板为进程级共享
 void MainWindow::NewWindow() {
-    wchar_t exe[MAX_PATH] = L"";
-    if (::GetModuleFileNameW(nullptr, exe, MAX_PATH) == 0) {
-        Output(0, L"新建窗口失败：无法取得程序路径");
+    MainWindow* win = new MainWindow();
+    win->SetSelfOwned(true);
+    win->SetSuppressDialogs(suppressDialogs_);
+    win->tilesetDir_ = tilesetDir_;
+    if (!win->Create(hInstance_)) {
+        delete win;
+        Output(0, L"新建窗口失败");
         return;
     }
-    STARTUPINFOW si = {};
-    si.cb = sizeof(si);
-    PROCESS_INFORMATION pi = {};
-    if (::CreateProcessW(exe, nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-        ::CloseHandle(pi.hThread);
-        ::CloseHandle(pi.hProcess);
-        Output(2, L"已新建窗口");
-    } else {
-        wchar_t msg[128];
-        ::wsprintfW(msg, L"新建窗口失败（错误 %lu）", ::GetLastError());
-        Output(0, msg);
-    }
+    win->LoadBrushFiles(AppSettings::Instance().brushFiles());
+    Output(2, L"已新建窗口");
 }
 
 void MainWindow::MinimizeWindows() {
@@ -2083,17 +2100,17 @@ void MainWindow::CopySelection(bool cut) {
 
     const int w = selX1_ - selX0_ + 1;
     const int h = selY1_ - selY0_ + 1;
-    clipboard_.width = w;
-    clipboard_.height = h;
-    clipboard_.tiles.assign(static_cast<std::size_t>(w) * h, 0);
+    SharedClipboard().width = w;
+    SharedClipboard().height = h;
+    SharedClipboard().tiles.assign(static_cast<std::size_t>(w) * h, 0);
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
-            clipboard_.tiles[static_cast<std::size_t>(y) * w + x] =
+            SharedClipboard().tiles[static_cast<std::size_t>(y) * w + x] =
                 map_.TileAt(selX0_ + x, selY0_ + y);
         }
     }
 
-    clipboard_.units.clear();
+    SharedClipboard().units.clear();
     for (const UnitRecord& u : map_.units()) {
         const int tx = static_cast<int>(u.x) / 32;
         const int ty = static_cast<int>(u.y) / 32;
@@ -2101,10 +2118,10 @@ void MainWindow::CopySelection(bool cut) {
         UnitRecord relative = u;
         relative.x = static_cast<u16>(u.x - selX0_ * 32);
         relative.y = static_cast<u16>(u.y - selY0_ * 32);
-        clipboard_.units.push_back(relative);
+        SharedClipboard().units.push_back(relative);
     }
 
-    clipboard_.doodads.clear();
+    SharedClipboard().doodads.clear();
     if (clipboardDoodads_) {
         for (const Doodad& d : map_.doodads().Items()) {
             const int tx = static_cast<int>(d.x) / 32;
@@ -2113,7 +2130,7 @@ void MainWindow::CopySelection(bool cut) {
             Doodad relative = d;
             relative.x = static_cast<u16>(d.x - selX0_ * 32);
             relative.y = static_cast<u16>(d.y - selY0_ * 32);
-            clipboard_.doodads.push_back(relative);
+            SharedClipboard().doodads.push_back(relative);
         }
     }
 
@@ -2138,12 +2155,12 @@ void MainWindow::CopySelection(bool cut) {
     }
 
     Log(L"[clip] copy %dx%d units=%u cut=%d", w, h,
-        static_cast<unsigned>(clipboard_.units.size()), cut ? 1 : 0);
+        static_cast<unsigned>(SharedClipboard().units.size()), cut ? 1 : 0);
     UpdateTitle();
 }
 
 void MainWindow::PasteClipboard() {
-    if (!map_.IsOpen() || clipboard_.Empty()) {
+    if (!map_.IsOpen() || SharedClipboard().Empty()) {
         BeepWarning();
         return;
     }
@@ -2157,16 +2174,16 @@ void MainWindow::PasteClipboard() {
         tx = selX0_;
         ty = selY0_;
     } else {
-        tx = (map_.width() - clipboard_.width) / 2;
-        ty = (map_.height() - clipboard_.height) / 2;
+        tx = (map_.width() - SharedClipboard().width) / 2;
+        ty = (map_.height() - SharedClipboard().height) / 2;
     }
     if (!PasteClipboardAt(tx, ty)) BeepWarning();
 }
 
 bool MainWindow::PasteClipboardAt(int tx, int ty) {
-    if (!map_.IsOpen() || clipboard_.Empty()) return false;
-    const int w = std::min(clipboard_.width, map_.width());
-    const int h = std::min(clipboard_.height, map_.height());
+    if (!map_.IsOpen() || SharedClipboard().Empty()) return false;
+    const int w = std::min(SharedClipboard().width, map_.width());
+    const int h = std::min(SharedClipboard().height, map_.height());
     if (w <= 0 || h <= 0) return false;
     tx = std::clamp(tx, 0, map_.width() - w);
     ty = std::clamp(ty, 0, map_.height() - h);
@@ -2174,7 +2191,7 @@ bool MainWindow::PasteClipboardAt(int tx, int ty) {
     BeginEdit();
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
-            map_.PaintTile(tx + x, ty + y, clipboard_.tiles[static_cast<std::size_t>(y) * clipboard_.width + x]);
+            map_.PaintTile(tx + x, ty + y, SharedClipboard().tiles[static_cast<std::size_t>(y) * SharedClipboard().width + x]);
         }
     }
 
@@ -2191,7 +2208,7 @@ bool MainWindow::PasteClipboardAt(int tx, int ty) {
     for (const UnitRecord& u : units) {
         if (u.serial >= nextSerial) nextSerial = u.serial + 1;
     }
-    for (const UnitRecord& src : clipboard_.units) {
+    for (const UnitRecord& src : SharedClipboard().units) {
         if (static_cast<int>(src.x) / 32 >= w || static_cast<int>(src.y) / 32 >= h) continue;
         const int nx = static_cast<int>(src.x) + tx * 32;
         const int ny = static_cast<int>(src.y) + ty * 32;
@@ -2203,9 +2220,9 @@ bool MainWindow::PasteClipboardAt(int tx, int ty) {
         units.push_back(r);
     }
 
-    if (!clipboard_.doodads.empty()) {
+    if (!SharedClipboard().doodads.empty()) {
         map_.mutableDoodads().RemoveInTileRect(tx, ty, tx + w - 1, ty + h - 1);
-        for (const Doodad& src : clipboard_.doodads) {
+        for (const Doodad& src : SharedClipboard().doodads) {
             const int nx = static_cast<int>(src.x) + tx * 32;
             const int ny = static_cast<int>(src.y) + ty * 32;
             if (nx < 0 || ny < 0 || nx >= map_.width() * 32 || ny >= map_.height() * 32) continue;
@@ -2220,7 +2237,7 @@ bool MainWindow::PasteClipboardAt(int tx, int ty) {
     CommitEdit(L"粘贴");
     SelectRect(tx, ty, tx + w - 1, ty + h - 1);
     Log(L"[clip] paste at %d,%d size=%dx%d units=%u", tx, ty, w, h,
-        static_cast<unsigned>(clipboard_.units.size()));
+        static_cast<unsigned>(SharedClipboard().units.size()));
     UpdateTitle();
     return true;
 }
@@ -4757,6 +4774,22 @@ LRESULT CALLBACK MainWindow::WndProcThunk(HWND hwnd, UINT msg, WPARAM wParam, LP
         auto* self = reinterpret_cast<MainWindow*>(reinterpret_cast<CREATESTRUCTW*>(lParam)->lpCreateParams);
         ::SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
         self->hwnd_ = hwnd;
+        LiveWindows().push_back(self);
+        return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+    if (msg == WM_NCDESTROY) {
+        auto* self = reinterpret_cast<MainWindow*>(::GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (self) {
+            auto& live = LiveWindows();
+            live.erase(std::remove(live.begin(), live.end(), self), live.end());
+            const bool last = live.empty();
+            const bool owned = self->selfOwned_;
+            ::SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+            const LRESULT result = ::DefWindowProcW(hwnd, msg, wParam, lParam);
+            if (last) ::PostQuitMessage(0);
+            if (owned) delete self;
+            return result;
+        }
         return ::DefWindowProcW(hwnd, msg, wParam, lParam);
     }
     auto* self = reinterpret_cast<MainWindow*>(::GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -4920,8 +4953,10 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             if (MaybeSave()) ::DestroyWindow(hwnd_);
             return 0;
         case WM_DESTROY: {
-            // 保存视图状态（缩放/方格/编辑层/显示选项）；无头回归时跳过
-            if (AppSettings::Instance().persistViewOnExit()) {
+            // 保存视图状态（缩放/方格/编辑层/显示选项）；无头回归时跳过。
+            // 同进程多窗口时只在最后一个窗口关闭时写回，避免互相覆盖。
+            if (AppSettings::Instance().persistViewOnExit() &&
+                LiveWindows().size() <= 1) {
                 ViewState& view = AppSettings::Instance().mutableView();
                 view.zoomPx = pxPerTile_;
                 view.gridEnabled = gridEnabled_;
@@ -4948,7 +4983,6 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
                 AppSettings::Instance().Save();
             }
             ReleaseBackBuffer();
-            ::PostQuitMessage(0);
             return 0;
         }
         default:
