@@ -719,6 +719,8 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
                               hInstance, this);
     if (!hwnd_) return false;
 
+    RegisterCommands();
+
     // 主菜单加速键：原始 RT_ACCELERATOR 109（Ctrl+N/O/S/Z/Y、Alt+网格尺寸…）
     hAccel_ = ::LoadAcceleratorsW(hInstance, MAKEINTRESOURCEW(IDR_ACCEL_MAIN));
 
@@ -4499,634 +4501,510 @@ bool MainWindow::ApplyRadarFogCommand(int id) {
     return true;
 }
 
+void MainWindow::RegisterCommands() {
+    // 文件
+    commands_.Register(kFileNew, [this](int) { NewMap(); });
+    commands_.Register(kFileOpen, [this](int) {
+        if (!MaybeSave()) return;
+        std::wstring path;
+        if (OpenFileDialog(hwnd_, kMapFilter, path)) OpenMap(path);
+    });
+    commands_.Register(kFileRecentMaps, [this](int) {
+        const std::vector<std::wstring>& recent = AppSettings::Instance().recentMaps();
+        if (recent.empty()) {
+            ::MessageBoxW(hwnd_, L"还没有最近打开的地图。", kWindowTitle, MB_ICONINFORMATION);
+            return;
+        }
+        HMENU popup = ::CreatePopupMenu();
+        for (std::size_t i = 0; i < recent.size(); i++) {
+            wchar_t label[512];
+            ::wsprintfW(label, L"%u. %ls", static_cast<unsigned>(i) + 1,
+                        FileNameOf(recent[i]).c_str());
+            ::AppendMenuW(popup, MF_STRING, kRecentMenuBase + static_cast<int>(i), label);
+        }
+        POINT pt;
+        ::GetCursorPos(&pt);
+        const int chosen = ::TrackPopupMenu(
+            popup, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_TOPALIGN,
+            pt.x, pt.y, 0, hwnd_, nullptr);
+        ::DestroyMenu(popup);
+        if (chosen < kRecentMenuBase ||
+            chosen >= kRecentMenuBase + static_cast<int>(recent.size())) {
+            return;
+        }
+        const std::wstring path = recent[static_cast<std::size_t>(chosen - kRecentMenuBase)];
+        if (::GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            ::MessageBoxW(hwnd_, L"该地图文件已不存在，已从最近列表移除。", kWindowTitle,
+                          MB_ICONWARNING);
+            AppSettings::Instance().RemoveRecentMap(path);
+            AppSettings::Instance().Save();
+            return;
+        }
+        if (MaybeSave()) OpenMap(path);
+    });
+    commands_.Register(kMpqFileManager, [this](int) {
+        if (!map_.IsOpen()) {
+            BeepWarning();
+            return;
+        }
+        SetDialogDocument(&map_);
+        ShowRecoveredDialog(IDD_DLG_167, hwnd_);
+        SetDialogDocument(nullptr);
+        if (map_.IsDirty()) {
+            UpdateTitle();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+        }
+    });
+    commands_.Register(kFileClose, [this](int) { CloseMap(); });
+    commands_.Register(kFileSave, [this](int) { SaveMap(false); });
+    commands_.Register(kFileSaveAs, [this](int) { SaveMap(true); });
+    commands_.Register(kFileSaveImage, [this](int) { SaveMapImage(); });
+    commands_.Register(kFileExit, [this](int) {
+        if (MaybeSave()) ::DestroyWindow(hwnd_);
+    });
+
+    // 编辑
+    commands_.Register(kEditUndo, [this](int) { Undo(); });
+    commands_.Register(kEditRedo, [this](int) { Redo(); });
+    commands_.Register(kEditDelete, [this](int) {
+        if (cursorTx_ < 0) return;
+        BeginEdit();
+        if (RemoveUnitsAtTileWithFx(cursorTx_, cursorTy_) > 0) {
+            CommitEdit(L"删除单位");
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+        } else {
+            editOpen_ = false;
+        }
+    });
+    commands_.Register(kEditDeselect, [this](int) {
+        cursorTx_ = cursorTy_ = -1;
+        ClearSelection();
+    });
+    commands_.Register(kEditSelectTool, [this](int) {
+        tool_ = Tool::kSelect;
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kEditProperties, [this](int) { EditUnitProps(); });
+    commands_.Register(kEditCut, [this](int) { CopySelection(true); });
+    commands_.Register(kEditCopy, [this](int) { CopySelection(false); });
+    commands_.Register(kEditPaste, [this](int) { PasteClipboard(); });
+    commands_.Register(kEditSelectAll, [this](int) { SelectAllTiles(); });
+    commands_.Register(kEditOverlapUnits, [this](int) {
+        if (!map_.IsOpen() || !hasSelection_) {
+            BeepWarning();
+            return;
+        }
+        const bool cursorInside = cursorTx_ >= selX0_ && cursorTx_ <= selX1_ &&
+                                  cursorTy_ >= selY0_ && cursorTy_ <= selY1_;
+        const int tx = cursorInside ? cursorTx_ : SelectionCenterX();
+        const int ty = cursorInside ? cursorTy_ : SelectionCenterY();
+        if (OverlapSelectedUnitsAt(tx, ty) == 0) BeepWarning();
+    });
+    commands_.Register(kDeleteInvalidUnits, [this](int) {
+        if (DeleteInvalidUnits() == 0) BeepWarning();
+    });
+    commands_.Register(kFixDoodadErrors, [this](int) {
+        if (!map_.IsOpen()) {
+            BeepWarning();
+            return;
+        }
+        BeginEdit();
+        const int fixed = map_.mutableDoodads().FixErrors(map_.width(), map_.height());
+        if (fixed > 0) {
+            map_.MarkDirty();
+            CommitEdit(L"纠正装饰物错误");
+            UpdateTitle();
+            ::InvalidateRect(hwnd_, nullptr, FALSE);
+        } else {
+            editOpen_ = false;
+            BeepWarning();
+        }
+    });
+    commands_.Register(kEditConvertTerrain, [this](int) {
+        if (!map_.IsOpen()) {
+            BeepWarning();
+            return;
+        }
+        int x0 = 0, y0 = 0, x1 = map_.width() - 1, y1 = map_.height() - 1;
+        if (hasSelection_) {
+            x0 = std::min(selX0_, selX1_);
+            x1 = std::max(selX0_, selX1_);
+            y0 = std::min(selY0_, selY1_);
+            y1 = std::max(selY0_, selY1_);
+        } else if (cursorTx_ >= 0) {
+            x0 = x1 = cursorTx_;
+            y0 = y1 = cursorTy_;
+        } else {
+            BeepWarning();
+            return;
+        }
+        BeginEdit();
+        const int removed = map_.mutableDoodads().RemoveInTileRect(x0, y0, x1, y1);
+        if (removed > 0) {
+            map_.MarkDirty();
+            CommitEdit(L"转换地形");
+        } else {
+            editOpen_ = false;
+            BeepWarning();
+        }
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kRandomizeMinerals, [this](int) {
+        if (!map_.IsOpen()) {
+            BeepWarning();
+            return;
+        }
+        BeginEdit();
+        if (RandomizeMineralTypes(map_) > 0) {
+            CommitEdit(L"矿物外形随机");
+        } else {
+            editOpen_ = false;
+        }
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+
+    // 剧本
+    commands_.Register(kScenarioResize, [this](int) { ResizeMapDialog(); });
+    commands_.Register(kScenarioDescription, [this](int) { EditMapText(2, true); });
+    commands_.Register(kScenarioStrings, [this](int) { EditMapText(1, false); });
+    commands_.Register(kScenarioForces, [this](int) { OpenPlayerRoster(); });
+    commands_.Register(kScenarioUnits, [this](int) {
+        if (!map_.IsOpen()) {
+            BeepWarning();
+            return;
+        }
+        BeginEdit();
+        SetDialogDocument(&map_);
+        ShowRecoveredDialog(IDD_DLG_172, hwnd_);
+        SetDialogDocument(nullptr);
+        CommitEdit(L"编辑单位属性");
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kScenarioUpgrades, [this](int) { OpenRestrictions(); });
+    commands_.Register(kScenarioTech, [this](int) { OpenRestrictions(); });
+    commands_.Register(kScenarioGotoStart, [this](int) { GotoStartPosition(); });
+    commands_.Register(kScenarioSounds, [this](int) {
+        if (!map_.IsOpen()) {
+            BeepWarning();
+            return;
+        }
+        BeginEdit();
+        SetDialogDocument(&map_);
+        ShowRecoveredDialog(IDD_SOUNDS, hwnd_);
+        SetDialogDocument(nullptr);
+        CommitEdit(L"编辑声音");
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kScenarioBriefing, [this](int) {
+        if (!map_.IsOpen()) {
+            BeepWarning();
+            return;
+        }
+        BeginEdit();
+        SetDialogDocument(&map_);
+        ShowRecoveredDialog(IDD_BRIEFING, hwnd_);
+        SetDialogDocument(nullptr);
+        CommitEdit(L"编辑任务简报");
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kLocRename, [this](int) {
+        if (!map_.IsOpen()) {
+            BeepWarning();
+            return;
+        }
+        POINT pt;
+        ::GetCursorPos(&pt);
+        ::ScreenToClient(hwnd_, &pt);
+        int tx = -1, ty = -1;
+        TileCoordsFromClient(pt.x, pt.y, tx, ty);
+        const int index = tx >= 0 ? LocationIndexAtTile(tx, ty) : -1;
+        if (index < 0) {
+            ::MessageBoxW(hwnd_, L"光标不在任何地点上。", kWindowTitle, MB_ICONINFORMATION);
+            return;
+        }
+        EditLocation(index);
+    });
+
+    // 触发
+    commands_.Register(kTriggerEditor, [this](int) {
+        if (!map_.IsOpen()) {
+            BeepWarning();
+            return;
+        }
+        BeginEdit();
+        SetDialogDocument(&map_);
+        ShowRecoveredDialog(IDD_DLG_181, hwnd_);
+        SetDialogDocument(nullptr);
+        CommitEdit(L"编辑触发");
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kTriggerTextView, [this](int) {
+        if (!map_.IsOpen()) {
+            BeepWarning();
+            return;
+        }
+        BeginEdit();
+        SetDialogDocument(&map_);
+        ShowRecoveredDialog(IDD_TRIG_TEXT, hwnd_);
+        SetDialogDocument(nullptr);
+        CommitEdit(L"编辑触发文本");
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kLayerBrush, [this](int) { OpenCustomBrush(); });
+    commands_.Register(kWindowBrush, [this](int) { ShowBrushPalette(); });
+    commands_.Register(kWindowUnitPanel, [this](int) { OpenUnitPlacement(); });
+    commands_.Register(kWindowSpUnits, [this](int) {
+        const int index = cursorTx_ >= 0 ? SpriteIndexAtTile(cursorTx_, cursorTy_) : -1;
+        OpenSpUnitEditor(index);
+    });
+
+    // 放置规则
+    commands_.RegisterAll({kPlaceBuildNormal, kPlaceUnitGrid, kPlaceGroundOverlap,
+                           kPlaceAirOverlap, kPlaceUnitAnywhere, kPlaceBuildingAnywhere,
+                           kPlaceAutoAddon, kPlaceMineralDistance, kDoodadAnywhere,
+                           kClipboardDoodads},
+                          [this](int id) { TogglePlacementRule(id); });
+
+    // 选项
+    commands_.Register(kOptionsEditorSettings, [this](int) {
+        ShowRecoveredDialog(IDD_DLG_155, hwnd_);
+    });
+    commands_.Register(kAdvancedCheckUpdate, [this](int) {
+        ShowRecoveredDialog(IDD_DLG_174, hwnd_);
+    });
+    commands_.Register(kAutoCheckUpdate, [this](int) {
+        const bool enabled = !AppSettings::Instance().autoCheckUpdate();
+        AppSettings::Instance().SetAutoCheckUpdate(enabled);
+        AppSettings::Instance().Save();
+        Output(2, enabled ? L"自动检查更新：已开启（当前无更新源）"
+                          : L"自动检查更新：已关闭");
+        SyncMenuChecks();
+    });
+    commands_.Register(kAdvancedBackup, [this](int) {
+        ShowRecoveredDialog(IDD_DLG_173, hwnd_);
+    });
+    commands_.Register(kAdvancedDefaultEditor, [this](int) { SetDefaultMapEditor(); });
+    commands_.Register(kAdvancedShortcut, [this](int) { CreateStartMenuShortcut(); });
+    commands_.Register(kEnableSound, [this](int) {
+        soundEnabled_ = !soundEnabled_;
+        AppSettings::Instance().SetSoundEnabled(soundEnabled_);
+        AppSettings::Instance().Save();
+        SyncMenuChecks();
+        if (soundEnabled_) ::MessageBeep(MB_ICONASTERISK);
+    });
+
+    // 输出面板
+    commands_.Register(kOutputShow, [this](int) {
+        outputVisible_ = !outputVisible_;
+        SyncMenuChecks();
+        LayoutChrome();
+        LayoutSceneTree();
+        UpdateScrollBars();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.RegisterAll({kOutputFont8, kOutputFont10, kOutputFont12, kOutputFont14,
+                           kOutputFont16},
+                          [this](int id) {
+        static const int kPoints[] = {8, 10, 12, 14, 16};
+        outputFontPt_ = kPoints[id - kOutputFont8];
+        SyncMenuChecks();
+        LayoutChrome();
+        LayoutSceneTree();
+        UpdateScrollBars();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.RegisterAll({kOutputVerbOff, kOutputVerbSimple, kOutputVerbNormal,
+                           kOutputVerbHigh, kOutputVerbDebug},
+                          [this](int id) {
+        static const int kLevels[] = {0, 1, 2, 3, 4};
+        static const int kIds[] = {kOutputVerbOff, kOutputVerbSimple, kOutputVerbNormal,
+                                   kOutputVerbHigh, kOutputVerbDebug};
+        int level = 2;
+        for (int i = 0; i < 5; i++) {
+            if (kIds[i] == id) level = kLevels[i];
+        }
+        outputVerbosity_ = level;
+        SyncMenuChecks();
+        LayoutChrome();
+        LayoutSceneTree();
+        UpdateScrollBars();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kOutputClear, [this](int) {
+        outputLines_.clear();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+
+    // 窗口
+    commands_.Register(kWindowNew, [this](int) { NewWindow(); });
+    commands_.Register(kWindowMinimize, [this](int) { MinimizeWindows(); });
+    commands_.Register(kWindowTileHorizontal, [this](int) { ArrangeWindows(true); });
+    commands_.Register(kWindowTileVertical, [this](int) { ArrangeWindows(false); });
+    commands_.Register(kWindowClose, [this](int) { ::PostMessageW(hwnd_, WM_CLOSE, 0, 0); });
+    commands_.Register(kWindowTerrain, [this](int) {
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kWindowDoodads, [this](int) { ShowDoodadPalette(); });
+
+    // 地图显示比率
+    commands_.Register(kZoom25, [this](int) { ApplyZoomPercent(25); });
+    commands_.Register(kZoom33, [this](int) { ApplyZoomPercent(33); });
+    commands_.Register(kZoom50, [this](int) { ApplyZoomPercent(50); });
+    commands_.Register(kZoom66, [this](int) { ApplyZoomPercent(66); });
+    commands_.Register(kZoom100, [this](int) { ApplyZoomPercent(100); });
+    commands_.Register(kZoom150, [this](int) { ApplyZoomPercent(150); });
+    commands_.Register(kZoom200, [this](int) { ApplyZoomPercent(200); });
+    commands_.Register(kZoom300, [this](int) { ApplyZoomPercent(300); });
+    commands_.Register(kZoom400, [this](int) { ApplyZoomPercent(400); });
+
+    // 编辑层 / Locations
+    commands_.Register(kLayerTerrain, [this](int) { SetLayer(EditLayer::kTerrain); });
+    commands_.Register(kLayerDoodads, [this](int) { SetLayer(EditLayer::kDoodads); });
+    commands_.Register(kLayerFog, [this](int) { SetLayer(EditLayer::kFog); });
+    commands_.Register(kLayerLocations, [this](int) { SetLayer(EditLayer::kLocations); });
+    commands_.Register(kLayerUnits, [this](int) { SetLayer(EditLayer::kUnits); });
+    commands_.Register(kLayerSpUnits, [this](int) { SetLayer(EditLayer::kSpUnits); });
+    commands_.Register(kLocDrawNeat, [this](int) { SetLocationDrawMode(0); });
+    commands_.Register(kLocDrawGrid, [this](int) { SetLocationDrawMode(1); });
+    commands_.Register(kLocDrawAnywhere, [this](int) { SetLocationDrawMode(2); });
+    commands_.Register(kSpAlignGrid, [this](int) {
+        spAlignGrid_ = !spAlignGrid_;
+        SyncMenuChecks();
+    });
+    commands_.RegisterAll({kFogDefaultUnexplored, kFogDefaultExplored}, [this](int id) {
+        if (!map_.IsOpen()) {
+            BeepWarning();
+            return;
+        }
+        BeginEdit();
+        map_.mutableFog().SetAll(id == kFogDefaultUnexplored ? 0xFF : 0x00,
+                                 map_.width(), map_.height());
+        map_.MarkDirty();
+        CommitEdit(L"战争迷雾默认");
+        UpdateTitle();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+
+    // 方格
+    commands_.Register(kGridTiny, [this](int) { ApplyGridPreset(8); });
+    commands_.Register(kGridSmall, [this](int) { ApplyGridPreset(16); });
+    commands_.Register(kGridNormal, [this](int) { ApplyGridPreset(32); });
+    commands_.Register(kGridLarge, [this](int) { ApplyGridPreset(64); });
+    commands_.Register(kGridHuge, [this](int) { ApplyGridPreset(128); });
+    commands_.Register(kGridCustom, [this](int) { OpenGridSettings(); });
+    commands_.Register(kGridOff, [this](int) { ApplyGridPreset(0); });
+    commands_.Register(kGridColorBlack, [this](int id) { SetGridColor(RGB(0, 0, 0), id); });
+    commands_.Register(kGridColorGray, [this](int id) { SetGridColor(RGB(128, 128, 128), id); });
+    commands_.Register(kGridColorWhite, [this](int id) { SetGridColor(RGB(255, 255, 255), id); });
+    commands_.Register(kGridColorGreen, [this](int id) { SetGridColor(RGB(0, 200, 0), id); });
+    commands_.Register(kGridColorRed, [this](int id) { SetGridColor(RGB(220, 0, 0), id); });
+    commands_.Register(kGridColorBlue, [this](int id) { SetGridColor(RGB(0, 90, 220), id); });
+    commands_.Register(kGridColorOther, [this](int id) { SetGridColor(gridColor_, id); });
+
+    // 调试
+    commands_.Register(kDebugEnable, [this](int) {
+        debugMode_ = !debugMode_;
+        SyncMenuChecks();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.RegisterAll({kDebugDataNormal, kDebugDataExact, kDebugDataFinal}, [this](int id) {
+        debugDataMode_ = id == kDebugDataNormal ? 0 : (id == kDebugDataExact ? 1 : 2);
+        SyncMenuChecks();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kDebugOverlaps, [this](int) {
+        showOverlapMarkers_ = !showOverlapMarkers_;
+        SyncMenuChecks();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kDebugCompare, [this](int) {
+        showCompareData_ = !showCompareData_;
+        SyncMenuChecks();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kDebugUnitConflict, [this](int) {
+        showUnitConflict_ = !showUnitConflict_;
+        SyncMenuChecks();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kDebugCpu, [this](int) {
+        showCpuTiming_ = !showCpuTiming_;
+        SyncMenuChecks();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kDebugImageSize, [this](int) {
+        showDebugImageSize_ = !showDebugImageSize_;
+        SyncMenuChecks();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kDebugImageSizeAlways, [this](int) {
+        showImageSizeAlways_ = !showImageSizeAlways_;
+        SyncMenuChecks();
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kDebugClearScreen, [this](int) {
+        ::InvalidateRect(hwnd_, nullptr, TRUE);
+    });
+    commands_.RegisterAll({kDebugClearDoodads, kDebugClearUnits, kDebugClearDuplicates},
+                          [this](int id) {
+        // 本工程不做增量缓存；清缓存等价于丢弃整图位图并重建
+        const wchar_t* what = id == kDebugClearDoodads ? L"装饰物"
+                             : id == kDebugClearUnits ? L"单位" : L"重复";
+        ReleaseBackBuffer();
+        RebuildView(pxPerTile_);
+        Output(3, std::wstring(L"已清除") + what + L"缓存并重建视图");
+        ::InvalidateRect(hwnd_, nullptr, FALSE);
+    });
+    commands_.Register(kAutoEdgeCliffs, [this](int) { AutoPlaceCliffs(); });
+
+    // 显示选项
+    commands_.RegisterAll({kDispAllColors, kDispUnits, kDispDoodads, kDispSpUnits,
+                           kDispZergGround, kDispSpecialStates, kDispHideMinimap,
+                           kDispColorCycle, kDispDeathFx, kDispFog, kDispFogExplored,
+                           kLayerFogToggle, kDispLocations},
+                          [this](int id) { ToggleDisplay(id); });
+
+    // 帮助 / 调试对话框
+    commands_.Register(kIscriptGrpDebug, [this](int) {
+        ShowRecoveredDialog(IDD_ISCRIPT, hwnd_);
+    });
+    commands_.Register(kDebugDialogs, [this](int) {
+        ShowRecoveredDialog(IDD_DLG_155, hwnd_);
+    });
+    commands_.Register(kHelpAbout, [this](int) {
+        ShowRecoveredDialog(IDD_DLG_103, hwnd_);
+    });
+    commands_.Register(kHelpHomepage, [this](int) {
+        OpenHelpUrl(L"http://www.stormcoast-fortress.net/");
+    });
+    commands_.Register(kHelpOnlineHelp, [this](int) {
+        OpenHelpUrl(L"http://www.stormcoast-fortress.net/");
+    });
+    commands_.Register(kHelpForum, [this](int) {
+        OpenHelpUrl(L"http://www.stormcoast-fortress.net/");
+    });
+    commands_.Register(kHelpReportBug, [this](int) {
+        // 原版指向作者邮箱；本工程改为项目仓库的 issue 页
+        OpenHelpUrl(L"https://github.com/coder-murphy/SCMapEditorPlus/issues");
+    });
+    commands_.Register(kHelpDonate, [this](int) {
+        ::MessageBoxW(hwnd_, L"本工程为免费开源工具，不接受捐款。", kWindowTitle,
+                      MB_ICONINFORMATION);
+    });
+}
+
 void MainWindow::OnCommand(int id) {
     if (ApplyRadarFogCommand(id)) return;
-    switch (id) {
-        case kFileNew:
-            NewMap();
-            break;
-        case kFileOpen: {
-            if (!MaybeSave()) break;
-            std::wstring path;
-            if (OpenFileDialog(hwnd_, kMapFilter, path)) OpenMap(path);
-            break;
-        }
-        case kFileRecentMaps: {
-            const std::vector<std::wstring>& recent = AppSettings::Instance().recentMaps();
-            if (recent.empty()) {
-                ::MessageBoxW(hwnd_, L"还没有最近打开的地图。", kWindowTitle, MB_ICONINFORMATION);
-                break;
-            }
-            HMENU popup = ::CreatePopupMenu();
-            for (std::size_t i = 0; i < recent.size(); i++) {
-                wchar_t label[512];
-                ::wsprintfW(label, L"%u. %ls", static_cast<unsigned>(i) + 1,
-                            FileNameOf(recent[i]).c_str());
-                ::AppendMenuW(popup, MF_STRING, kRecentMenuBase + static_cast<int>(i), label);
-            }
-            POINT pt;
-            ::GetCursorPos(&pt);
-            const int chosen = ::TrackPopupMenu(
-                popup, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_TOPALIGN,
-                pt.x, pt.y, 0, hwnd_, nullptr);
-            ::DestroyMenu(popup);
-            if (chosen < kRecentMenuBase ||
-                chosen >= kRecentMenuBase + static_cast<int>(recent.size())) {
-                break;
-            }
-            const std::wstring path = recent[static_cast<std::size_t>(chosen - kRecentMenuBase)];
-            if (::GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
-                ::MessageBoxW(hwnd_, L"该地图文件已不存在，已从最近列表移除。", kWindowTitle,
-                              MB_ICONWARNING);
-                AppSettings::Instance().RemoveRecentMap(path);
-                AppSettings::Instance().Save();
-                break;
-            }
-            if (MaybeSave()) OpenMap(path);
-            break;
-        }
-        case kMpqFileManager: {
-            if (!map_.IsOpen()) {
-                BeepWarning();
-                break;
-            }
-            SetDialogDocument(&map_);
-            ShowRecoveredDialog(IDD_DLG_167, hwnd_);
-            SetDialogDocument(nullptr);
-            if (map_.IsDirty()) {
-                UpdateTitle();
-                ::InvalidateRect(hwnd_, nullptr, FALSE);
-            }
-            break;
-        }
-        case kFileClose:
-            CloseMap();
-            break;
-        case kFileSave:
-            SaveMap(false);
-            break;
-        case kFileSaveAs:
-            SaveMap(true);
-            break;
-        case kFileSaveImage:
-            SaveMapImage();
-            break;
-        case kEditUndo:
-            Undo();
-            break;
-        case kEditRedo:
-            Redo();
-            break;
-        case kEditDelete:
-            if (cursorTx_ >= 0) {
-                BeginEdit();
-                if (RemoveUnitsAtTileWithFx(cursorTx_, cursorTy_) > 0) {
-                    CommitEdit(L"删除单位");
-                    ::InvalidateRect(hwnd_, nullptr, FALSE);
-                } else {
-                    editOpen_ = false;
-                }
-            }
-            break;
-        case kEditDeselect:
-            cursorTx_ = cursorTy_ = -1;
-            ClearSelection();
-            break;
-        case kEditSelectTool:
-            tool_ = Tool::kSelect;
-            UpdateTitle();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kEditProperties:
-            EditUnitProps();
-            break;
-        case kScenarioResize:
-            ResizeMapDialog();
-            break;
-        case kScenarioDescription:
-            EditMapText(2, true);      // STR[2] 地图描述（富文本）
-            break;
-        case kScenarioStrings:
-            EditMapText(1, false);     // STR[1] 地图名
-            break;
-        case kScenarioForces:
-            OpenPlayerRoster();
-            break;
-        case kScenarioUnits:
-            if (!map_.IsOpen()) {
-                BeepWarning();
-                break;
-            }
-            BeginEdit();
-            SetDialogDocument(&map_);
-            ShowRecoveredDialog(IDD_DLG_172, hwnd_);
-            SetDialogDocument(nullptr);
-            CommitEdit(L"编辑单位属性");
-            UpdateTitle();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kScenarioUpgrades:
-            OpenRestrictions();
-            break;
-        case kScenarioTech:
-            OpenRestrictions();
-            break;
-        case kScenarioGotoStart:
-            GotoStartPosition();
-            break;
-        case kScenarioSounds: {
-            if (!map_.IsOpen()) {
-                BeepWarning();
-                break;
-            }
-            BeginEdit();
-            SetDialogDocument(&map_);
-            ShowRecoveredDialog(IDD_SOUNDS, hwnd_);
-            SetDialogDocument(nullptr);
-            CommitEdit(L"编辑声音");
-            UpdateTitle();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        }
-        case kScenarioBriefing: {
-            if (!map_.IsOpen()) {
-                BeepWarning();
-                break;
-            }
-            BeginEdit();
-            SetDialogDocument(&map_);
-            ShowRecoveredDialog(IDD_BRIEFING, hwnd_);
-            SetDialogDocument(nullptr);
-            CommitEdit(L"编辑任务简报");
-            UpdateTitle();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        }
-        case kLayerBrush:
-            OpenCustomBrush();
-            break;
-        case kWindowBrush:
-            ShowBrushPalette();
-            break;
-        case kWindowUnitPanel:
-            OpenUnitPlacement();
-            break;
-        case kWindowSpUnits: {
-            const int index = cursorTx_ >= 0 ? SpriteIndexAtTile(cursorTx_, cursorTy_) : -1;
-            OpenSpUnitEditor(index);
-            break;
-        }
-        case kPlaceBuildNormal:
-        case kPlaceUnitGrid:
-        case kPlaceGroundOverlap:
-        case kPlaceAirOverlap:
-        case kPlaceUnitAnywhere:
-        case kPlaceBuildingAnywhere:
-        case kPlaceAutoAddon:
-        case kPlaceMineralDistance:
-        case kDoodadAnywhere:
-        case kClipboardDoodads:
-            TogglePlacementRule(id);
-            break;
-        case kOptionsEditorSettings:
-            ShowRecoveredDialog(IDD_DLG_155, hwnd_);
-            break;
-        case kAdvancedCheckUpdate:
-            ShowRecoveredDialog(IDD_DLG_174, hwnd_);
-            break;
-        case kAutoCheckUpdate: {
-            const bool enabled = !AppSettings::Instance().autoCheckUpdate();
-            AppSettings::Instance().SetAutoCheckUpdate(enabled);
-            AppSettings::Instance().Save();
-            Output(2, enabled ? L"自动检查更新：已开启（当前无更新源）"
-                              : L"自动检查更新：已关闭");
-            SyncMenuChecks();
-            break;
-        }
-        case kAdvancedBackup:
-            ShowRecoveredDialog(IDD_DLG_173, hwnd_);
-            break;
-        case kAdvancedDefaultEditor:
-            SetDefaultMapEditor();
-            break;
-        case kAdvancedShortcut:
-            CreateStartMenuShortcut();
-            break;
-        case kEnableSound:
-            soundEnabled_ = !soundEnabled_;
-            AppSettings::Instance().SetSoundEnabled(soundEnabled_);
-            AppSettings::Instance().Save();
-            SyncMenuChecks();
-            if (soundEnabled_) ::MessageBeep(MB_ICONASTERISK);
-            break;
-        // 选项 → 输出
-        case kOutputShow:
-            outputVisible_ = !outputVisible_;
-            SyncMenuChecks();
-            LayoutChrome();
-            LayoutSceneTree();
-            UpdateScrollBars();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kOutputFont8:
-        case kOutputFont10:
-        case kOutputFont12:
-        case kOutputFont14:
-        case kOutputFont16: {
-            static const int kPoints[] = {8, 10, 12, 14, 16};
-            outputFontPt_ = kPoints[id - kOutputFont8];
-            SyncMenuChecks();
-            LayoutChrome();
-            LayoutSceneTree();
-            UpdateScrollBars();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        }
-        case kOutputVerbOff:
-        case kOutputVerbSimple:
-        case kOutputVerbNormal:
-        case kOutputVerbHigh:
-        case kOutputVerbDebug: {
-            static const int kLevels[] = {0, 1, 2, 3, 4};
-            static const int kIds[] = {kOutputVerbOff, kOutputVerbSimple, kOutputVerbNormal,
-                                       kOutputVerbHigh, kOutputVerbDebug};
-            int level = 2;
-            for (int i = 0; i < 5; i++) {
-                if (kIds[i] == id) level = kLevels[i];
-            }
-            outputVerbosity_ = level;
-            SyncMenuChecks();
-            LayoutChrome();
-            LayoutSceneTree();
-            UpdateScrollBars();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        }
-        case kOutputClear:
-            outputLines_.clear();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kWindowNew:
-            NewWindow();
-            break;
-        case kWindowMinimize:
-            MinimizeWindows();
-            break;
-        case kWindowTileHorizontal:
-            ArrangeWindows(true);
-            break;
-        case kWindowTileVertical:
-            ArrangeWindows(false);
-            break;
-        case kWindowClose:
-            ::PostMessageW(hwnd_, WM_CLOSE, 0, 0);
-            break;
-        case kWindowTerrain:
-            InvalidateRect(hwnd_, nullptr, FALSE);   // 地形视图即主视图，重绘即可
-            break;
-        case kWindowDoodads:
-            ShowDoodadPalette();
-            break;
-        case kEditCut:
-            CopySelection(true);
-            break;
-        case kEditCopy:
-            CopySelection(false);
-            break;
-        case kEditPaste:
-            PasteClipboard();
-            break;
-        case kEditSelectAll:
-            SelectAllTiles();
-            break;
-        case kEditOverlapUnits: {
-            if (!map_.IsOpen() || !hasSelection_) {
-                BeepWarning();
-                break;
-            }
-            const bool cursorInside = cursorTx_ >= selX0_ && cursorTx_ <= selX1_ &&
-                                      cursorTy_ >= selY0_ && cursorTy_ <= selY1_;
-            const int tx = cursorInside ? cursorTx_ : SelectionCenterX();
-            const int ty = cursorInside ? cursorTy_ : SelectionCenterY();
-            if (OverlapSelectedUnitsAt(tx, ty) == 0) BeepWarning();
-            break;
-        }
-        case kDeleteInvalidUnits:
-            if (DeleteInvalidUnits() == 0) BeepWarning();
-            break;
-        case kFixDoodadErrors: {
-            if (!map_.IsOpen()) {
-                BeepWarning();
-                break;
-            }
-            BeginEdit();
-            const int fixed = map_.mutableDoodads().FixErrors(map_.width(), map_.height());
-            if (fixed > 0) {
-                map_.MarkDirty();
-                CommitEdit(L"纠正装饰物错误");
-                UpdateTitle();
-                ::InvalidateRect(hwnd_, nullptr, FALSE);
-            } else {
-                editOpen_ = false;
-                BeepWarning();
-            }
-            break;
-        }
-        case kEditConvertTerrain: {
-            if (!map_.IsOpen()) {
-                BeepWarning();
-                break;
-            }
-            int x0 = 0, y0 = 0, x1 = map_.width() - 1, y1 = map_.height() - 1;
-            if (hasSelection_) {
-                x0 = std::min(selX0_, selX1_);
-                x1 = std::max(selX0_, selX1_);
-                y0 = std::min(selY0_, selY1_);
-                y1 = std::max(selY0_, selY1_);
-            } else if (cursorTx_ >= 0) {
-                x0 = x1 = cursorTx_;
-                y0 = y1 = cursorTy_;
-            } else {
-                BeepWarning();
-                break;
-            }
-            BeginEdit();
-            const int removed = map_.mutableDoodads().RemoveInTileRect(x0, y0, x1, y1);
-            if (removed > 0) {
-                map_.MarkDirty();
-                CommitEdit(L"转换地形");
-            } else {
-                editOpen_ = false;
-                BeepWarning();
-            }
-            UpdateTitle();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        }
-        case kRandomizeMinerals: {
-            if (!map_.IsOpen()) {
-                BeepWarning();
-                break;
-            }
-            BeginEdit();
-            if (RandomizeMineralTypes(map_) > 0) {
-                CommitEdit(L"矿物外形随机");
-            } else {
-                editOpen_ = false;
-            }
-            UpdateTitle();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        }
-        case kZoom25: ApplyZoomPercent(25); break;
-        case kZoom33: ApplyZoomPercent(33); break;
-        case kZoom50: ApplyZoomPercent(50); break;
-        case kZoom66: ApplyZoomPercent(66); break;
-        case kZoom100: ApplyZoomPercent(100); break;
-        case kZoom150: ApplyZoomPercent(150); break;
-        case kZoom200: ApplyZoomPercent(200); break;
-        case kZoom300: ApplyZoomPercent(300); break;
-        case kZoom400: ApplyZoomPercent(400); break;
-        case kLayerTerrain:
-            SetLayer(EditLayer::kTerrain);
-            break;
-        case kLayerDoodads:
-            SetLayer(EditLayer::kDoodads);
-            break;
-        case kLayerFog:
-            SetLayer(EditLayer::kFog);
-            break;
-        case kFogDefaultUnexplored:
-        case kFogDefaultExplored: {
-            if (!map_.IsOpen()) {
-                BeepWarning();
-                break;
-            }
-            BeginEdit();
-            map_.mutableFog().SetAll(id == kFogDefaultUnexplored ? 0xFF : 0x00,
-                                     map_.width(), map_.height());
-            map_.MarkDirty();
-            CommitEdit(L"战争迷雾默认");
-            UpdateTitle();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        }
-        case kLayerLocations:
-            SetLayer(EditLayer::kLocations);
-            break;
-        case kLayerUnits:
-            SetLayer(EditLayer::kUnits);
-            break;
-        case kLayerSpUnits:
-            SetLayer(EditLayer::kSpUnits);
-            break;
-        case kLocDrawNeat:
-            SetLocationDrawMode(0);
-            break;
-        case kLocDrawGrid:
-            SetLocationDrawMode(1);
-            break;
-        case kLocDrawAnywhere:
-            SetLocationDrawMode(2);
-            break;
-        case kSpAlignGrid:
-            spAlignGrid_ = !spAlignGrid_;
-            SyncMenuChecks();
-            break;
-        case kGridTiny:
-            ApplyGridPreset(8);
-            break;
-        case kGridSmall:
-            ApplyGridPreset(16);
-            break;
-        case kGridNormal:
-            ApplyGridPreset(32);
-            break;
-        case kGridLarge:
-            ApplyGridPreset(64);
-            break;
-        case kGridHuge:
-            ApplyGridPreset(128);
-            break;
-        case kGridCustom:
-            OpenGridSettings();
-            break;
-        case kGridOff:
-            ApplyGridPreset(0);
-            break;
-        case kGridColorBlack:
-            SetGridColor(RGB(0, 0, 0), id);
-            break;
-        case kGridColorGray:
-            SetGridColor(RGB(128, 128, 128), id);
-            break;
-        case kGridColorWhite:
-            SetGridColor(RGB(255, 255, 255), id);
-            break;
-        case kGridColorGreen:
-            SetGridColor(RGB(0, 200, 0), id);
-            break;
-        case kGridColorRed:
-            SetGridColor(RGB(220, 0, 0), id);
-            break;
-        case kGridColorBlue:
-            SetGridColor(RGB(0, 90, 220), id);
-            break;
-        case kGridColorOther:
-            SetGridColor(gridColor_, id);
-            break;
-        case kDebugEnable:
-            debugMode_ = !debugMode_;
-            SyncMenuChecks();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kDebugDataNormal:
-        case kDebugDataExact:
-        case kDebugDataFinal:
-            debugDataMode_ = id == kDebugDataNormal ? 0 : (id == kDebugDataExact ? 1 : 2);
-            SyncMenuChecks();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kDebugOverlaps:
-            showOverlapMarkers_ = !showOverlapMarkers_;
-            SyncMenuChecks();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kDebugCompare:
-            showCompareData_ = !showCompareData_;
-            SyncMenuChecks();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kDebugUnitConflict:
-            showUnitConflict_ = !showUnitConflict_;
-            SyncMenuChecks();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kDebugCpu:
-            showCpuTiming_ = !showCpuTiming_;
-            SyncMenuChecks();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kDebugImageSize:
-            showDebugImageSize_ = !showDebugImageSize_;
-            SyncMenuChecks();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kDebugClearScreen:
-            ::InvalidateRect(hwnd_, nullptr, TRUE);
-            break;
-        case kDebugImageSizeAlways:
-            showImageSizeAlways_ = !showImageSizeAlways_;
-            SyncMenuChecks();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kDebugClearDoodads:
-        case kDebugClearUnits:
-        case kDebugClearDuplicates: {
-            // 本工程不做增量缓存；清缓存等价于丢弃整图位图并重建
-            const wchar_t* what = id == kDebugClearDoodads ? L"装饰物"
-                                 : id == kDebugClearUnits ? L"单位" : L"重复";
-            ReleaseBackBuffer();
-            RebuildView(pxPerTile_);
-            Output(3, std::wstring(L"已清除") + what + L"缓存并重建视图");
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        }
-        case kAutoEdgeCliffs:
-            AutoPlaceCliffs();
-            break;
-        case kDispAllColors:
-        case kDispUnits:
-        case kDispDoodads:
-        case kDispSpUnits:
-        case kDispZergGround:
-        case kDispSpecialStates:
-        case kDispHideMinimap:
-        case kDispColorCycle:
-        case kDispDeathFx:
-        case kDispFog:
-        case kDispFogExplored:
-        case kLayerFogToggle:
-        case kDispLocations:
-            ToggleDisplay(id);
-            break;
-        case kLocRename: {
-            if (!map_.IsOpen()) {
-                BeepWarning();
-                break;
-            }
-            POINT pt;
-            ::GetCursorPos(&pt);
-            ::ScreenToClient(hwnd_, &pt);
-            int tx = -1, ty = -1;
-            TileCoordsFromClient(pt.x, pt.y, tx, ty);
-            const int index = tx >= 0 ? LocationIndexAtTile(tx, ty) : -1;
-            if (index < 0) {
-                ::MessageBoxW(hwnd_, L"光标不在任何地点上。", kWindowTitle,
-                              MB_ICONINFORMATION);
-                break;
-            }
-            EditLocation(index);
-            break;
-        }
-        case kTriggerEditor:
-            if (!map_.IsOpen()) {
-                BeepWarning();
-                break;
-            }
-            BeginEdit();
-            SetDialogDocument(&map_);
-            ShowRecoveredDialog(IDD_DLG_181, hwnd_);
-            SetDialogDocument(nullptr);
-            CommitEdit(L"编辑触发");
-            UpdateTitle();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kTriggerTextView:
-            if (!map_.IsOpen()) {
-                BeepWarning();
-                break;
-            }
-            BeginEdit();
-            SetDialogDocument(&map_);
-            ShowRecoveredDialog(IDD_TRIG_TEXT, hwnd_);
-            SetDialogDocument(nullptr);
-            CommitEdit(L"编辑触发文本");
-            UpdateTitle();
-            ::InvalidateRect(hwnd_, nullptr, FALSE);
-            break;
-        case kIscriptGrpDebug:
-            ShowRecoveredDialog(IDD_ISCRIPT, hwnd_);
-            break;
-        case kDebugDialogs:
-            ShowRecoveredDialog(IDD_DLG_155, hwnd_);
-            break;
-        case kFileExit:
-            if (MaybeSave()) ::DestroyWindow(hwnd_);
-            break;
-        case kHelpAbout:
-            ShowRecoveredDialog(IDD_DLG_103, hwnd_);
-            break;
-        case kHelpHomepage:
-            OpenHelpUrl(L"http://www.stormcoast-fortress.net/");
-            break;
-        case kHelpOnlineHelp:
-            OpenHelpUrl(L"http://www.stormcoast-fortress.net/");
-            break;
-        case kHelpForum:
-            OpenHelpUrl(L"http://www.stormcoast-fortress.net/");
-            break;
-        case kHelpReportBug:
-            // 原版指向作者邮箱；本工程改为项目仓库的 issue 页
-            OpenHelpUrl(L"https://github.com/coder-murphy/SCMapEditorPlus/issues");
-            break;
-        case kHelpDonate:
-            ::MessageBoxW(hwnd_, L"本工程为免费开源工具，不接受捐款。", kWindowTitle,
-                          MB_ICONINFORMATION);
-            break;
-        default:
-            Log(L"[ui] command %d not implemented", id);
-            break;
+    if (!commands_.Execute(id)) {
+        Log(L"[ui] command %d not implemented", id);
     }
 }
 

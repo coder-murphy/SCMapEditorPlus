@@ -27,7 +27,17 @@
     事件改为注册式；对话框状态经 `DWLP_USER` 持有并在 `WM_NCDESTROY` 释放。
   - 行为与外观不变：`settings155`、414 控件快照、20 组交互基准全部通过；
     四配置构建与审计通过。
-  - 后续：命令表（156 个命令）、更多对话框迁移、测试出 GUI。
+- [x] **命令表迁移（150+ 命令 ID）**
+  - 新增 `src/ui/command_table.*`：`CommandTable` 以 `std::function<void(int)>` 注册命令，
+    `RegisterAll` 支持一组命令复用同一处理器；`Execute` 先复制处理器，
+    命令内关闭窗口（文件→退出）也安全。
+  - `MainWindow::RegisterCommands()` 接管原 `OnCommand` 的 switch：文件 / 编辑 / 剧本 /
+    触发 / 窗口 / 放置规则 / 显示选项 / 调试 / 帮助等命令全部改由命令表分发。
+  - `OnCommand` 只保留小雷达/迷雾范围命令的预判，以及未注册命令的日志；
+    `main_window.cpp` 减少约 130 行。
+  - 回归：`menu`、`menu-cmd`、对话框审计通过；25 项地图回归 21 项通过，
+    4 项为已知测试地图缺段（player/decor/sprite/radar）。
+  - 后续：把 enabled/checked 状态从 `SyncMenuChecks` 收进命令元数据；再迁测试出 GUI。
 
 ## P0 编辑核心
 

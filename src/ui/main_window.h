@@ -8,6 +8,7 @@
 #include "terrain/brush.h"
 #include "terrain/terrain_renderer.h"
 #include "ui/brush_palette.h"
+#include "ui/command_table.h"
 #include "ui/doodad_palette.h"
 
 namespace scmd {
@@ -87,6 +88,7 @@ public:
     const EditHistory& history() const { return history_; }
 
     void OnCommand(int id);
+    void RegisterCommands();   // 创建窗口后一次性建立命令表
 
     // 单位放置参数（也用于无头回归）
     void SetUnitPlacement(u16 type, u8 owner, u32 resource);
@@ -261,6 +263,7 @@ private:
     HWND statusBar_ = nullptr;   // 右侧栏下方场景树（TreeView 子窗口）
     bool suppressDialogs_ = false;   // 无头运行：不弹开图兼容性提示
     HACCEL hAccel_ = nullptr;
+    CommandTable commands_;
     MapDocument map_;
     std::wstring tilesetDir_;
     std::wstring fileName_;

@@ -797,5 +797,9 @@ dirty=1 saved=1 reopened=1 reopenDim=1 reopenTile=1
     `Load` / `Commit` / `ResetDefaults` 统一处理，数值提交时钳制；文本字段重置时保持用户输入。
 - 已迁移：155 基本设置（`dlg_basic.cpp`）。15 个字段（8 数值 + 1 文本 + 6 开关）由一张表驱动，
   事件改为注册式；新增设置项只需在字段表加一行。
+- `src/ui/command_table.h`：`CommandTable` 按命令 ID 注册 `std::function<void(int)>`，
+  `RegisterAll` 服务一组命令；`Execute` 先复制处理器，命令内关闭窗口也安全。
+  `MainWindow::RegisterCommands()` 集中注册 150+ 个命令，`OnCommand` 仅保留
+  小雷达/迷雾范围预判与未注册日志；勾选/启用状态仍在 `SyncMenuChecks`，下一步再收编。
 - 原则：宿主原生控件，不引入 MVVM/通用绑定引擎，不改变 `.rc` 像素布局。
 
