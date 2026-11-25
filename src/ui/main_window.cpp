@@ -126,6 +126,7 @@ bool LoadObjectGrpBytes(const std::wstring& relPath, Buffer& out) {
     if (!gameDir.empty()) dirs.push_back(gameDir);
     const std::wstring exeDir = ExeDirPath();
     dirs.push_back(exeDir);
+    dirs.push_back(exeDir + L"\\..");
     dirs.push_back(exeDir + L"\\..\\..\\..");
 
     for (const std::wstring& dir : dirs) {

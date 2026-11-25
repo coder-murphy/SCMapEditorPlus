@@ -72,6 +72,7 @@ bool ObjectGraphics::LoadAuto() {
     if (!gameDir.empty()) dirs.push_back(gameDir);
     const std::wstring exeDir = ExeDir();
     dirs.push_back(exeDir);
+    dirs.push_back(exeDir + L"\\..");
     dirs.push_back(exeDir + L"\\..\\..\\..");
 
     TableFile files[] = {

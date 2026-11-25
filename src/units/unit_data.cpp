@@ -107,6 +107,7 @@ bool UnitDataTable::LoadAuto(UnitDataTable& out, std::wstring& source) {
     const std::wstring gameDir = AppSettings::Instance().gameDir();
     if (!gameDir.empty()) dirs.push_back(gameDir);
     dirs.push_back(ExeDir());
+    dirs.push_back(ExeDir() + L"\\..");
     dirs.push_back(ExeDir() + L"\\..\\..\\..");
 
     for (const std::wstring& dir : dirs) {
