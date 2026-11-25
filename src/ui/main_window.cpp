@@ -3620,7 +3620,9 @@ bool MainWindow::BlitObject(HDC dc, const std::wstring& relPath, int mapX, int m
     return true;
 }
 
-// 对象调色板：在地形集 WPE 基础上，用玩家颜色重写 0x88-0x8F 的 8 级队色渐变
+// 对象调色板：在地形集 WPE 基础上，用玩家队色重写 0x08-0x0F 与 0x88-0x8F。
+// 队色表按原版导出大图（origin.bmp）四角起点采样：9/10 最亮、11 中、12..15 暗；
+// 0..3 号为实测值，4..11 号为近似值（未在样本地图中出现）。
 const Buffer& MainWindow::TeamPaletteFor(int owner) const {
     auto it = teamPalettes_.find(owner);
     if (it != teamPalettes_.end()) return it->second;
@@ -3630,35 +3632,47 @@ const Buffer& MainWindow::TeamPaletteFor(int owner) const {
         auto inserted = teamPalettes_.emplace(owner, Buffer());
         return inserted.first->second;
     }
-    // 仅玩家 0..7 的归属对象做队色替换；中立/装饰物保持地形集调色板
-    if (owner < 0 || owner >= 8 || !map_.IsOpen()) {
+    // 中立/装饰/资源（owner >= 8）与阴影（owner < 0）保持地形集调色板原色，
+    // 与原版一致：矿物的晶体、气矿阴影不能被队色覆盖
+    if (owner < 0 || owner >= 8) {
         auto inserted = teamPalettes_.emplace(owner, std::move(palette));
         return inserted.first->second;
     }
-    // 8 种标准玩家颜色（BW 9-12 槽复用/补色；中立用灰）
-    static const u8 kColors[12][3] = {
-        {244, 4, 4},     {12, 72, 204},   {0, 128, 128},   {128, 0, 200},
-        {240, 120, 0},   {128, 64, 0},    {255, 255, 255}, {255, 255, 0},
-        {0, 180, 0},     {0, 255, 255},   {255, 128, 255}, {140, 140, 140},
+    struct TeamRamp {
+        u8 bright[3];
+        u8 mid[3];
+        u8 dark[3];
     };
-    int colorIndex = 11;
-    if (owner >= 0 && owner < 8 && map_.IsOpen()) {
+    static const TeamRamp kRamps[12] = {
+        {{168, 8, 8}, {132, 4, 4}, {96, 0, 0}},             // 0 红（实测）
+        {{8, 52, 152}, {4, 32, 100}, {0, 8, 80}},           // 1 蓝（实测）
+        {{32, 144, 112}, {16, 84, 60}, {16, 84, 60}},       // 2 青（实测）
+        {{136, 64, 156}, {104, 48, 120}, {72, 28, 80}},     // 3 紫（实测）
+        {{200, 112, 16}, {160, 90, 13}, {120, 68, 10}},     // 4 橙（近似）
+        {{96, 40, 16}, {76, 32, 13}, {56, 24, 10}},         // 5 棕（近似）
+        {{204, 224, 208}, {163, 179, 166}, {122, 134, 125}},// 6 白（近似）
+        {{252, 252, 56}, {202, 202, 45}, {151, 151, 34}},   // 7 黄（近似）
+        {{8, 128, 8}, {6, 102, 6}, {5, 77, 5}},             // 8 绿（近似）
+        {{252, 252, 124}, {202, 202, 99}, {151, 151, 74}},  // 9 柠檬（近似）
+        {{236, 196, 176}, {189, 157, 141}, {142, 118, 106}},// 10 桃（近似）
+        {{204, 132, 184}, {163, 106, 147}, {122, 79, 110}}, // 11 皇家（近似）
+    };
+    int colorIndex = owner;
+    if (map_.IsOpen()) {
         colorIndex = map_.players().player(owner).color;
         if (colorIndex < 0 || colorIndex >= 8) colorIndex = owner;
-    } else if (owner >= 8 && owner < 12) {
-        colorIndex = owner;
     }
-    if (colorIndex < 0 || colorIndex >= 12) colorIndex = 11;
-    const u8* rgb = kColors[colorIndex];
-    // 星际精灵的队色在调色板 8..15（StartLoc/单位），0x88..0x8F 也一并覆盖
-    static const int kTeamBases[] = {0x08, 0x88};
-    for (int base : kTeamBases) {
-        for (int k = 0; k < 8; k++) {
-            const int shade = 35 + k * 9;   // 35%..98%
+    if (colorIndex < 0 || colorIndex >= 12) colorIndex = 0;
+    const TeamRamp& ramp = kRamps[colorIndex];
+    // 调色板 8..15：8/9/10 亮、11 中、12..15 暗（与原版起点标记一致）
+    static const int kLevel[8] = {0, 0, 0, 1, 2, 2, 2, 2};
+    for (int k = 0; k < 8; k++) {
+        const u8* rgb = kLevel[k] == 0 ? ramp.bright : (kLevel[k] == 1 ? ramp.mid : ramp.dark);
+        for (int base : {0x08, 0x88}) {
             const std::size_t at = static_cast<std::size_t>(base + k) * 4;
-            palette[at + 0] = static_cast<u8>(rgb[0] * shade / 100);
-            palette[at + 1] = static_cast<u8>(rgb[1] * shade / 100);
-            palette[at + 2] = static_cast<u8>(rgb[2] * shade / 100);
+            palette[at + 0] = rgb[0];
+            palette[at + 1] = rgb[1];
+            palette[at + 2] = rgb[2];
         }
     }
     auto inserted = teamPalettes_.emplace(owner, std::move(palette));
@@ -3690,6 +3704,12 @@ void MainWindow::DrawSprites(HDC dc, const RECT& client) const {
 
     for (const SpriteRecord& s : map_.sprites().Items()) {
         const std::wstring grp = ObjectGraphicsFor().SpriteGrpPath(s.type);
+        if (!grp.empty()) {
+            const std::wstring shadow = ObjectGraphicsFor().SpriteShadowGrpPath(s.type);
+            if (!shadow.empty()) {
+                BlitObject(dc, shadow, static_cast<int>(s.x), static_cast<int>(s.y), -1);
+            }
+        }
         if (!grp.empty() && BlitObject(dc, grp, static_cast<int>(s.x), static_cast<int>(s.y),
                                        static_cast<int>(s.owner))) {
             continue;
@@ -4194,6 +4214,11 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
         const std::wstring grp = ObjectGraphicsFor().UnitGrpPath(u.type);
         // 气矿固定用第 3 帧（与原版导出/ScmDraft2 一致），其余单位用第 0 帧
         const int frame = u.type == 188 ? 3 : 0;
+        // 先画阴影（原版导出的单位/资源下方有投影）；出生点是编辑器标记，不画阴影
+        if (u.type != 214) {
+            const std::wstring shadow = ObjectGraphicsFor().UnitShadowGrpPath(u.type);
+            if (!shadow.empty()) BlitObject(dc, shadow, cx, cy, -1, frame);
+        }
         const bool drawn =
             !grp.empty() && BlitObject(dc, grp, cx, cy, static_cast<int>(u.owner), frame);
         if (!drawn) {
@@ -4447,6 +4472,14 @@ void MainWindow::DrawMinimap(HDC dc) const {
     for (const UnitRecord& u : map_.units()) {
         const int x = mx + static_cast<int>(u.x) * mw / mapPxW;
         const int y = my + static_cast<int>(u.y) * mh / mapPxH;
+        // 出生点在小地图上放大成白点，与原版一样醒目
+        if (u.type == 214) {
+            RECT r = {x - 1, y - 1, x + 2, y + 2};
+            HBRUSH w = ::CreateSolidBrush(RGB(255, 255, 255));
+            ::FillRect(dc, &r, w);
+            ::DeleteObject(w);
+            continue;
+        }
         RECT r = {x, y, x + 2, y + 2};
         HBRUSH b = ::CreateSolidBrush(CycleColor(UnitColorFor(u.type, showAllColors_), allowColorCycle_));
         ::FillRect(dc, &r, b);

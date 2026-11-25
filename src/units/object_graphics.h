@@ -17,8 +17,15 @@ public:
     // 返回 unit\ 下的相对路径（如 terran\marine.grp）；无图形时返回空串
     std::wstring UnitGrpPath(int unitType) const;
     std::wstring SpriteGrpPath(int spriteId) const;
+    // 阴影图形：images.dat 链上紧随其后（+1..+2）的 *Sha*.grp；无阴影返回空串
+    std::wstring UnitShadowGrpPath(int unitType) const;
+    std::wstring SpriteShadowGrpPath(int spriteId) const;
 
 private:
+    int UnitImageIndex(int unitType) const;
+    int SpriteImageIndex(int spriteId) const;
+    std::wstring ShadowGrpPathForImage(int imageIndex) const;
+
     std::vector<u8> unitFlingy_;      // units.dat 0x0000，228 B
     std::vector<u16> flingySprite_;   // flingy.dat 0x0000，209×2 B
     std::vector<u16> spriteImage_;    // sprites.dat 0x0000，517×2 B

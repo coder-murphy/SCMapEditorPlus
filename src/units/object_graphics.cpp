@@ -167,15 +167,52 @@ std::wstring ObjectGraphics::UnitGrpPath(int unitType) const {
     return SpriteGrpPath(flingySprite_[static_cast<std::size_t>(flingy)]);
 }
 
-std::wstring ObjectGraphics::SpriteGrpPath(int spriteId) const {
-    if (!loaded_ || spriteId < 0 || spriteId >= static_cast<int>(spriteImage_.size())) {
-        return std::wstring();
-    }
+int ObjectGraphics::UnitImageIndex(int unitType) const {
+    if (!loaded_ || unitType < 0 || unitType >= static_cast<int>(unitFlingy_.size())) return -1;
+    const int flingy = unitFlingy_[static_cast<std::size_t>(unitType)];
+    if (flingy < 0 || flingy >= static_cast<int>(flingySprite_.size())) return -1;
+    return SpriteImageIndex(flingySprite_[static_cast<std::size_t>(flingy)]);
+}
+
+int ObjectGraphics::SpriteImageIndex(int spriteId) const {
+    if (!loaded_ || spriteId < 0 || spriteId >= static_cast<int>(spriteImage_.size())) return -1;
     const int image = spriteImage_[static_cast<std::size_t>(spriteId)];
-    if (image < 0 || image >= static_cast<int>(imageGrpFile_.size())) return std::wstring();
+    return image >= 0 && image < static_cast<int>(imageGrpFile_.size()) ? image : -1;
+}
+
+std::wstring ObjectGraphics::SpriteGrpPath(int spriteId) const {
+    const int image = SpriteImageIndex(spriteId);
+    if (image < 0) return std::wstring();
     const u32 file = imageGrpFile_[static_cast<std::size_t>(image)];
     if (file == 0 || file > grpNames_.size()) return std::wstring();
     return grpNames_[file - 1];
+}
+
+// 阴影图形紧跟在对象图形之后 1..2 个 images.dat 记录（如 min01→min01Sha、
+// geyser→geyShad、Acritter→nacShad），按 *Sha*.grp 命名识别。
+std::wstring ObjectGraphics::ShadowGrpPathForImage(int imageIndex) const {
+    if (imageIndex < 0) return std::wstring();
+    for (int k = 1; k <= 2; k++) {
+        const int at = imageIndex + k;
+        if (at < 0 || at >= static_cast<int>(imageGrpFile_.size())) break;
+        const u32 file = imageGrpFile_[static_cast<std::size_t>(at)];
+        if (file == 0 || file > grpNames_.size()) continue;
+        const std::wstring& name = grpNames_[file - 1];
+        std::wstring lower = name;
+        for (wchar_t& ch : lower) {
+            if (ch >= L'A' && ch <= L'Z') ch += L'a' - L'A';
+        }
+        if (lower.find(L"sha") != std::wstring::npos) return name;
+    }
+    return std::wstring();
+}
+
+std::wstring ObjectGraphics::UnitShadowGrpPath(int unitType) const {
+    return ShadowGrpPathForImage(UnitImageIndex(unitType));
+}
+
+std::wstring ObjectGraphics::SpriteShadowGrpPath(int spriteId) const {
+    return ShadowGrpPathForImage(SpriteImageIndex(spriteId));
 }
 
 }  // namespace scmd
