@@ -42,11 +42,9 @@ if ([string]::IsNullOrEmpty($Source)) {
 
 New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 # /E 增量复制（不删除 exe\ 里用户自己放的文件），重复提交时只更新变化项
-$rc = Start-Process -FilePath 'robocopy.exe' `
-    -ArgumentList @("`"$Source`"", "`"$Dest`"", '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/R:1', '/W:1') `
-    -Wait -PassThru -NoNewWindow
-if ($rc.ExitCode -ge 8) {
-    Write-Host "[copy-app] robocopy 失败：$($rc.ExitCode)"
+& robocopy.exe $Source $Dest /E /NFL /NDL /NJH /NJS /R:1 /W:1 | Out-Null
+if ($LASTEXITCODE -ge 8) {
+    Write-Host "[copy-app] robocopy 失败：$LASTEXITCODE"
     exit 1
 }
 $count = (Get-ChildItem -LiteralPath $Dest -Recurse -File | Measure-Object).Count
