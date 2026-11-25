@@ -208,6 +208,15 @@ bool IsResourceType(u16 type) {
     return (type >= 176 && type <= 178) || type == 188;
 }
 
+// 空瓦片：组越界、巨块越界或巨块引用为 0（CV5 空槽），各版本编辑器都渲染成黑块
+bool TileRenderable(const Tileset& ts, u16 value) {
+    if (!ts.IsLoaded()) return true;
+    const int group = static_cast<int>((value & 0x7FF0) >> 4);
+    if (group >= ts.GroupCount()) return false;
+    const u16 mega = ts.MegatileOf(value);
+    return mega != 0 && static_cast<int>(mega) < ts.MegaCount();
+}
+
 // 光标落在某个兼容宿主的附属槽 2×2 内时，吸附到槽左上角
 bool SnapAddonToParent(const MapDocument& map, u16 type, int& tx, int& ty) {
     const AddonRule* rule = FindAddonRule(type);
@@ -1622,6 +1631,69 @@ int RepairCompatibilityIssues(MapDocument& map) {
                       sprites.end());
         fixed += static_cast<int>(before - sprites.size());
     }
+    // 空瓦片（黑块）：用最近一层的有效邻格填补，避免地图出现纯黑方块
+    if (map.hasTileset()) {
+        const Tileset& ts = map.tileset();
+        Buffer& tiles = map.mutableTiles();
+        const std::size_t count = static_cast<std::size_t>(w) * h;
+        if (tiles.size() >= count * 2) {
+            std::vector<u16> values(count);
+            std::vector<int> bad;
+            for (std::size_t i = 0; i < count; i++) {
+                const u8* p = tiles.data() + i * 2;
+                values[i] = static_cast<u16>(p[0] | (p[1] << 8));
+                if (!TileRenderable(ts, values[i])) bad.push_back(static_cast<int>(i));
+            }
+            if (!bad.empty()) {
+                // 兜底：全图最常见的有效瓦片
+                std::unordered_map<u16, int> freq;
+                for (u16 v : values) {
+                    if (TileRenderable(ts, v)) freq[v]++;
+                }
+                u16 fallback = 0;
+                int fallbackCount = 0;
+                for (const auto& kv : freq) {
+                    if (kv.second > fallbackCount) {
+                        fallbackCount = kv.second;
+                        fallback = kv.first;
+                    }
+                }
+                for (int index : bad) {
+                    const int tx = index % w;
+                    const int ty = index / w;
+                    u16 pick = fallback;
+                    bool found = false;
+                    for (int r = 1; r <= 8 && !found; r++) {
+                        std::unordered_map<u16, int> ring;
+                        for (int dy = -r; dy <= r; dy++) {
+                            for (int dx = -r; dx <= r; dx++) {
+                                if (std::max(std::abs(dx), std::abs(dy)) != r) continue;
+                                const int nx = tx + dx;
+                                const int ny = ty + dy;
+                                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                                const u16 v = values[static_cast<std::size_t>(ny) * w + nx];
+                                if (TileRenderable(ts, v)) ring[v]++;
+                            }
+                        }
+                        int best = 0;
+                        for (const auto& kv : ring) {
+                            if (kv.second > best) {
+                                best = kv.second;
+                                pick = kv.first;
+                                found = true;
+                            }
+                        }
+                    }
+                    if (!found && fallbackCount == 0) continue;
+                    values[static_cast<std::size_t>(index)] = pick;
+                    u8* p = tiles.data() + index * 2;
+                    p[0] = static_cast<u8>(pick & 0xFF);
+                    p[1] = static_cast<u8>(pick >> 8);
+                    fixed++;
+                }
+            }
+        }
+    }
     if (fixed > 0) map.MarkDirty();
     return fixed;
 }
@@ -1687,6 +1759,18 @@ void MainWindow::CheckCompatibility() {
                     static_cast<unsigned>(tiles.size()),
                     static_cast<unsigned>(expectTiles));
         issues.push_back(line);
+    } else if (map_.hasTileset()) {
+        int emptyTiles = 0;
+        const std::size_t count = static_cast<std::size_t>(w) * h;
+        for (std::size_t i = 0; i < count; i++) {
+            const u8* p = tiles.data() + i * 2;
+            const u16 v = static_cast<u16>(p[0] | (p[1] << 8));
+            if (!TileRenderable(map_.tileset(), v)) emptyTiles++;
+        }
+        if (emptyTiles > 0) {
+            ::wsprintfW(line, L"空瓦片（黑块）%d 个（点「保存」修正为周边地形）", emptyTiles);
+            issues.push_back(line);
+        }
     }
     const AppSettings& settings = AppSettings::Instance();
     if (settings.maxUnits() > 0 &&
@@ -1722,6 +1806,13 @@ void MainWindow::CheckCompatibility() {
     const int fixed = RepairCompatibilityIssues(map_);
     if (fixed > 0) {
         CommitEdit(L"兼容性修复");
+        // 瓦片可能被修正：重建整图位图，并保持当前滚动位置
+        const int scrollX = scrollX_;
+        const int scrollY = scrollY_;
+        RebuildView(pxPerTile_);
+        scrollX_ = scrollX;
+        scrollY_ = scrollY;
+        UpdateScrollBars();
     } else {
         editOpen_ = false;
     }
