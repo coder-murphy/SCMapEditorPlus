@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -33,6 +34,14 @@ enum class EditLayer {
     kLocations = 3,
     kUnits = 4,
     kSpUnits = 5,
+};
+
+// 地形放置方式（对应 ScmDraft2 的地形层模式）
+enum class TerrainPlacementMode {
+    kIsometric = 0,   // 等距地形：按相邻地形类型选子瓦片，自动混合
+    kRectangular = 1, // 矩形地形：按组整格填充，不参与混合
+    kSubtile = 2,     // 子瓦片：只改同组瓦片的子索引
+    kIndexed = 3,     // 瓦片索引：放置精确的 group+index
 };
 
 // Locations 描绘模式（选项 → Locations）
@@ -110,6 +119,13 @@ public:
     // 地点描绘（也用于无头回归）：像素坐标，right/bottom 为开区间
     void SetLocationDrawMode(int mode);
     int AddLocationFromDrag(int px0, int py0, int px1, int py1);
+
+    // 地形放置方式与刷子大小（ScmDraft2 风格）
+    void SetTerrainPlacementMode(TerrainPlacementMode mode);
+    void ResizeTerrainBrush(int delta);
+    TerrainPlacementMode terrainPlacementMode() const { return terrainMode_; }
+    int terrainBrushWidth() const { return brushW_; }
+    int terrainBrushHeight() const { return brushH_; }
 
     // SP 单位放置（也用于无头回归）
     void SetSpPlacement(u16 type, u8 owner, u16 flags);
@@ -198,6 +214,11 @@ private:
     void ShowBrushPalette();
     void SetBrushTile(u16 value);
     void RefreshBrushPalette();
+    void StampTerrainAt(int tx, int ty);
+    u16 TerrainValueFor(int tx, int ty) const;
+    int IsoSubIndexFor(u16 group, int mask) const;
+    void BuildIsoIndexCounts(u16 group) const;
+    void ResetTerrainPaintState();
 
     // 装饰物窗口（窗口 → 装饰物窗口）
     void ShowDoodadPalette();
@@ -368,6 +389,11 @@ private:
     u16 brushTile_ = 0x0040;   // 默认：platform 甲板
     TerrainBrush brushPattern_;      // 当前刷子图案（1x1 即单格刷）
     std::vector<TerrainBrush> customBrushes_;   // 182 列表（进程内）
+    TerrainPlacementMode terrainMode_ = TerrainPlacementMode::kIndexed;
+    int brushW_ = 1;   // 地形刷宽（格），+/- 调整
+    int brushH_ = 1;   // 地形刷高（格）
+    // 等距模式：按 (group, 四邻差异掩码) 统计地图中实际使用的子索引
+    mutable std::unordered_map<u16, std::array<std::array<int, 16>, 16>> isoIndexCounts_;
     int customBrushIndex_ = -1;
     u16 unitType_ = 176;       // 默认：矿物
     u8 unitOwner_ = 11;        // 0..7 玩家，11 中立

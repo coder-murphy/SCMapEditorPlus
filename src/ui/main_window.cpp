@@ -844,6 +844,22 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
         // 去掉「帮助」菜单（关于/主页/在线帮助/论坛/错误与建议/捐款及自测入口）
         ::RemoveMenu(bar, 8, MF_BYPOSITION);
         ::DrawMenuBar(hwnd_);
+        // 「选项」菜单追加地形放置方式（对应 ScmDraft2 的四种地形模式）
+        if (HMENU options = ::GetSubMenu(bar, 2)) {
+            HMENU terrain = ::CreatePopupMenu();
+            if (terrain) {
+                ::AppendMenuW(terrain, MF_STRING, kTerrainModeIso, L"等距地形（自动混合）");
+                ::AppendMenuW(terrain, MF_STRING, kTerrainModeRect, L"矩形地形");
+                ::AppendMenuW(terrain, MF_STRING, kTerrainModeSubtile, L"子瓦片");
+                ::AppendMenuW(terrain, MF_STRING, kTerrainModeIndexed, L"瓦片索引");
+                ::AppendMenuW(terrain, MF_SEPARATOR, 0, nullptr);
+                ::AppendMenuW(terrain, MF_STRING, kTerrainBrushBigger, L"刷子增大\t+");
+                ::AppendMenuW(terrain, MF_STRING, kTerrainBrushSmaller, L"刷子减小\t-");
+                ::AppendMenuW(options, MF_SEPARATOR, 0, nullptr);
+                ::AppendMenuW(options, MF_POPUP, reinterpret_cast<UINT_PTR>(terrain),
+                              L"地形放置方式");
+            }
+        }
         // 「调试」菜单追加本工程的崖壁自动铺设
         if (HMENU debug = FindMenuContaining(bar, kDebugEnable)) {
             ::AppendMenuW(debug, MF_SEPARATOR, 0, nullptr);
@@ -1372,6 +1388,13 @@ void MainWindow::UpdateStatusBar() {
     }
     const wchar_t* layers[] = {L"地形", L"装饰物", L"迷雾", L"Locations", L"单位", L"SP单位"};
     const wchar_t* layer = layers[std::clamp(static_cast<int>(layer_), 0, 5)];
+    wchar_t layerText[64];
+    if (layer_ == EditLayer::kTerrain) {
+        static const wchar_t* kModeNames[] = {L"等距", L"矩形", L"子瓦片", L"索引"};
+        const int mode = std::clamp(static_cast<int>(terrainMode_), 0, 3);
+        ::wsprintfW(layerText, L"%s · %s %dx%d", layer, kModeNames[mode], brushW_, brushH_);
+        layer = layerText;
+    }
 
     wchar_t player[128] = L"";
     wchar_t force[64] = L"";
@@ -1605,6 +1628,7 @@ bool MainWindow::OpenMap(const std::wstring& path) {    if (!map_.Open(path, til
     mapPath_ = path;
     fileName_ = FileNameOf(path);
     ReleaseSpriteCache();   // 地形集可能变化，按新调色板重新解码对象图形
+    ResetTerrainPaintState();
     {
         wchar_t msg[256];
         ::wsprintfW(msg, L"打开地图: %ls  %dx%d", fileName_.c_str(), map_.width(), map_.height());
@@ -1910,6 +1934,7 @@ void MainWindow::CloseMap() {
     if (map_.IsOpen()) Output(2, L"关闭地图: " + fileName_);
     map_.Close();
     ReleaseSpriteCache();
+    ResetTerrainPaintState();
     mapPath_.clear();
     fileName_.clear();
     history_.Clear();
@@ -3076,6 +3101,7 @@ bool MainWindow::PaintBrushAt(int tx, int ty) {
     if (!map_.IsOpen() || tx < 0 || ty < 0 || tx >= map_.width() || ty >= map_.height()) {
         return false;
     }
+    isoIndexCounts_.clear();   // 每笔按当前地图重新学习混合索引
     BeginEdit();
     StampBrushAt(tx, ty);
     CommitEdit(L"绘制地形");
@@ -3086,8 +3112,8 @@ bool MainWindow::PaintBrushAt(int tx, int ty) {
 
 void MainWindow::StampBrushAt(int tx, int ty) {
     if (!map_.IsOpen()) return;
-    if (brushPattern_.Empty()) {
-        PaintTileToBuffer(tx, ty, brushTile_);
+    if (brushPattern_.Empty() || (brushPattern_.width == 1 && brushPattern_.height == 1)) {
+        StampTerrainAt(tx, ty);
         return;
     }
 
@@ -3096,6 +3122,133 @@ void MainWindow::StampBrushAt(int tx, int ty) {
     for (int y = 0; y < brushPattern_.height; y++) {
         for (int x = 0; x < brushPattern_.width; x++) {
             PaintTileToBuffer(ox + x, oy + y, brushPattern_.At(x, y));
+        }
+    }
+}
+
+void MainWindow::SetTerrainPlacementMode(TerrainPlacementMode mode) {
+    terrainMode_ = mode;
+    static const wchar_t* kNames[] = {L"等距地形", L"矩形地形", L"子瓦片", L"瓦片索引"};
+    const int index = std::clamp(static_cast<int>(mode), 0, 3);
+    Output(2, std::wstring(L"[地形] 放置方式：") + kNames[index]);
+    SyncMenuChecks();
+    UpdateStatusBar();
+}
+
+void MainWindow::ResizeTerrainBrush(int delta) {
+    const int w = std::clamp(brushW_ + delta, 1, 15);
+    const int h = std::clamp(brushH_ + delta, 1, 15);
+    if (w == brushW_ && h == brushH_) return;
+    brushW_ = w;
+    brushH_ = h;
+    wchar_t msg[64];
+    ::wsprintfW(msg, L"[地形] 刷子 %dx%d", brushW_, brushH_);
+    Output(2, msg);
+    UpdateStatusBar();
+}
+
+void MainWindow::ResetTerrainPaintState() {
+    isoIndexCounts_.clear();
+}
+
+void MainWindow::BuildIsoIndexCounts(u16 group) const {
+    std::array<std::array<int, 16>, 16> table{};
+    if (map_.IsOpen() && map_.hasTileset()) {
+        const int w = map_.width();
+        const int h = map_.height();
+        const Tileset& ts = map_.tileset();
+        const u16 g = static_cast<u16>(group >> 4);
+        const u16 baseType = ts.Type(g);
+        static const int kDx[4] = {-1, 1, 0, 0};
+        static const int kDy[4] = {0, 0, -1, 1};
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                const u16 v = map_.TileAt(x, y);
+                if ((v & 0x7FF0) != group) continue;
+                int mask = 0;
+                for (int d = 0; d < 4; d++) {
+                    const int nx = x + kDx[d];
+                    const int ny = y + kDy[d];
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                    const u16 nv = map_.TileAt(nx, ny);
+                    const u16 ng = static_cast<u16>((nv & 0x7FF0) >> 4);
+                    if (ng == g) continue;
+                    if (ts.Type(ng) != baseType) mask |= (1 << d);
+                }
+                table[static_cast<std::size_t>(mask)][v & 0x0F]++;
+            }
+        }
+    }
+    isoIndexCounts_[group] = table;
+}
+
+int MainWindow::IsoSubIndexFor(u16 group, int mask) const {
+    auto it = isoIndexCounts_.find(group);
+    if (it == isoIndexCounts_.end()) {
+        BuildIsoIndexCounts(group);
+        it = isoIndexCounts_.find(group);
+        if (it == isoIndexCounts_.end()) return 0;
+    }
+    const auto& row = it->second[static_cast<std::size_t>(mask & 0x0F)];
+    int best = 0;
+    int bestCount = 0;
+    for (int i = 0; i < 16; i++) {
+        if (row[static_cast<std::size_t>(i)] > bestCount) {
+            bestCount = row[static_cast<std::size_t>(i)];
+            best = i;
+        }
+    }
+    return best;
+}
+
+u16 MainWindow::TerrainValueFor(int tx, int ty) const {
+    const u16 group = static_cast<u16>(brushTile_ & 0x7FF0);
+    switch (terrainMode_) {
+        case TerrainPlacementMode::kIsometric: {
+            if (!map_.hasTileset()) return brushTile_;
+            const int w = map_.width();
+            const int h = map_.height();
+            const Tileset& ts = map_.tileset();
+            const u16 baseType = ts.Type(static_cast<u16>(group >> 4));
+            static const int kDx[4] = {-1, 1, 0, 0};
+            static const int kDy[4] = {0, 0, -1, 1};
+            int mask = 0;
+            for (int d = 0; d < 4; d++) {
+                const int nx = tx + kDx[d];
+                const int ny = ty + kDy[d];
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                const u16 nv = map_.TileAt(nx, ny);
+                const u16 ng = static_cast<u16>((nv & 0x7FF0) >> 4);
+                if (ng == (group >> 4)) continue;
+                if (ts.Type(ng) != baseType) mask |= (1 << d);
+            }
+            return static_cast<u16>(group | IsoSubIndexFor(group, mask));
+        }
+        case TerrainPlacementMode::kRectangular:
+            return static_cast<u16>(group | IsoSubIndexFor(group, 0));
+        case TerrainPlacementMode::kSubtile: {
+            const u16 cur = map_.TileAt(tx, ty);
+            if ((cur & 0x7FF0) != group) return cur;
+            return static_cast<u16>(group | (brushTile_ & 0x0F));
+        }
+        case TerrainPlacementMode::kIndexed:
+        default:
+            return brushTile_;
+    }
+}
+
+void MainWindow::StampTerrainAt(int tx, int ty) {
+    if (!map_.IsOpen()) return;
+    const int w = std::max(1, brushW_);
+    const int h = std::max(1, brushH_);
+    const int ox = tx - (w - 1) / 2;
+    const int oy = ty - (h - 1) / 2;
+    for (int dy = 0; dy < h; dy++) {
+        for (int dx = 0; dx < w; dx++) {
+            const int x = ox + dx;
+            const int y = oy + dy;
+            if (x < 0 || y < 0 || x >= map_.width() || y >= map_.height()) continue;
+            PaintTileToBuffer(x, y, TerrainValueFor(x, y));
         }
     }
 }
@@ -3684,6 +3837,7 @@ void MainWindow::OnLButtonDown(int mx, int my) {
 
     switch (tool_) {
         case Tool::kTerrain:
+            isoIndexCounts_.clear();   // 每笔按当前地图重新学习混合索引
             BeginEdit();
             StampBrushAt(tx, ty);
             break;
@@ -3824,6 +3978,15 @@ void MainWindow::OnKeyDown(int vk) {
             case VK_DOWN: ScrollByPixels(0, stepY); return;
             default: break;
         }
+    }
+    // 地形刷大小：+ / -（ScmDraft2 同款）
+    if (!ctrl && (vk == VK_OEM_PLUS || vk == VK_ADD)) {
+        ResizeTerrainBrush(1);
+        return;
+    }
+    if (!ctrl && (vk == VK_OEM_MINUS || vk == VK_SUBTRACT)) {
+        ResizeTerrainBrush(-1);
+        return;
     }
     switch (vk) {
         case '1': SetLayer(EditLayer::kTerrain); break;
@@ -5318,6 +5481,18 @@ void MainWindow::RegisterCommands() {
     commands_.Register(kLocDrawNeat, [this](int) { SetLocationDrawMode(0); });
     commands_.Register(kLocDrawGrid, [this](int) { SetLocationDrawMode(1); });
     commands_.Register(kLocDrawAnywhere, [this](int) { SetLocationDrawMode(2); });
+
+    // 地形放置方式（等距 / 矩形 / 子瓦片 / 瓦片索引）
+    commands_.RegisterAll({kTerrainModeIso, kTerrainModeRect, kTerrainModeSubtile,
+                           kTerrainModeIndexed},
+                          [this](int id) {
+        static const TerrainPlacementMode kModes[] = {
+            TerrainPlacementMode::kIsometric, TerrainPlacementMode::kRectangular,
+            TerrainPlacementMode::kSubtile, TerrainPlacementMode::kIndexed};
+        SetTerrainPlacementMode(kModes[id - kTerrainModeIso]);
+    });
+    commands_.Register(kTerrainBrushBigger, [this](int) { ResizeTerrainBrush(1); });
+    commands_.Register(kTerrainBrushSmaller, [this](int) { ResizeTerrainBrush(-1); });
     commands_.Register(kSpAlignGrid, [this](int) {
         spAlignGrid_ = !spAlignGrid_;
         SyncMenuChecks();
@@ -5511,6 +5686,20 @@ void MainWindow::RegisterCommandStates() {
         commands_.SetState(s.id, [this, s] {
             return CommandState{(kTilePixels * s.percent + 50) / 100 == pxPerTile_};
         });
+    }
+
+    // 地形放置方式（互斥）
+    static const struct {
+        int id;
+        TerrainPlacementMode mode;
+    } kTerrainModes[] = {
+        {kTerrainModeIso, TerrainPlacementMode::kIsometric},
+        {kTerrainModeRect, TerrainPlacementMode::kRectangular},
+        {kTerrainModeSubtile, TerrainPlacementMode::kSubtile},
+        {kTerrainModeIndexed, TerrainPlacementMode::kIndexed},
+    };
+    for (const auto& s : kTerrainModes) {
+        commands_.SetState(s.id, [this, s] { return CommandState{terrainMode_ == s.mode}; });
     }
 
     // 调试数据显示（互斥，且只在“允许调试”时勾选）

@@ -187,6 +187,14 @@ enum CommandId : int {
     kMpqFileManager = 0x8FFC,   // 文件 → MPQ 文件管理（167）
     kDebugDialogs = 0x8FFF,
     kAutoEdgeCliffs = 0x8FFE,   // 调试 → 自动铺设崖壁（向虚空外侧压印 1..3 圈）
+
+    // 选项 → 地形放置方式（ScmDraft2 的四种地形模式，运行时追加）
+    kTerrainModeIso = 0x8FF5,       // 等距地形（按相邻地形自动选子瓦片）
+    kTerrainModeRect = 0x8FF6,      // 矩形地形（按组整格填充）
+    kTerrainModeSubtile = 0x8FF7,   // 子瓦片（只改同组瓦片的子索引）
+    kTerrainModeIndexed = 0x8FF8,   // 瓦片索引（放置当前选中的精确瓦片）
+    kTerrainBrushBigger = 0x8FF9,   // 刷子增大
+    kTerrainBrushSmaller = 0x8FFA,  // 刷子减小
 };
 
 }  // namespace scmd
