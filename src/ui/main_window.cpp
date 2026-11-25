@@ -3770,8 +3770,10 @@ void MainWindow::TileCoordsFromClient(int mx, int my, int& tx, int& ty) const {
     ty = -1;
     if (pxPerTile_ <= 0 || !map_.IsOpen()) return;
     if (!PointInMapView(mx, my)) return;   // 侧栏 / 日志区域不参与地图操作
-    tx = (mx + scrollX_) / pxPerTile_;
-    ty = (my + scrollY_) / pxPerTile_;
+    // 客户区坐标先换算到地图视口内（视口左上角不是 (0,0)）
+    const RECT view = MapViewRect();
+    tx = (mx - view.left + scrollX_) / pxPerTile_;
+    ty = (my - view.top + scrollY_) / pxPerTile_;
     if (tx < 0 || ty < 0 || tx >= map_.width() || ty >= map_.height()) {
         tx = ty = -1;
     }
@@ -3782,8 +3784,9 @@ void MainWindow::PixelCoordsFromClient(int mx, int my, int& px, int& py) const {
     py = 0;
     if (pxPerTile_ <= 0 || !map_.IsOpen()) return;
     if (!PointInMapView(mx, my)) return;
-    px = (mx + scrollX_) * kTilePixels / pxPerTile_;
-    py = (my + scrollY_) * kTilePixels / pxPerTile_;
+    const RECT view = MapViewRect();
+    px = (mx - view.left + scrollX_) * kTilePixels / pxPerTile_;
+    py = (my - view.top + scrollY_) * kTilePixels / pxPerTile_;
     px = std::clamp(px, 0, map_.width() * kTilePixels);
     py = std::clamp(py, 0, map_.height() * kTilePixels);
 }
@@ -3848,8 +3851,9 @@ void MainWindow::PaintTileToBuffer(int tx, int ty, u16 value) {
     }
 
     RECT r;
-    r.left = tx * pxPerTile_ - scrollX_;
-    r.top = ty * pxPerTile_ - scrollY_;
+    const RECT view = MapViewRect();
+    r.left = view.left + tx * pxPerTile_ - scrollX_;
+    r.top = view.top + ty * pxPerTile_ - scrollY_;
     r.right = r.left + pxPerTile_;
     r.bottom = r.top + pxPerTile_;
     ::InvalidateRect(hwnd_, &r, FALSE);
@@ -3871,9 +3875,10 @@ void MainWindow::OnLButtonDown(int mx, int my) {
         fogPaint_ = !map_.fog().IsFogged(tx, ty);
         if (map_.mutableFog().SetFogged(tx, ty, fogPaint_)) {
             map_.MarkDirty();
+            const RECT view = MapViewRect();
             RECT r;
-            r.left = tx * pxPerTile_ - scrollX_;
-            r.top = ty * pxPerTile_ - scrollY_;
+            r.left = view.left + tx * pxPerTile_ - scrollX_;
+            r.top = view.top + ty * pxPerTile_ - scrollY_;
             r.right = r.left + pxPerTile_;
             r.bottom = r.top + pxPerTile_;
             ::InvalidateRect(hwnd_, &r, FALSE);
@@ -3974,9 +3979,10 @@ void MainWindow::OnMouseMove(int mx, int my, bool leftDown) {
     if (leftDown && layer_ == EditLayer::kFog && tx >= 0) {
         if (map_.mutableFog().SetFogged(tx, ty, fogPaint_)) {
             map_.MarkDirty();
+            const RECT view = MapViewRect();
             RECT r;
-            r.left = tx * pxPerTile_ - scrollX_;
-            r.top = ty * pxPerTile_ - scrollY_;
+            r.left = view.left + tx * pxPerTile_ - scrollX_;
+            r.top = view.top + ty * pxPerTile_ - scrollY_;
             r.right = r.left + pxPerTile_;
             r.bottom = r.top + pxPerTile_;
             ::InvalidateRect(hwnd_, &r, FALSE);
@@ -4600,20 +4606,24 @@ void MainWindow::Present(HDC dc, const RECT& client) {
 
     if (viewW > 0 && viewH > 0) {
         const int saved = ::SaveDC(dc);
-        ::IntersectClipRect(dc, view.left, view.top, view.right, view.bottom);
+        // 叠加层（单位/精灵/网格/光标等）都按“视口内坐标”绘制，
+        // 与 BitBlt 到 view.left/top 的地形保持一致，否则会整体偏移视口原点
+        ::SetViewportOrgEx(dc, view.left, view.top, nullptr);
+        ::IntersectClipRect(dc, 0, 0, viewW, viewH);
+        const RECT local = {0, 0, viewW, viewH};
 
-        if (showZergGround_) DrawCreep(dc, view);
-        if (showDoodads_) DrawDoodads(dc, view);
-        if (showSpUnits_) DrawSprites(dc, view);
-        if (showFog_) DrawFog(dc, view);
-        DrawGrid(dc, view);
-        if (showUnits_) DrawUnits(dc, view);
-        if (showDeathFx_) DrawDeathMarks(dc, view);
-        if (showOverlapMarkers_) DrawOverlapMarkers(dc, view);
-        if (showUnitConflict_) DrawUnitConflictSizes(dc, view);
-        if (showLocations_) DrawLocations(dc, view);
-        if (locationDrawing_) DrawLocationPreview(dc, view);
-        DrawSelection(dc, view);
+        if (showZergGround_) DrawCreep(dc, local);
+        if (showDoodads_) DrawDoodads(dc, local);
+        if (showSpUnits_) DrawSprites(dc, local);
+        if (showFog_) DrawFog(dc, local);
+        DrawGrid(dc, local);
+        if (showUnits_) DrawUnits(dc, local);
+        if (showDeathFx_) DrawDeathMarks(dc, local);
+        if (showOverlapMarkers_) DrawOverlapMarkers(dc, local);
+        if (showUnitConflict_) DrawUnitConflictSizes(dc, local);
+        if (showLocations_) DrawLocations(dc, local);
+        if (locationDrawing_) DrawLocationPreview(dc, local);
+        DrawSelection(dc, local);
 
         // 光标所在格高亮
         if (cursorTx_ >= 0) {
@@ -5088,10 +5098,11 @@ void MainWindow::RefreshAfterHistory(const Buffer& oldTiles) {
     }
 
     RECT r;
-    r.left = x0 * pxPerTile_ - scrollX_;
-    r.top = y0 * pxPerTile_ - scrollY_;
-    r.right = (x1 + 1) * pxPerTile_ - scrollX_;
-    r.bottom = (y1 + 1) * pxPerTile_ - scrollY_;
+    const RECT view = MapViewRect();
+    r.left = view.left + x0 * pxPerTile_ - scrollX_;
+    r.top = view.top + y0 * pxPerTile_ - scrollY_;
+    r.right = view.left + (x1 + 1) * pxPerTile_ - scrollX_;
+    r.bottom = view.top + (y1 + 1) * pxPerTile_ - scrollY_;
     ::InvalidateRect(hwnd_, &r, FALSE);
     Log(L"[render] 局部重绘 %dx%d 格 (%d,%d)-(%d,%d)", x1 - x0 + 1, y1 - y0 + 1, x0, y0, x1, y1);
 }
