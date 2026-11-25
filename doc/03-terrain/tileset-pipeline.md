@@ -191,3 +191,20 @@ entries=4317 unique=1 window=1 click=1 paint=1 readback=1 filters=1 file=1
 双击应用后，主窗口以光标为中心压印图案，整笔作为一次撤销记录。
 无头回归：`--brush-pattern-test`。
 
+## ScmDraft2 等距地形放置数据（RE 发现）
+
+在 `[CN]ScmDraft2.exe` 中定位到地形类型名称表（ASCII，文件偏移约 0x7B000 起）：
+
+- 8 个地形集名称：Badlands / Space Platform / Installation / Ash World /
+  Jungle World / Desert World / Ice World / Twilight World。
+- 每个地形集随后是约 14 条地形类型名（空槽为 `Undefined`），例如 Badlands：
+  `Dirt / Mud / High Dirt / Water / Grass / High Grass / Structure / Asphalt / Rocky Ground`。
+- 状态栏的 `Isometrical Terrain | Jungle WorkDirt` 就来自这些类型名，说明 ScmDraft2 的
+  等距地形放置由**固定的地形类型表**驱动（每种类型在 exe 内有自己的组/变体/邻接混合规则），
+  而不是按 CV5 组或地图统计推断。
+
+当前 Plus 的等距模式是“从当前地图统计同组同 4 邻掩码的常见子索引”，因此在边缘混合、
+新组合上会与原版不一致。要与原版完全一致，需要继续从 exe 提取每种类型的组号、变体列表
+和邻接混合规则（名称字符串没有直接指针引用，需结合引用代码/结构交叉定位）。
+
+
