@@ -14,6 +14,8 @@ parsers, dumps, and docs; reuse them instead of re-deriving formats.
 1. `references/resource-map.md` — where every resource and tool lives.
 2. `references/original-editor.md` — dumping and interpreting ScmDraft2 resources.
 3. `references/mpq.md` — reading/writing MPQ, compression, and tileset export.
+4. `references/objects.md` — GRP decoding, unit/sprite drawing rules, team colors,
+   shadows, palette findings, and the viewport coordinate system.
 
 ## Non-negotiable rules
 
@@ -31,6 +33,12 @@ parsers, dumps, and docs; reuse them instead of re-deriving formats.
   `#pragma code_page(65001)` or stay ASCII-only.
 - Headless verification goes through `SCMDTests.exe`; `SCMDPlus.exe` keeps only UI probes.
 - Mark findings `VERIFIED` or `TODO` in `doc/`; never present a guess as a fact.
+- **GRP rows decode left→right from `frame.x` (`x++`)**. Decoding right→left mirrors every
+  unit/sprite — this was the “units face backwards” bug. Validate with grayscale NCC
+  against `origin.bmp` (≥0.99), never with mask IoU alone.
+- Object palette: team color is indices 8..15 **and** 0x88..0x8F (9/10 bright, 11 mid,
+  12..15 dark); neutral/resources (owner ≥ 8) stay untinted. Shadows are the `*Sha*`
+  image 1–2 `images.dat` entries after the body and use the same center anchor.
 
 ## Quick commands
 
@@ -46,9 +54,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\dump_original.ps1
 bin\Win32\Debug\SCMDTests.exe --mpq="<map.scx>"
 bin\Win32\Debug\SCMDTests.exe --open="<map.scx>" --section-test
 
-# Extract one MPQ entry (tool mode in the GUI binary)
-bin\Win32\Debug\SCMDPlus.exe --mpq="<archive.mpq>" --mpq-extract=arr\units.dat `
-  --extract-to="%TEMP%\units.dat"
+# Extract one MPQ entry (tool mode in the GUI binary).
+# In PowerShell call it with & and quoted args; a Start-Process -ArgumentList array
+# mangles backslash paths and ends with "extract=FAIL args". --extract-to is a FILE path.
+& bin\Win32\Debug\SCMDPlus.exe --mpq="<archive.mpq>" --mpq-extract="arr\units.dat" `
+  --extract-to="$env:TEMP\units.dat"
+& bin\Win32\Debug\SCMDPlus.exe --mpq="mpq\BrooDat.mpq" `
+  --mpq-extract="unit\neutral\geyser.grp" --extract-to="$env:TEMP\geyser.grp"
+
+# Terrain-only baseline for object alignment checks (4096×4096 at 32 px/tile)
+bin\Win32\Debug\scmd_cli.exe render "<map.scm>" "$env:TEMP\terrain32.bmp" --scale 32 --ts exe\ts
 
 # Export the eight tilesets from StarDat/BrooDat
 bin\Win32\Debug\scmd_cli.exe extract-ts "F:\Games\单机游戏\starcraft" "%TEMP%\ts"
@@ -67,6 +82,10 @@ bin\Win32\Debug\scmd_cli.exe extract-ts "F:\Games\单机游戏\starcraft" "%TEMP
   entry count, CHK size, and DIM to `%TEMP%\scmdplus_mpq.txt`.
 - **Extract or switch tilesets** — export with `scmd_cli extract-ts`, keep `ts/` in the
   repository, and pass `--ts=<dir>` to tests. The build copies `ts/` next to both EXEs.
+- **Fix unit/sprite visuals (orientation, shadow, color)** — read `references/objects.md`.
+  Render terrain only with `scmd_cli render --scale 32`, decode the GRP at the CHK anchor,
+  and score with grayscale NCC against `origin.bmp` (target ≥0.99). Use the
+  `.wpe` palette for now; the dedicated object palette is still a TODO.
 
 ## Continuous reinforcement loop
 

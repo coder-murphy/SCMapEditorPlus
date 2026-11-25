@@ -81,6 +81,7 @@ VERSIONINFO.
 | How are menus/command IDs organized? | `src/ui/command_ids.h`, `doc/05-ui/ui-map.md` |
 | How is a map loaded/saved? | `src/map/map_document.*`, `src/chk/chk_document.*` |
 | How are tilesets decoded? | `src/terrain/tileset.*`, `src/terrain/terrain_renderer.*` |
+| How are units/sprites drawn (GRP, shadow, team color, anchor)? | `references/objects.md`, `src/units/object_graphics.*`, `src/units/iscript.cpp` (`GrpFile`) |
 
 ## Build and verification
 

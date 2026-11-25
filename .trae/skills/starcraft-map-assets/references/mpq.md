@@ -70,7 +70,17 @@ header(32) | file data (16-byte aligned) | hash table (1024 × 16) | block table
 | Map CHK load/save | `src/map/map_document.*`, `src/chk/` |
 | Tileset export | `src/terrain/tileset_export.*`, `scmd_cli extract-ts` |
 | Map self-test | `SCMDTests.exe --mpq=<map>` (writes `%TEMP%\scmdplus_mpq.txt`) |
-| Single entry extraction | `SCMDPlus.exe --mpq=<archive> --mpq-extract=<entry> --extract-to=<out>` |
+| Single entry extraction | `SCMDPlus.exe --mpq=<archive> --mpq-extract=<entry> --extract-to=<out-file>` |
+
+PowerShell notes for the extraction mode (VERIFIED):
+
+- Call it with `&` and quoted arguments, e.g.
+  `& exe\SCMDPlus.exe --mpq="mpq\BrooDat.mpq" --mpq-extract="unit\neutral\geyser.grp" --extract-to="$env:TEMP\geyser.grp"`.
+- Passing the same arguments through `Start-Process -ArgumentList @(...)` mangles the
+  backslashes and the tool reports `extract=FAIL args`.
+- `--extract-to` is a **file** path, not a directory.
+- Unit GRPs are under `unit\<race>\...`; shadow GRPs are siblings such as
+  `unit\neutral\min01Sha.grp` (see `objects.md`).
 
 ## Tilesets
 
