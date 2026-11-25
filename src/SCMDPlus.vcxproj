@@ -160,5 +160,10 @@
     </ItemGroup>
     <Copy SourceFiles="@(TilesetFiles)" DestinationFolder="$(OutDir)ts" SkipUnchangedFiles="true" />
   </Target>
+  <!-- 每次构建后把完整应用目录增量同步到仓库 exe\，方便手动调试 -->
+  <Target Name="SyncToExeFolder" AfterTargets="CopyTilesets">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\tools\copy-app.ps1&quot; -Source &quot;$(TargetDir).&quot;"
+          ContinueOnError="true" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
