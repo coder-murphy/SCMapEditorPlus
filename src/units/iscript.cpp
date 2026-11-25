@@ -477,7 +477,9 @@ bool GrpFile::DecodeFrame(int index, const Buffer& palette, Buffer& bgra, int& w
         dst[3] = 0xFF;
     };
 
-    // 帧数据：u16 行偏移表（相对帧数据起点）+ 每行 RLE（从右往左绘制）
+    // 帧数据：u16 行偏移表（相对帧数据起点）+ 每行 RLE（从左往右绘制）
+    // 注意：RLE 流按“帧内从左到右”的顺序存储，此前误按从右往左解码，
+    // 会让所有单位/精灵水平镜像（与原版导出的 NCC 只有 ~0，左→右可达 1.000）
     // 重复帧共享同一偏移，因此取下一个“更大”的偏移作为帧数据末尾
     std::size_t frameEnd = data_.size();
     for (int j = index + 1; j < frameCount_; j++) {
@@ -499,14 +501,14 @@ bool GrpFile::DecodeFrame(int index, const Buffer& palette, Buffer& bgra, int& w
                                       static_cast<std::size_t>(line + 1) * 2);
         }
         if (start > end || end > data_.size()) continue;
-        int x = static_cast<int>(f.x) + static_cast<int>(f.width) - 1;
+        int x = static_cast<int>(f.x);
         const int y = static_cast<int>(f.y) + line;
         std::size_t pos = start;
         while (pos < end) {
             const u8 b = data_[pos++];
             if (b == 0x00) continue;
-            if (b & 0x80) {                         // 透明像素：向左跳过
-                x -= (b & 0x7F);
+            if (b & 0x80) {                         // 透明像素：向右跳过
+                x += (b & 0x7F);
                 continue;
             }
             if (b & 0x40) {                         // 重复像素
@@ -514,13 +516,13 @@ bool GrpFile::DecodeFrame(int index, const Buffer& palette, Buffer& bgra, int& w
                 if (n == 0) continue;
                 if (pos >= end) break;
                 const u8 color = data_[pos++];
-                for (int i = 0; i < n; i++) writePixel(x--, y, color);
+                for (int i = 0; i < n; i++) writePixel(x++, y, color);
                 continue;
             }
-            // 直接像素串（从右往左）
+            // 直接像素串（从左往右）
             const int n = b;
             for (int i = 0; i < n && pos < end; i++) {
-                writePixel(x--, y, data_[pos++]);
+                writePixel(x++, y, data_[pos++]);
             }
         }
     }
