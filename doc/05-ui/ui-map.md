@@ -683,6 +683,17 @@ GUI 探针：155（映射/禁用/应用不关闭/添加 MPQ）、166/172（置�
 - 说明：仍是顶层窗口，不是经典 MDI 子窗口；停靠/子窗口模型如需要再重构。
 - 回归：`--menu-cmd-test` 的 `window`（新建后 `LiveWindowCount` +1，关闭后恢复）。
 
+## 地图视口对象绘制（GRP）
+
+- 单位（UNIT）：`units.dat` 的 flingy → `flingy.dat` 的 sprite → `sprites.dat` 的 image →
+  `images.dat` 的 GRP File（`images.tbl` 下标，1 起）→ `unit\<name>` 图形。
+- SP 单位（THG2）与装饰物（DD2）：type 直接作为 `sprites.dat` 下标走同一段链路。
+- 图形取自星际目录 / exe 旁 / 工程根（先找解包的 `arr\*.dat`，再读
+  `mpq\BrooDat.mpq`、`StarDat.mpq`），`GrpFile::Parse` 解析第 0 帧，
+  用当前地形集 WPE 调色板解码为 32 位位图，AlphaBlend 居中绘制在对象所在格中心。
+- 无图形数据时退回原有标记（单位色点、SP 单位方框/圆环、装饰物品红方框）；
+  打开/关闭地图时清空位图缓存（不同地形集调色板不同）。
+
 ## 地图显示比率（P0 收尾）
 
 - 选项 → 地图显示比率（0x8119/0x8118/0x8117/0x8116/0x80D8/0x80DD/0x80D9/0x80DB/0x80DA）：

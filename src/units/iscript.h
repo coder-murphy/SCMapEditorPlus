@@ -91,6 +91,8 @@ struct GrpFrameMeta {
 class GrpFile {
 public:
     bool Load(const std::wstring& path);
+    // 直接解析内存中的 GRP（从 MPQ 读取时不用落盘）
+    bool Parse(const Buffer& data);
     bool loaded() const { return loaded_; }
     int frameCount() const { return frameCount_; }
     int width() const { return width_; }

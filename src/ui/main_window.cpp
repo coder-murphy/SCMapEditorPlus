@@ -7,6 +7,7 @@
 #include <cstring>
 #include <cwchar>
 #include <functional>
+#include <fstream>
 #include <objbase.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -23,6 +24,7 @@
 #include "platform/file_dialog.h"
 #include "map/map_switches.h"
 #include "terrain/edge_placer.h"
+#include "units/iscript.h"
 #include "units/stat_txt.h"
 #include "res/resource.h"
 #include "ui/command_ids.h"
@@ -89,6 +91,55 @@ const StatTextTable& SceneUnitNames() {
         StatTextTable::LoadAuto(table, source);
     }
     return table;
+}
+
+// ── 对象 GRP 加载（unit\...grp，来自游戏目录、工程根或 mpq 副本）──
+bool ReadWholeFileW(const std::wstring& path, Buffer& out) {
+    std::ifstream in(path.c_str(), std::ios::binary | std::ios::ate);
+    if (!in) return false;
+    const std::streamoff size = in.tellg();
+    if (size <= 0 || size > (32ll << 20)) return false;
+    in.seekg(0, std::ios::beg);
+    out.resize(static_cast<std::size_t>(size));
+    in.read(reinterpret_cast<char*>(out.data()), size);
+    return in.good() || in.eof();
+}
+
+std::wstring ExeDirPath() {
+    wchar_t path[MAX_PATH] = L"";
+    ::GetModuleFileNameW(nullptr, path, MAX_PATH);
+    wchar_t* slash = std::wcsrchr(path, L'\\');
+    if (slash) *slash = L'\0';
+    return path;
+}
+
+bool LoadObjectGrpBytes(const std::wstring& relPath, Buffer& out) {
+    if (relPath.empty()) return false;
+    std::string entry = "unit\\";
+    for (wchar_t ch : relPath) {
+        if (ch >= 128) return false;
+        entry.push_back(static_cast<char>(ch));
+    }
+    std::vector<std::wstring> dirs;
+    const std::wstring gameDir = AppSettings::Instance().gameDir();
+    if (!gameDir.empty()) dirs.push_back(gameDir);
+    const std::wstring exeDir = ExeDirPath();
+    dirs.push_back(exeDir);
+    dirs.push_back(exeDir + L"\\..\\..\\..");
+
+    for (const std::wstring& dir : dirs) {
+        if (ReadWholeFileW(dir + L"\\unit\\" + relPath, out)) return true;
+    }
+    for (const std::wstring& dir : dirs) {
+        const std::wstring mpqs[] = {dir + L"\\StarDat.mpq", dir + L"\\BrooDat.mpq",
+                                     dir + L"\\mpq\\StarDat.mpq", dir + L"\\mpq\\BrooDat.mpq"};
+        for (const std::wstring& mpqPath : mpqs) {
+            if (::GetFileAttributesW(mpqPath.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+            MpqArchive mpq;
+            if (mpq.Open(mpqPath) && mpq.ReadFile(entry, out)) return true;
+        }
+    }
+    return false;
 }
 
 // 工具栏按钮的工具提示：iItem 可能是按钮索引或命令 ID，两种都覆盖
@@ -1011,6 +1062,7 @@ MainWindow::~MainWindow() {
         ::DeleteObject(startupBanner_);
         startupBanner_ = nullptr;
     }
+    ReleaseSpriteCache();
 }
 
 void MainWindow::CreateToolbar() {
@@ -1552,6 +1604,7 @@ bool MainWindow::OpenMap(const std::wstring& path) {    if (!map_.Open(path, til
     }
     mapPath_ = path;
     fileName_ = FileNameOf(path);
+    ReleaseSpriteCache();   // 地形集可能变化，按新调色板重新解码对象图形
     {
         wchar_t msg[256];
         ::wsprintfW(msg, L"打开地图: %ls  %dx%d", fileName_.c_str(), map_.width(), map_.height());
@@ -1856,6 +1909,7 @@ void MainWindow::CloseMap() {
     if (!MaybeSave()) return;
     if (map_.IsOpen()) Output(2, L"关闭地图: " + fileName_);
     map_.Close();
+    ReleaseSpriteCache();
     mapPath_.clear();
     fileName_.clear();
     history_.Clear();
@@ -3285,6 +3339,90 @@ void MainWindow::DrawLocationPreview(HDC dc, const RECT& client) const {
     ::DeleteObject(pen);
 }
 
+const ObjectGraphics& MainWindow::ObjectGraphicsFor() const {
+    if (!objectGraphicsTried_) {
+        objectGraphicsTried_ = true;
+        objectGraphics_.LoadAuto();
+    }
+    return objectGraphics_;
+}
+
+const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& relPath) const {
+    if (relPath.empty()) return nullptr;
+    auto it = spriteCache_.find(relPath);
+    if (it != spriteCache_.end()) return it->second.bmp ? &it->second : nullptr;
+    if (spriteMissing_.find(relPath) != spriteMissing_.end()) return nullptr;
+
+    Buffer grpData;
+    GrpFile grp;
+    if (!LoadObjectGrpBytes(relPath, grpData) || !grp.Parse(grpData) || grp.frameCount() <= 0) {
+        spriteMissing_.insert(relPath);
+        return nullptr;
+    }
+    Buffer bgra;
+    int w = 0;
+    int h = 0;
+    const Buffer emptyPalette;
+    const Buffer& palette = map_.hasTileset() ? map_.tileset().palette() : emptyPalette;
+    if (!grp.DecodeFrame(0, palette, bgra, w, h) || w <= 0 || h <= 0) {
+        spriteMissing_.insert(relPath);
+        return nullptr;
+    }
+
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = w;
+    bi.bmiHeader.biHeight = -h;   // 自上而下
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    const HDC screen = ::GetDC(hwnd_);
+    const HBITMAP bmp = screen ? ::CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits,
+                                                    nullptr, 0)
+                               : nullptr;
+    if (screen) ::ReleaseDC(hwnd_, screen);
+    if (!bmp || !bits) {
+        if (bmp) ::DeleteObject(bmp);
+        spriteMissing_.insert(relPath);
+        return nullptr;
+    }
+    std::memcpy(bits, bgra.data(), static_cast<std::size_t>(w) * h * 4);
+
+    SpriteBitmap entry;
+    entry.bmp = bmp;
+    entry.width = w;
+    entry.height = h;
+    auto inserted = spriteCache_.emplace(relPath, entry);
+    return &inserted.first->second;
+}
+
+bool MainWindow::BlitObject(HDC dc, const std::wstring& relPath, int mapX, int mapY) const {
+    const SpriteBitmap* bmp = SpriteBitmapFor(relPath);
+    if (!bmp || pxPerTile_ <= 0) return false;
+    const int left = (mapX - bmp->width / 2) * pxPerTile_ / kTilePixels - scrollX_;
+    const int top = (mapY - bmp->height / 2) * pxPerTile_ / kTilePixels - scrollY_;
+    const int w = std::max(1, bmp->width * pxPerTile_ / kTilePixels);
+    const int h = std::max(1, bmp->height * pxPerTile_ / kTilePixels);
+
+    const HDC mem = ::CreateCompatibleDC(dc);
+    if (!mem) return false;
+    const HGDIOBJ old = ::SelectObject(mem, bmp->bmp);
+    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 0xFF, AC_SRC_ALPHA};
+    ::AlphaBlend(dc, left, top, w, h, mem, 0, 0, bmp->width, bmp->height, bf);
+    ::SelectObject(mem, old);
+    ::DeleteDC(mem);
+    return true;
+}
+
+void MainWindow::ReleaseSpriteCache() {
+    for (auto& kv : spriteCache_) {
+        if (kv.second.bmp) ::DeleteObject(kv.second.bmp);
+    }
+    spriteCache_.clear();
+    spriteMissing_.clear();
+}
+
 void MainWindow::DrawDoodads(HDC dc, const RECT& client) const {
     if (!map_.IsOpen() || pxPerTile_ <= 0) return;
     const HPEN pen = ::CreatePen(PS_SOLID, 1, RGB(255, 80, 255));
@@ -3292,6 +3430,11 @@ void MainWindow::DrawDoodads(HDC dc, const RECT& client) const {
     const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
 
     for (const Doodad& d : map_.doodads().Items()) {
+        // DD2 的 type 直接作为 sprites.dat 下标取图形
+        const int cx = (static_cast<int>(d.x) / kTilePixels) * kTilePixels + kTilePixels / 2;
+        const int cy = (static_cast<int>(d.y) / kTilePixels) * kTilePixels + kTilePixels / 2;
+        const std::wstring grp = ObjectGraphicsFor().SpriteGrpPath(d.type);
+        if (!grp.empty() && BlitObject(dc, grp, cx, cy)) continue;
         const int sx = static_cast<int>(d.x) * pxPerTile_ / kTilePixels - scrollX_;
         const int sy = static_cast<int>(d.y) * pxPerTile_ / kTilePixels - scrollY_;
         const int size = std::max(3, pxPerTile_ / 2);
@@ -3315,6 +3458,10 @@ void MainWindow::DrawSprites(HDC dc, const RECT& client) const {
     const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
 
     for (const SpriteRecord& s : map_.sprites().Items()) {
+        const int cx = (static_cast<int>(s.x) / kTilePixels) * kTilePixels + kTilePixels / 2;
+        const int cy = (static_cast<int>(s.y) / kTilePixels) * kTilePixels + kTilePixels / 2;
+        const std::wstring grp = ObjectGraphicsFor().SpriteGrpPath(s.type);
+        if (!grp.empty() && BlitObject(dc, grp, cx, cy)) continue;
         const int sx = static_cast<int>(s.x) * pxPerTile_ / kTilePixels - scrollX_;
         const int sy = static_cast<int>(s.y) * pxPerTile_ / kTilePixels - scrollY_;
         const int size = std::max(3, pxPerTile_ / 2);
@@ -3795,16 +3942,22 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
         if (sx < -pxPerTile_ || sy < -pxPerTile_) continue;
         if (sx > client.right || sy > client.bottom) continue;
 
-        const int size = std::max(3, pxPerTile_ / 2);
-        const HBRUSH brush =
-            ::CreateSolidBrush(CycleColor(UnitColorFor(u.type, showAllColors_), allowColorCycle_));
-        RECT r;
-        r.left = sx + (pxPerTile_ - size) / 2;
-        r.top = sy + (pxPerTile_ - size) / 2;
-        r.right = r.left + size;
-        r.bottom = r.top + size;
-        ::FillRect(dc, &r, brush);
-        ::DeleteObject(brush);
+        const int cx = tx * kTilePixels + kTilePixels / 2;
+        const int cy = ty * kTilePixels + kTilePixels / 2;
+        const std::wstring grp = ObjectGraphicsFor().UnitGrpPath(u.type);
+        const bool drawn = !grp.empty() && BlitObject(dc, grp, cx, cy);
+        if (!drawn) {
+            const int size = std::max(3, pxPerTile_ / 2);
+            const HBRUSH brush = ::CreateSolidBrush(
+                CycleColor(UnitColorFor(u.type, showAllColors_), allowColorCycle_));
+            RECT r;
+            r.left = sx + (pxPerTile_ - size) / 2;
+            r.top = sy + (pxPerTile_ - size) / 2;
+            r.right = r.left + size;
+            r.bottom = r.top + size;
+            ::FillRect(dc, &r, brush);
+            ::DeleteObject(brush);
+        }
 
         if (specialPen && u.validState != 0x0018) {
             ::Ellipse(dc, sx + 1, sy + 1, sx + pxPerTile_ - 1, sy + pxPerTile_ - 1);

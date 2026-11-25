@@ -419,6 +419,12 @@
     33%/66% 等档位可正确回显，固定列表外的档位临时显示实际比例。
   - 场景树单位条目改为显示 `stat_txt.tbl` 名称（懒加载，来源游戏目录或仓库 `mpq/` 副本），
     名称缺失时退回 `类型 N`，不再显示 CHK 实例编号；名称置于最前避免窄栏截断。
+- [x] **视口对象改为实际 GRP 图形**
+  - 新增 `units/object_graphics.*`：解析 units/flingy/sprites/images.dat + images.tbl，
+    单位走 flingy→sprite→image→GRP 链，THG2/DD2 的 type 直接作为 sprite 下标。
+  - 主视图按当前地形集调色板解码 GRP 第 0 帧并 AlphaBlend 居中绘制；
+    图形缺失时保留原色点/方框标记，打开/关闭地图会清理缓存。
+  - `GrpFile` 增加 `Parse(Buffer)`，可直接从 MPQ 读取，不落盘。
 - [x] **地图/日志视口分离与消除重绘白闪**
   - 地图与日志改为两个独立视口：`HScrollRect` 挂在地图视口底部，`VScrollRect` 只贯穿
     地图视口；新增 `logVScroll_` 日志垂直滚动条（`UpdateLogScrollBar` / `ScrollLogLines`，

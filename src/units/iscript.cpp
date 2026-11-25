@@ -380,6 +380,14 @@ bool GrpFile::Load(const std::wstring& path) {
     data_.clear();
     Buffer data;
     if (!ReadWholeFile(path, data) || data.size() < 10) return false;
+    return Parse(data);
+}
+
+bool GrpFile::Parse(const Buffer& data) {
+    loaded_ = false;
+    frames_.clear();
+    data_.clear();
+    if (data.size() < 10) return false;
     const int count = ReadU16(data.data());
     if (count <= 0 || count > 65535) return false;
     const std::size_t tableEnd = 6 + static_cast<std::size_t>(count) * 4;

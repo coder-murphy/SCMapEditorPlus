@@ -1,5 +1,7 @@
 ﻿#pragma once
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 #include <windows.h>
 #include <commctrl.h>
@@ -8,6 +10,7 @@
 #include "map/map_document.h"
 #include "terrain/brush.h"
 #include "terrain/terrain_renderer.h"
+#include "units/object_graphics.h"
 #include "ui/brush_palette.h"
 #include "ui/command_table.h"
 #include "ui/doodad_palette.h"
@@ -163,6 +166,18 @@ private:
     void DrawSprites(HDC dc, const RECT& client) const;
     void DrawFog(HDC dc, const RECT& client) const;
 
+    // 对象 GRP：按 images.tbl 相对路径取（并缓存）绘制位图
+    struct SpriteBitmap {
+        HBITMAP bmp = nullptr;
+        int width = 0;
+        int height = 0;
+    };
+    const ObjectGraphics& ObjectGraphicsFor() const;
+    const SpriteBitmap* SpriteBitmapFor(const std::wstring& relPath) const;
+    // 在源像素坐标 (mapX,mapY) 处居中绘制；返回 false 表示无图形
+    bool BlitObject(HDC dc, const std::wstring& relPath, int mapX, int mapY) const;
+    void ReleaseSpriteCache();
+
     // 对话框接线
     void ResizeMapDialog();
     void EditUnitProps();
@@ -265,6 +280,10 @@ private:
     HIMAGELIST toolbarImages_ = nullptr;
     HBITMAP menuIconBitmap_ = nullptr;
     HBITMAP startupBanner_ = nullptr;
+    mutable ObjectGraphics objectGraphics_;
+    mutable bool objectGraphicsTried_ = false;
+    mutable std::unordered_map<std::wstring, SpriteBitmap> spriteCache_;
+    mutable std::unordered_set<std::wstring> spriteMissing_;
     HWND layerCombo_ = nullptr;
     HWND playerCombo_ = nullptr;
     HWND zoomCombo_ = nullptr;
