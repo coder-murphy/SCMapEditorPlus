@@ -1,5 +1,4 @@
 ﻿#pragma once
-#include <array>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -126,6 +125,9 @@ public:
     TerrainPlacementMode terrainPlacementMode() const { return terrainMode_; }
     int terrainBrushWidth() const { return brushW_; }
     int terrainBrushHeight() const { return brushH_; }
+    // 当前地形类型（ScmDraft2 地形类型表的槽位 0..12，用于等距地形）
+    void SetTerrainTypeSlot(int slot);
+    int terrainTypeSlot() const { return terrainTypeSlot_; }
 
     // SP 单位放置（也用于无头回归）
     void SetSpPlacement(u16 type, u8 owner, u16 flags);
@@ -215,11 +217,9 @@ private:
     void ShowBrushPalette();
     void SetBrushTile(u16 value);
     void RefreshBrushPalette();
+    void RebuildTerrainTypeCombo();
     void StampTerrainAt(int tx, int ty);
     u16 TerrainValueFor(int tx, int ty) const;
-    int IsoSubIndexFor(u16 group, int mask) const;
-    void BuildIsoIndexCounts(u16 group) const;
-    void ResetTerrainPaintState();
 
     // 装饰物窗口（窗口 → 装饰物窗口）
     void ShowDoodadPalette();
@@ -391,11 +391,10 @@ private:
     u16 brushTile_ = 0x0040;   // 默认：platform 甲板
     TerrainBrush brushPattern_;      // 当前刷子图案（1x1 即单格刷）
     std::vector<TerrainBrush> customBrushes_;   // 182 列表（进程内）
-    TerrainPlacementMode terrainMode_ = TerrainPlacementMode::kIndexed;
+    TerrainPlacementMode terrainMode_ = TerrainPlacementMode::kIsometric;
     int brushW_ = 1;   // 地形刷宽（格），+/- 调整
     int brushH_ = 1;   // 地形刷高（格）
-    // 等距模式：按 (group, 四邻差异掩码) 统计地图中实际使用的子索引
-    mutable std::unordered_map<u16, std::array<std::array<int, 16>, 16>> isoIndexCounts_;
+    int terrainTypeSlot_ = 0;   // ScmDraft2 地形类型表槽位（等距模式使用）
     int customBrushIndex_ = -1;
     u16 unitType_ = 176;       // 默认：矿物
     u8 unitOwner_ = 11;        // 0..7 玩家，11 中立

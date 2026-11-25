@@ -34,6 +34,7 @@
 #include "units/stat_txt.h"
 #include "units/unit_data.h"
 #include "terrain/terrain_renderer.h"
+#include "terrain/terrain_types.h"
 #include "terrain/edge_placer.h"
 #include "terrain/tileset_export.h"
 #include "chk/chk_section.h"
@@ -382,6 +383,20 @@ std::wstring ParseBrushPatternTestArg() {
     if (argv) {
         for (int i = 1; i < argc; ++i) {
             if (std::wcsncmp(argv[i], L"--brush-pattern-test=", 21) == 0) path = argv[i] + 21;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
+// --terrain-type-test=<输出scx>：ScmDraft2 地形类型表与等距铺设回归
+std::wstring ParseTerrainTypeTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--terrain-type-test=", 20) == 0) path = argv[i] + 20;
         }
         ::LocalFree(argv);
     }
@@ -926,6 +941,57 @@ int RunBrushPatternTest(MainWindow& win, const std::wstring& outPath) {
                 saved ? 1 : 0, reopened ? 1 : 0, reopenOk ? 1 : 0);
     WriteDiag(msg);
     return (painted && tileOk && undoOk && redoOk && saved && reopenOk) ? 0 : 2;
+}
+
+// --terrain-type-test=<输出scx>：ScmDraft2 地形类型表 / 等距铺设回归
+int RunTerrainTypeTest(MainWindow& win, const std::wstring& outPath) {
+    MapDocument& doc = win.mutableMap();
+    if (!doc.CreateNew(16, 16, 4 /* Jungle World */, win.tilesetDir()) || !doc.hasTileset()) {
+        WriteDiag(L"create=FAIL\n");
+        return 2;
+    }
+
+    const TerrainTypeInfo* types = TerrainTypes(4);
+    const bool tableOk = types && std::wcscmp(types[1].name, L"Dirt") == 0 &&
+                         types[1].group == 2 && TerrainTypeSlotForGroup(4, 3) == 1;
+
+    win.SetTerrainPlacementMode(TerrainPlacementMode::kIsometric);
+    win.SetTerrainTypeSlot(1);   // Jungle: Dirt -> 组 2 / 3
+
+    const bool p1 = win.PaintBrushAt(4, 5);
+    const bool p2 = win.PaintBrushAt(5, 5);
+    const u16 even = doc.TileAt(4, 5);
+    const u16 odd = doc.TileAt(5, 5);
+    const bool groupOk = ((even & 0x7FF0) >> 4) == 2 && ((odd & 0x7FF0) >> 4) == 3;
+    const bool copyOk = (even & 0x0F) == (odd & 0x0F);
+    const bool validOk = doc.tileset().HasSubtile(2, even & 0x0F) &&
+                         doc.tileset().HasSubtile(3, odd & 0x0F);
+
+    win.SetTerrainTypeSlot(0);   // Jungle: Water -> 组 6 / 7
+    const bool p3 = win.PaintBrushAt(7, 6);
+    const u16 water = doc.TileAt(7, 6);
+    const bool randomOk = ((water & 0x7FF0) >> 4) == 7 &&
+                          doc.tileset().HasSubtile(7, water & 0x0F);
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    const bool reopenOk = reopened && check.TileAt(4, 5) == even && check.TileAt(5, 5) == odd &&
+                          check.TileAt(7, 6) == water;
+
+    wchar_t msg[512];
+    ::wsprintfW(msg,
+                L"table=%d\npaint=%d/%d/%d\nnoffset=%u\nnodd=%u\ngroupOk=%d\ncopyOk=%d\n"
+                L"validOk=%d\nrandomOk=%d\nsaved=%d\nreopened=%d\nreopenOk=%d\n",
+                tableOk ? 1 : 0, p1 ? 1 : 0, p2 ? 1 : 0, p3 ? 1 : 0,
+                static_cast<unsigned>(even), static_cast<unsigned>(odd),
+                groupOk ? 1 : 0, copyOk ? 1 : 0, validOk ? 1 : 0, randomOk ? 1 : 0,
+                saved ? 1 : 0, reopened ? 1 : 0, reopenOk ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = tableOk && p1 && p2 && p3 && groupOk && copyOk && validOk && randomOk &&
+                    saved && reopenOk;
+    return ok ? 0 : 2;
 }
 
 // --brush-test：地形刷调色板回归（枚举 / 去重 / 选中 / 窗口交互 / 绘制）
@@ -3041,6 +3107,13 @@ int App::Run(HINSTANCE hInstance) {
     // 多格图案刷回归（无头）
     if (const std::wstring brushOut = ParseBrushPatternTestArg(); !brushOut.empty()) {
         const int rc = RunBrushPatternTest(mainWindow_, brushOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 地形类型表 / 等距铺设回归（无头）
+    if (const std::wstring terrainTypeOut = ParseTerrainTypeTestArg(); !terrainTypeOut.empty()) {
+        const int rc = RunTerrainTypeTest(mainWindow_, terrainTypeOut);
         ::DestroyWindow(mainWindow_.hwnd());
         return rc;
     }

@@ -193,18 +193,50 @@ entries=4317 unique=1 window=1 click=1 paint=1 readback=1 filters=1 file=1
 
 ## ScmDraft2 等距地形放置数据（RE 发现）
 
-在 `[CN]ScmDraft2.exe` 中定位到地形类型名称表（ASCII，文件偏移约 0x7B000 起）：
+从 `[CN]ScmDraft2.exe`（PE32，image base 0x400000）提取到的完整地形类型表与等距铺设规则：
 
-- 8 个地形集名称：Badlands / Space Platform / Installation / Ash World /
-  Jungle World / Desert World / Ice World / Twilight World。
-- 每个地形集随后是约 14 条地形类型名（空槽为 `Undefined`），例如 Badlands：
-  `Dirt / Mud / High Dirt / Water / Grass / High Grass / Structure / Asphalt / Rocky Ground`。
-- 状态栏的 `Isometrical Terrain | Jungle WorkDirt` 就来自这些类型名，说明 ScmDraft2 的
-  等距地形放置由**固定的地形类型表**驱动（每种类型在 exe 内有自己的组/变体/邻接混合规则），
-  而不是按 CV5 组或地图统计推断。
+### 名称表
 
-当前 Plus 的等距模式是“从当前地图统计同组同 4 邻掩码的常见子索引”，因此在边缘混合、
-新组合上会与原版不一致。要与原版完全一致，需要继续从 exe 提取每种类型的组号、变体列表
-和邻接混合规则（名称字符串没有直接指针引用，需结合引用代码/结构交叉定位）。
+- 8 个地形集名：文件偏移 0x7B038，每个 15 字节定长：
+  Badlands / Space Platform / Installation / Ash World / Jungle World /
+  Desert World / Ice World / Twilight World。
+- 地形类型名：文件偏移 0x7B0B0，8 × 13 × 30 字节定长（末尾空槽为 `Undefined`）。
+- 状态栏 `Isometrical Terrain | Jungle World Dirt` 即由“地形集名 + 类型名”拼接。
+
+### 组号表
+
+VA 0x47C878 处是 8 × 14 个 u32（第 14 项保留为 0），代码 0x413920 按
+`&table[tileset * 0x38]` 取到每个地形集的 14 项；值就是 CV5 组号。
+名称与组号按槽位一一对应：
+
+| 地形集 | 类型 = CV5 组（偶数列） |
+|---|---|
+| Badlands | Dirt 2 / Mud 20 / High Dirt 4 / Water 6 / Grass 8 / High Grass 10 / Structure 18 / Asphalt 16 / Rocky Ground 12 |
+| Space Platform | Space 2 / Low Platform 14 / Rusty Pit 18 / Platform 4 / Dark platform 16 / Plating 6 / Solar Array 12 / High Platform 8 / High Plating 10 / Elevated Catwalk 20 |
+| Installation | Substructure 2 / Floor 6 / Roof 8 / Substructure Plating 4 / Plating 10 / Sunstructure Panels 14 / Bottomless Pit 12 |
+| Ash World | Magma 14 / Dirt 2 / Lava 4 / Shale 10 / Broken Rock 16 / High Dirt 6 / High Lava 8 / High Shale 12 |
+| Jungle World | Water 6 / Dirt 2 / Mud 26 / Jungle 8 / Rocky Ground 10 / Ruins 14 / Raised Jungle 12 / Temple 16 / High Dirt 4 / High Jungle 18 / High Ruins 20 / High Raised Jungle 22 / High Temple 24 |
+| Desert World | Tar 6 / Dirt 2 / Dried Mud 26 / Sand Dunes 8 / Rocky Ground 10 / Crags 14 / Sandy Sunken Pit 12 / Compound 16 / High Dirt 4 / High Sand Dunes 18 / High Crags 20 / High Sandy Sunken Pit 22 / High Compound 24 |
+| Ice World | Ice 6 / Snow 2 / Moguls 26 / Dirt 8 / Rocky Snow 10 / Grass 14 / Water 12 / Outpost 16 / High Snow 4 / High Dirt 18 / High Grass 20 / High Water 22 / High Outpost 24 |
+| Twilight World | Water 6 / Dirt 2 / Mud 26 / Crushed Rock 8 / Crevices 10 / Flagstones 14 / Sunken Ground 12 / Basilica 16 / High Dirt 4 / High Crushed Rock 18 / High Flagstones 20 / High Sunken Ground 22 / High Basilica 24 |
+
+### 等距铺设规则
+
+0x419010（地形层鼠标/绘制处理）与 0x431D60（默认子索引）给出的行为：
+
+1. 偶数列（`tx & 1 == 0`）使用组 `G`，奇数列使用 `G + 1`；地图数据中两组严格
+   按列交替，构成 2×2 拼块。
+2. 奇数列若左格（`tx - 1`）的组正好是 `G`，则沿用左格的子索引；否则随机。
+3. 随机子索引优先在 0..5 中取（`rand() & 7` 且 < 6，且 CV5 槽非 0），
+   失败后在 6..15 中重试；所有槽都为空时返回 0。
+4. 本工程的“矩形地形”模式不做列交替，直接使用所选组的第一个有效子索引。
+
+CV5 组号的低 4 位即子索引；地图数据验证：Jungle 水（组 6）出现在偶数列、
+组 7 出现在奇数列，且奇数列子索引与左格完全一致（样本 17036/17037 吻合）。
+
+实现位置：表数据在 `src/terrain/terrain_types.cpp`，等距铺设规则在
+`MainWindow::TerrainValueFor`（等距分支），默认/随机子索引在
+`Tileset::FirstValidSubtile / RandomValidSubtile`。回归：`--terrain-type-test=<out.scx>`。
+
 
 

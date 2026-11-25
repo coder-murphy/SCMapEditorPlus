@@ -33,6 +33,7 @@
     <ClCompile Include="archive\mpq_archive.cpp"><Filter>archive</Filter></ClCompile>
     <ClCompile Include="chk\chk_document.cpp"><Filter>chk</Filter></ClCompile>
     <ClCompile Include="terrain\tileset.cpp"><Filter>terrain</Filter></ClCompile>
+    <ClCompile Include="terrain\terrain_types.cpp"><Filter>terrain</Filter></ClCompile>
     <ClCompile Include="terrain\brush.cpp"><Filter>terrain</Filter></ClCompile>
     <ClCompile Include="terrain\terrain_renderer.cpp"><Filter>terrain</Filter></ClCompile>
     <ClCompile Include="terrain\tileset_export.cpp"><Filter>terrain</Filter></ClCompile>
@@ -59,6 +60,7 @@
     <ClInclude Include="chk\chk_section.h"><Filter>chk</Filter></ClInclude>
     <ClInclude Include="chk\chk_document.h"><Filter>chk</Filter></ClInclude>
     <ClInclude Include="terrain\tileset.h"><Filter>terrain</Filter></ClInclude>
+    <ClInclude Include="terrain\terrain_types.h"><Filter>terrain</Filter></ClInclude>
     <ClInclude Include="terrain\brush.h"><Filter>terrain</Filter></ClInclude>
     <ClInclude Include="terrain\terrain_renderer.h"><Filter>terrain</Filter></ClInclude>
     <ClInclude Include="terrain\tileset_export.h"><Filter>terrain</Filter></ClInclude>

@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <fstream>
+#include <random>
 
 #include "common/log.h"
 
@@ -111,6 +112,30 @@ bool Tileset::IsWalkable(u16 group) const {
 u16 Tileset::Type(u16 group) const {
     if (group >= GroupCount()) return 0;
     return static_cast<u16>(ReadU16(cv5_.data() + group * 52) >> 1);
+}
+
+bool Tileset::HasSubtile(u16 group, int index) const {
+    if (group >= GroupCount() || index < 0 || index > 15) return false;
+    return ReadU16(cv5_.data() + group * 52 + 20 + index * 2) != 0;
+}
+
+int Tileset::FirstValidSubtile(u16 group) const {
+    for (int i = 0; i < 16; i++) {
+        if (HasSubtile(group, static_cast<int>(i))) return i;
+    }
+    return 0;
+}
+
+int Tileset::RandomValidSubtile(u16 group) const {
+    // ScmDraft2 先尝试 0..5（rand() & 7 且 < 6），失败后在 6..15 中重试
+    static std::mt19937 rng(std::random_device{}());
+    int index = static_cast<int>(rng() & 7u);
+    if (index < 6 && HasSubtile(group, index)) return index;
+    for (int tries = 0; tries < 64; tries++) {
+        index = 6 + static_cast<int>(rng() % 10u);
+        if (HasSubtile(group, index)) return index;
+    }
+    return FirstValidSubtile(group);
 }
 
 }  // namespace scmd

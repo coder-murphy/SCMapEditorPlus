@@ -30,6 +30,13 @@ public:
     bool IsWalkable(u16 group) const;
     u16 Type(u16 group) const;
 
+    // 组内子索引（0..15）是否有有效大瓦片（CV5 引用非 0）
+    bool HasSubtile(u16 group, int index) const;
+    // 组内第一个有效子索引；无有效项时返回 0
+    int FirstValidSubtile(u16 group) const;
+    // 随机取有效子索引（与 ScmDraft2 一致：优先 0..5，其次 6..15）
+    int RandomValidSubtile(u16 group) const;
+
     // CV5 里 flags & 0x0040（Creep）的 4×4 图案组；无则 HasCreep() 为 false
     bool HasCreep() const { return creepGroup_ >= 0; }
     int CreepGroup() const { return creepGroup_; }
