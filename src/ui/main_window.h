@@ -191,9 +191,11 @@ private:
         int height = 0;
     };
     const ObjectGraphics& ObjectGraphicsFor() const;
-    const SpriteBitmap* SpriteBitmapFor(const std::wstring& relPath, int owner) const;
-    // 在源像素坐标 (mapX,mapY) 处居中绘制；返回 false 表示无图形
-    bool BlitObject(HDC dc, const std::wstring& relPath, int mapX, int mapY, int owner) const;
+    const SpriteBitmap* SpriteBitmapFor(const std::wstring& relPath, int owner,
+                                        int frame = 0) const;
+    // 在源像素坐标 (mapX,mapY) 处居中绘制；frame 为 GRP 帧（默认 0）
+    bool BlitObject(HDC dc, const std::wstring& relPath, int mapX, int mapY, int owner,
+                    int frame = 0) const;
     const Buffer& TeamPaletteFor(int owner) const;
     void ReleaseSpriteCache();
 

@@ -3539,13 +3539,17 @@ const ObjectGraphics& MainWindow::ObjectGraphicsFor() const {
 }
 
 const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& relPath,
-                                                            int owner) const {
+                                                            int owner, int frame) const {
     if (relPath.empty()) return nullptr;
-    // 同一 GRP 按玩家颜色缓存不同版本
+    // 同一 GRP 按玩家颜色/帧缓存不同版本
     std::wstring key = relPath;
     if (owner >= 0) {
         key += L"|";
         key += std::to_wstring(owner);
+    }
+    if (frame != 0) {
+        key += L"#";
+        key += std::to_wstring(frame);
     }
     auto it = spriteCache_.find(key);
     if (it != spriteCache_.end()) return it->second.bmp ? &it->second : nullptr;
@@ -3563,7 +3567,8 @@ const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& 
     const Buffer emptyPalette;
     const Buffer& palette =
         map_.hasTileset() ? TeamPaletteFor(owner) : emptyPalette;
-    if (!grp.DecodeFrame(0, palette, bgra, w, h) || w <= 0 || h <= 0) {
+    const int useFrame = frame >= 0 && frame < grp.frameCount() ? frame : 0;
+    if (!grp.DecodeFrame(useFrame, palette, bgra, w, h) || w <= 0 || h <= 0) {
         spriteMissing_.insert(key);
         return nullptr;
     }
@@ -3597,8 +3602,8 @@ const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& 
 }
 
 bool MainWindow::BlitObject(HDC dc, const std::wstring& relPath, int mapX, int mapY,
-                            int owner) const {
-    const SpriteBitmap* bmp = SpriteBitmapFor(relPath, owner);
+                            int owner, int frame) const {
+    const SpriteBitmap* bmp = SpriteBitmapFor(relPath, owner, frame);
     if (!bmp || pxPerTile_ <= 0) return false;
     const int left = (mapX - bmp->width / 2) * pxPerTile_ / kTilePixels - scrollX_;
     const int top = (mapY - bmp->height / 2) * pxPerTile_ / kTilePixels - scrollY_;
@@ -3645,12 +3650,16 @@ const Buffer& MainWindow::TeamPaletteFor(int owner) const {
     }
     if (colorIndex < 0 || colorIndex >= 12) colorIndex = 11;
     const u8* rgb = kColors[colorIndex];
-    for (int k = 0; k < 8; k++) {
-        const int shade = 35 + k * 9;   // 35%..98%
-        const std::size_t at = static_cast<std::size_t>(0x88 + k) * 4;
-        palette[at + 0] = static_cast<u8>(rgb[0] * shade / 100);
-        palette[at + 1] = static_cast<u8>(rgb[1] * shade / 100);
-        palette[at + 2] = static_cast<u8>(rgb[2] * shade / 100);
+    // 星际精灵的队色在调色板 8..15（StartLoc/单位），0x88..0x8F 也一并覆盖
+    static const int kTeamBases[] = {0x08, 0x88};
+    for (int base : kTeamBases) {
+        for (int k = 0; k < 8; k++) {
+            const int shade = 35 + k * 9;   // 35%..98%
+            const std::size_t at = static_cast<std::size_t>(base + k) * 4;
+            palette[at + 0] = static_cast<u8>(rgb[0] * shade / 100);
+            palette[at + 1] = static_cast<u8>(rgb[1] * shade / 100);
+            palette[at + 2] = static_cast<u8>(rgb[2] * shade / 100);
+        }
     }
     auto inserted = teamPalettes_.emplace(owner, std::move(palette));
     return inserted.first->second;
@@ -3666,31 +3675,11 @@ void MainWindow::ReleaseSpriteCache() {
 }
 
 void MainWindow::DrawDoodads(HDC dc, const RECT& client) const {
-    if (!map_.IsOpen() || pxPerTile_ <= 0) return;
-    const HPEN pen = ::CreatePen(PS_SOLID, 1, RGB(255, 80, 255));
-    const HGDIOBJ oldPen = ::SelectObject(dc, pen);
-    const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
-
-    for (const Doodad& d : map_.doodads().Items()) {
-        // DD2 的 type 直接作为 sprites.dat 下标取图形；按 CHK 精确像素坐标居中
-        const std::wstring grp = ObjectGraphicsFor().SpriteGrpPath(d.type);
-        if (!grp.empty() && BlitObject(dc, grp, static_cast<int>(d.x), static_cast<int>(d.y), -1)) {
-            continue;
-        }
-        const int sx = static_cast<int>(d.x) * pxPerTile_ / kTilePixels - scrollX_;
-        const int sy = static_cast<int>(d.y) * pxPerTile_ / kTilePixels - scrollY_;
-        const int size = std::max(3, pxPerTile_ / 2);
-        RECT r = {sx - size / 2, sy - size / 2, sx - size / 2 + size, sy - size / 2 + size};
-        if (r.right < client.left || r.bottom < client.top || r.left > client.right ||
-            r.top > client.bottom) {
-            continue;
-        }
-        ::Rectangle(dc, r.left, r.top, r.right, r.bottom);
-    }
-
-    ::SelectObject(dc, oldBrush);
-    ::SelectObject(dc, oldPen);
-    ::DeleteObject(pen);
+    // DD2 装饰物本身是“特殊地形块”，图形已经包含在 MTXM 地形里；
+    // 其中少数带精灵的装饰物（门/机关等）由 THG2 记录，交给 DrawSprites 绘制。
+    // DD2 的 type 不是 sprites.dat 下标，不能直接取 GRP，否则会画出其它地形集的图形。
+    (void)dc;
+    (void)client;
 }
 
 void MainWindow::DrawSprites(HDC dc, const RECT& client) const {
@@ -4197,8 +4186,10 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
         const int cx = static_cast<int>(u.x);
         const int cy = static_cast<int>(u.y);
         const std::wstring grp = ObjectGraphicsFor().UnitGrpPath(u.type);
+        // 气矿固定用第 3 帧（与原版导出/ScmDraft2 一致），其余单位用第 0 帧
+        const int frame = u.type == 188 ? 3 : 0;
         const bool drawn =
-            !grp.empty() && BlitObject(dc, grp, cx, cy, static_cast<int>(u.owner));
+            !grp.empty() && BlitObject(dc, grp, cx, cy, static_cast<int>(u.owner), frame);
         if (!drawn) {
             const int size = std::max(3, pxPerTile_ / 2);
             const HBRUSH brush = ::CreateSolidBrush(
