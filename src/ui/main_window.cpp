@@ -3500,25 +3500,33 @@ const ObjectGraphics& MainWindow::ObjectGraphicsFor() const {
     return objectGraphics_;
 }
 
-const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& relPath) const {
+const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& relPath,
+                                                            int owner) const {
     if (relPath.empty()) return nullptr;
-    auto it = spriteCache_.find(relPath);
+    // 同一 GRP 按玩家颜色缓存不同版本
+    std::wstring key = relPath;
+    if (owner >= 0) {
+        key += L"|";
+        key += std::to_wstring(owner);
+    }
+    auto it = spriteCache_.find(key);
     if (it != spriteCache_.end()) return it->second.bmp ? &it->second : nullptr;
-    if (spriteMissing_.find(relPath) != spriteMissing_.end()) return nullptr;
+    if (spriteMissing_.find(key) != spriteMissing_.end()) return nullptr;
 
     Buffer grpData;
     GrpFile grp;
     if (!LoadObjectGrpBytes(relPath, grpData) || !grp.Parse(grpData) || grp.frameCount() <= 0) {
-        spriteMissing_.insert(relPath);
+        spriteMissing_.insert(key);
         return nullptr;
     }
     Buffer bgra;
     int w = 0;
     int h = 0;
     const Buffer emptyPalette;
-    const Buffer& palette = map_.hasTileset() ? map_.tileset().palette() : emptyPalette;
+    const Buffer& palette =
+        map_.hasTileset() ? TeamPaletteFor(owner) : emptyPalette;
     if (!grp.DecodeFrame(0, palette, bgra, w, h) || w <= 0 || h <= 0) {
-        spriteMissing_.insert(relPath);
+        spriteMissing_.insert(key);
         return nullptr;
     }
 
@@ -3537,7 +3545,7 @@ const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& 
     if (screen) ::ReleaseDC(hwnd_, screen);
     if (!bmp || !bits) {
         if (bmp) ::DeleteObject(bmp);
-        spriteMissing_.insert(relPath);
+        spriteMissing_.insert(key);
         return nullptr;
     }
     std::memcpy(bits, bgra.data(), static_cast<std::size_t>(w) * h * 4);
@@ -3546,12 +3554,13 @@ const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& 
     entry.bmp = bmp;
     entry.width = w;
     entry.height = h;
-    auto inserted = spriteCache_.emplace(relPath, entry);
+    auto inserted = spriteCache_.emplace(key, entry);
     return &inserted.first->second;
 }
 
-bool MainWindow::BlitObject(HDC dc, const std::wstring& relPath, int mapX, int mapY) const {
-    const SpriteBitmap* bmp = SpriteBitmapFor(relPath);
+bool MainWindow::BlitObject(HDC dc, const std::wstring& relPath, int mapX, int mapY,
+                            int owner) const {
+    const SpriteBitmap* bmp = SpriteBitmapFor(relPath, owner);
     if (!bmp || pxPerTile_ <= 0) return false;
     const int left = (mapX - bmp->width / 2) * pxPerTile_ / kTilePixels - scrollX_;
     const int top = (mapY - bmp->height / 2) * pxPerTile_ / kTilePixels - scrollY_;
@@ -3568,12 +3577,54 @@ bool MainWindow::BlitObject(HDC dc, const std::wstring& relPath, int mapX, int m
     return true;
 }
 
+// 对象调色板：在地形集 WPE 基础上，用玩家颜色重写 0x88-0x8F 的 8 级队色渐变
+const Buffer& MainWindow::TeamPaletteFor(int owner) const {
+    auto it = teamPalettes_.find(owner);
+    if (it != teamPalettes_.end()) return it->second;
+
+    Buffer palette = map_.hasTileset() ? map_.tileset().palette() : Buffer();
+    if (palette.size() < 256 * 4) {
+        auto inserted = teamPalettes_.emplace(owner, Buffer());
+        return inserted.first->second;
+    }
+    // 仅玩家 0..7 的归属对象做队色替换；中立/装饰物保持地形集调色板
+    if (owner < 0 || owner >= 8 || !map_.IsOpen()) {
+        auto inserted = teamPalettes_.emplace(owner, std::move(palette));
+        return inserted.first->second;
+    }
+    // 8 种标准玩家颜色（BW 9-12 槽复用/补色；中立用灰）
+    static const u8 kColors[12][3] = {
+        {244, 4, 4},     {12, 72, 204},   {0, 128, 128},   {128, 0, 200},
+        {240, 120, 0},   {128, 64, 0},    {255, 255, 255}, {255, 255, 0},
+        {0, 180, 0},     {0, 255, 255},   {255, 128, 255}, {140, 140, 140},
+    };
+    int colorIndex = 11;
+    if (owner >= 0 && owner < 8 && map_.IsOpen()) {
+        colorIndex = map_.players().player(owner).color;
+        if (colorIndex < 0 || colorIndex >= 8) colorIndex = owner;
+    } else if (owner >= 8 && owner < 12) {
+        colorIndex = owner;
+    }
+    if (colorIndex < 0 || colorIndex >= 12) colorIndex = 11;
+    const u8* rgb = kColors[colorIndex];
+    for (int k = 0; k < 8; k++) {
+        const int shade = 35 + k * 9;   // 35%..98%
+        const std::size_t at = static_cast<std::size_t>(0x88 + k) * 4;
+        palette[at + 0] = static_cast<u8>(rgb[0] * shade / 100);
+        palette[at + 1] = static_cast<u8>(rgb[1] * shade / 100);
+        palette[at + 2] = static_cast<u8>(rgb[2] * shade / 100);
+    }
+    auto inserted = teamPalettes_.emplace(owner, std::move(palette));
+    return inserted.first->second;
+}
+
 void MainWindow::ReleaseSpriteCache() {
     for (auto& kv : spriteCache_) {
         if (kv.second.bmp) ::DeleteObject(kv.second.bmp);
     }
     spriteCache_.clear();
     spriteMissing_.clear();
+    teamPalettes_.clear();
 }
 
 void MainWindow::DrawDoodads(HDC dc, const RECT& client) const {
@@ -3583,11 +3634,11 @@ void MainWindow::DrawDoodads(HDC dc, const RECT& client) const {
     const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
 
     for (const Doodad& d : map_.doodads().Items()) {
-        // DD2 的 type 直接作为 sprites.dat 下标取图形
-        const int cx = (static_cast<int>(d.x) / kTilePixels) * kTilePixels + kTilePixels / 2;
-        const int cy = (static_cast<int>(d.y) / kTilePixels) * kTilePixels + kTilePixels / 2;
+        // DD2 的 type 直接作为 sprites.dat 下标取图形；按 CHK 精确像素坐标居中
         const std::wstring grp = ObjectGraphicsFor().SpriteGrpPath(d.type);
-        if (!grp.empty() && BlitObject(dc, grp, cx, cy)) continue;
+        if (!grp.empty() && BlitObject(dc, grp, static_cast<int>(d.x), static_cast<int>(d.y), -1)) {
+            continue;
+        }
         const int sx = static_cast<int>(d.x) * pxPerTile_ / kTilePixels - scrollX_;
         const int sy = static_cast<int>(d.y) * pxPerTile_ / kTilePixels - scrollY_;
         const int size = std::max(3, pxPerTile_ / 2);
@@ -3611,10 +3662,11 @@ void MainWindow::DrawSprites(HDC dc, const RECT& client) const {
     const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
 
     for (const SpriteRecord& s : map_.sprites().Items()) {
-        const int cx = (static_cast<int>(s.x) / kTilePixels) * kTilePixels + kTilePixels / 2;
-        const int cy = (static_cast<int>(s.y) / kTilePixels) * kTilePixels + kTilePixels / 2;
         const std::wstring grp = ObjectGraphicsFor().SpriteGrpPath(s.type);
-        if (!grp.empty() && BlitObject(dc, grp, cx, cy)) continue;
+        if (!grp.empty() && BlitObject(dc, grp, static_cast<int>(s.x), static_cast<int>(s.y),
+                                       static_cast<int>(s.owner))) {
+            continue;
+        }
         const int sx = static_cast<int>(s.x) * pxPerTile_ / kTilePixels - scrollX_;
         const int sy = static_cast<int>(s.y) * pxPerTile_ / kTilePixels - scrollY_;
         const int size = std::max(3, pxPerTile_ / 2);
@@ -4105,10 +4157,11 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
         if (sx < -pxPerTile_ || sy < -pxPerTile_) continue;
         if (sx > client.right || sy > client.bottom) continue;
 
-        const int cx = tx * kTilePixels + kTilePixels / 2;
-        const int cy = ty * kTilePixels + kTilePixels / 2;
+        const int cx = static_cast<int>(u.x);
+        const int cy = static_cast<int>(u.y);
         const std::wstring grp = ObjectGraphicsFor().UnitGrpPath(u.type);
-        const bool drawn = !grp.empty() && BlitObject(dc, grp, cx, cy);
+        const bool drawn =
+            !grp.empty() && BlitObject(dc, grp, cx, cy, static_cast<int>(u.owner));
         if (!drawn) {
             const int size = std::max(3, pxPerTile_ / 2);
             const HBRUSH brush = ::CreateSolidBrush(

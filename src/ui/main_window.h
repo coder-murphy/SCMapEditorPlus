@@ -189,9 +189,10 @@ private:
         int height = 0;
     };
     const ObjectGraphics& ObjectGraphicsFor() const;
-    const SpriteBitmap* SpriteBitmapFor(const std::wstring& relPath) const;
+    const SpriteBitmap* SpriteBitmapFor(const std::wstring& relPath, int owner) const;
     // 在源像素坐标 (mapX,mapY) 处居中绘制；返回 false 表示无图形
-    bool BlitObject(HDC dc, const std::wstring& relPath, int mapX, int mapY) const;
+    bool BlitObject(HDC dc, const std::wstring& relPath, int mapX, int mapY, int owner) const;
+    const Buffer& TeamPaletteFor(int owner) const;
     void ReleaseSpriteCache();
 
     // 对话框接线
@@ -305,6 +306,7 @@ private:
     mutable bool objectGraphicsTried_ = false;
     mutable std::unordered_map<std::wstring, SpriteBitmap> spriteCache_;
     mutable std::unordered_set<std::wstring> spriteMissing_;
+    mutable std::unordered_map<int, Buffer> teamPalettes_;   // 按玩家颜色生成的对象调色板
     HWND layerCombo_ = nullptr;
     HWND playerCombo_ = nullptr;
     HWND zoomCombo_ = nullptr;
