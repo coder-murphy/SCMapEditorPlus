@@ -61,6 +61,8 @@ constexpr int kToolIndexId = 0x8FE5;
 constexpr int kToolMirrorXId = 0x8FE6;
 constexpr int kToolMirrorYId = 0x8FE7;
 constexpr int kToolMirrorXYId = 0x8FE8;
+constexpr int kToolModeId = 0x8FE9;    // 地形放置方式（原版 4 项 + 复制/剪切/粘贴）
+constexpr int kMaxTerrainBrush = 14;   // 原版工具栏笔刷尺寸 01..14
 
 constexpr const wchar_t* kMapFilter =
     L"StarCraft 地图 (*.scx;*.scm)\0*.scx;*.scm\0所有文件 (*.*)\0*.*\0\0";
@@ -1178,10 +1180,31 @@ void MainWindow::CreateToolbar() {
     terrainCombo_ = makeCombo(kToolTerrainId, 112);
     RebuildTerrainTypeCombo();
 
-    indexCombo_ = makeCombo(kToolIndexId, 38);
-    ::SendMessageW(indexCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"01"));
-    ::SendMessageW(indexCombo_, CB_SETCURSEL, 0, 0);
-    ::EnableWindow(indexCombo_, FALSE);
+    // 地形放置方式：与原版工具栏第 4 个下拉一致（4 种地形模式 + 剪贴板）
+    modeCombo_ = makeCombo(kToolModeId, 112);
+    static const wchar_t* kTerrainModes[] = {L"标准地形", L"方块地形", L"自定义地形",
+                                             L"特殊地形", L"复制/剪切/粘贴"};
+    for (int i = 0; i < 5; i++) {
+        const LRESULT at = ::SendMessageW(modeCombo_, CB_ADDSTRING, 0,
+                                          reinterpret_cast<LPARAM>(kTerrainModes[i]));
+        if (at != CB_ERR) {
+            ::SendMessageW(modeCombo_, CB_SETITEMDATA, static_cast<WPARAM>(at),
+                           static_cast<LPARAM>(i));
+        }
+    }
+
+    // 笔刷尺寸 01..14：原版工具栏 "01" 下拉
+    indexCombo_ = makeCombo(kToolIndexId, 44);
+    for (int i = 1; i <= kMaxTerrainBrush; i++) {
+        wchar_t label[8];
+        ::wsprintfW(label, L"%02d", i);
+        const LRESULT at = ::SendMessageW(indexCombo_, CB_ADDSTRING, 0,
+                                          reinterpret_cast<LPARAM>(label));
+        if (at != CB_ERR) {
+            ::SendMessageW(indexCombo_, CB_SETITEMDATA, static_cast<WPARAM>(at),
+                           static_cast<LPARAM>(i));
+        }
+    }
 
     static const wchar_t* kMirror[] = {L"镜像-X", L"镜像-Y", L"镜像-XY"};
     const int kMirrorIds[] = {kToolMirrorXId, kToolMirrorYId, kToolMirrorXYId};
@@ -1190,7 +1213,6 @@ void MainWindow::CreateToolbar() {
             0, L"Button", kMirror[i], WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
             0, 0, 10, 10, hwnd_,
             reinterpret_cast<HMENU>(static_cast<INT_PTR>(kMirrorIds[i])), hInstance_, nullptr);
-        ::EnableWindow(mirrorButtons_[i], FALSE);
     }
 }
 
@@ -1205,6 +1227,24 @@ void MainWindow::SyncToolbarControls() {
                 break;
             }
         }
+    }
+    if (modeCombo_) {
+        ::SendMessageW(modeCombo_, CB_SETCURSEL,
+                       static_cast<WPARAM>(std::clamp(static_cast<int>(terrainMode_), 0, 4)), 0);
+    }
+    if (indexCombo_) {
+        // 笔刷为矩形（自定义图案）时不强塞一个尺寸，保留最近一次选择
+        if (brushW_ == brushH_ && brushW_ >= 1 && brushW_ <= kMaxTerrainBrush) {
+            ::SendMessageW(indexCombo_, CB_SETCURSEL, static_cast<WPARAM>(brushW_ - 1), 0);
+        }
+    }
+    if (mirrorButtons_[0]) {
+        ::SendMessageW(mirrorButtons_[0], BM_SETCHECK,
+                       mirrorX_ ? BST_CHECKED : BST_UNCHECKED, 0);
+        ::SendMessageW(mirrorButtons_[1], BM_SETCHECK,
+                       mirrorY_ ? BST_CHECKED : BST_UNCHECKED, 0);
+        ::SendMessageW(mirrorButtons_[2], BM_SETCHECK,
+                       (mirrorX_ && mirrorY_) ? BST_CHECKED : BST_UNCHECKED, 0);
     }
     if (playerCombo_) {
         const LRESULT n = ::SendMessageW(playerCombo_, CB_GETCOUNT, 0, 0);
@@ -1294,8 +1334,43 @@ bool MainWindow::OnToolbarCommand(int id, int code) {
         }
         return true;
     }
-    if (id == kToolIndexId || id == kToolMirrorXId ||
-        id == kToolMirrorYId || id == kToolMirrorXYId) {
+    if (id == kToolModeId) {
+        if (code == CBN_SELCHANGE) {
+            const LRESULT sel = ::SendMessageW(modeCombo_, CB_GETCURSEL, 0, 0);
+            if (sel != CB_ERR) SetTerrainPlacementMode(static_cast<TerrainPlacementMode>(sel));
+        }
+        return true;
+    }
+    if (id == kToolIndexId) {
+        if (code == CBN_SELCHANGE) {
+            const LRESULT sel = ::SendMessageW(indexCombo_, CB_GETCURSEL, 0, 0);
+            if (sel != CB_ERR) {
+                const LRESULT size = ::SendMessageW(indexCombo_, CB_GETITEMDATA,
+                                                    static_cast<WPARAM>(sel), 0);
+                if (size > 0) SetTerrainBrushSize(static_cast<int>(size));
+            }
+        }
+        return true;
+    }
+    if (id == kToolMirrorXId || id == kToolMirrorYId || id == kToolMirrorXYId) {
+        if (code == BN_CLICKED) {
+            // 自动复选按钮已翻转自身状态；XY 同时驱动 X/Y 两项
+            const bool xOn = ::SendMessageW(mirrorButtons_[0], BM_GETCHECK, 0, 0) == BST_CHECKED;
+            const bool yOn = ::SendMessageW(mirrorButtons_[1], BM_GETCHECK, 0, 0) == BST_CHECKED;
+            if (id == kToolMirrorXYId) {
+                const bool on = ::SendMessageW(mirrorButtons_[2], BM_GETCHECK, 0, 0) ==
+                                BST_CHECKED;
+                mirrorX_ = on;
+                mirrorY_ = on;
+            } else {
+                mirrorX_ = xOn;
+                mirrorY_ = yOn;
+            }
+            SyncToolbarControls();
+            wchar_t msg[64];
+            ::wsprintfW(msg, L"[地形] 镜像 X=%d Y=%d", mirrorX_ ? 1 : 0, mirrorY_ ? 1 : 0);
+            Output(2, msg);
+        }
         return true;
     }
     return false;
@@ -1363,7 +1438,8 @@ void MainWindow::LayoutChrome() {
         place(playerCombo_, 68);
         place(zoomCombo_, 68);
         place(terrainCombo_, 84);
-        place(indexCombo_, 38);
+        place(modeCombo_, 112);
+        place(indexCombo_, 44);
         place(mirrorButtons_[0], 66);
         place(mirrorButtons_[1], 66);
         place(mirrorButtons_[2], 74);
@@ -1411,8 +1487,9 @@ void MainWindow::UpdateStatusBar() {
     const wchar_t* layer = layers[std::clamp(static_cast<int>(layer_), 0, 5)];
     wchar_t layerText[96];
     if (layer_ == EditLayer::kTerrain) {
-        static const wchar_t* kModeNames[] = {L"等距", L"矩形", L"子瓦片", L"索引"};
-        const int mode = std::clamp(static_cast<int>(terrainMode_), 0, 3);
+        static const wchar_t* kModeNames[] = {L"标准", L"方块", L"自定义", L"特殊",
+                                              L"复制/粘贴"};
+        const int mode = std::clamp(static_cast<int>(terrainMode_), 0, 4);
         ::wsprintfW(layerText, L"%s · %s %dx%d", layer, kModeNames[mode], brushW_, brushH_);
         const TerrainTypeInfo* types =
             map_.hasTileset() ? TerrainTypes(map_.era()) : nullptr;
@@ -3197,6 +3274,10 @@ bool MainWindow::PaintBrushAt(int tx, int ty) {
 
 void MainWindow::StampBrushAt(int tx, int ty) {
     if (!map_.IsOpen()) return;
+    if (terrainMode_ == TerrainPlacementMode::kClipboard) {
+        StampClipboardAt(tx, ty);
+        return;
+    }
     if (brushPattern_.Empty() || (brushPattern_.width == 1 && brushPattern_.height == 1)) {
         StampTerrainAt(tx, ty);
         return;
@@ -3206,29 +3287,107 @@ void MainWindow::StampBrushAt(int tx, int ty) {
     const int oy = ty - brushPattern_.height / 2;
     for (int y = 0; y < brushPattern_.height; y++) {
         for (int x = 0; x < brushPattern_.width; x++) {
-            PaintTileToBuffer(ox + x, oy + y, brushPattern_.At(x, y));
+            PaintTileMirrored(ox + x, oy + y, brushPattern_.At(x, y));
+        }
+    }
+}
+
+// 镜像放置：X 以地图中线左右对称、Y 上下对称；相同坐标只写一次
+void MainWindow::PaintTileMirrored(int tx, int ty, u16 value) {
+    if (!map_.IsOpen()) return;
+    const int w = map_.width();
+    const int h = map_.height();
+    const int xs[2] = {tx, w - 1 - tx};
+    const int ys[2] = {ty, h - 1 - ty};
+    const int nx = mirrorX_ ? 2 : 1;
+    const int ny = mirrorY_ ? 2 : 1;
+    for (int i = 0; i < nx; i++) {
+        for (int j = 0; j < ny; j++) {
+            const int x = xs[i];
+            const int y = ys[j];
+            if (x < 0 || y < 0 || x >= w || y >= h) continue;
+            PaintTileToBuffer(x, y, value);
+        }
+    }
+}
+
+// 等距/矩形等模式按位置计算值，镜像位置也要重新计算（奇偶列规则）
+void MainWindow::PaintTileMirroredAuto(int tx, int ty) {
+    if (!map_.IsOpen()) return;
+    const int w = map_.width();
+    const int h = map_.height();
+    const int xs[2] = {tx, w - 1 - tx};
+    const int ys[2] = {ty, h - 1 - ty};
+    const int nx = mirrorX_ ? 2 : 1;
+    const int ny = mirrorY_ ? 2 : 1;
+    for (int i = 0; i < nx; i++) {
+        for (int j = 0; j < ny; j++) {
+            const int x = xs[i];
+            const int y = ys[j];
+            if (x < 0 || y < 0 || x >= w || y >= h) continue;
+            PaintTileToBuffer(x, y, TerrainValueFor(x, y));
+        }
+    }
+}
+
+// 复制/剪切/粘贴模式：以系统剪贴板中的地形块作为刷子（居中放置）
+void MainWindow::StampClipboardAt(int tx, int ty) {
+    if (SharedClipboard().Empty()) {
+        BeepWarning();
+        return;
+    }
+    const int w = SharedClipboard().width;
+    const int h = SharedClipboard().height;
+    const int ox = tx - w / 2;
+    const int oy = ty - h / 2;
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            PaintTileMirrored(ox + x, oy + y,
+                              SharedClipboard().tiles[static_cast<std::size_t>(y) * w + x]);
         }
     }
 }
 
 void MainWindow::SetTerrainPlacementMode(TerrainPlacementMode mode) {
     terrainMode_ = mode;
-    static const wchar_t* kNames[] = {L"等距地形", L"矩形地形", L"子瓦片", L"瓦片索引"};
-    const int index = std::clamp(static_cast<int>(mode), 0, 3);
+    static const wchar_t* kNames[] = {L"标准地形", L"方块地形", L"自定义地形", L"特殊地形",
+                                      L"复制/剪切/粘贴"};
+    const int index = std::clamp(static_cast<int>(mode), 0, 4);
     Output(2, std::wstring(L"[地形] 放置方式：") + kNames[index]);
+    SyncToolbarControls();
     SyncMenuChecks();
     UpdateStatusBar();
 }
 
 void MainWindow::ResizeTerrainBrush(int delta) {
-    const int w = std::clamp(brushW_ + delta, 1, 15);
-    const int h = std::clamp(brushH_ + delta, 1, 15);
+    const int w = std::clamp(brushW_ + delta, 1, kMaxTerrainBrush);
+    const int h = std::clamp(brushH_ + delta, 1, kMaxTerrainBrush);
     if (w == brushW_ && h == brushH_) return;
     brushW_ = w;
     brushH_ = h;
     wchar_t msg[64];
     ::wsprintfW(msg, L"[地形] 刷子 %dx%d", brushW_, brushH_);
     Output(2, msg);
+    SyncToolbarControls();
+    UpdateStatusBar();
+}
+
+void MainWindow::SetTerrainBrushSize(int size) {
+    const int n = std::clamp(size, 1, kMaxTerrainBrush);
+    if (n == brushW_ && n == brushH_) return;
+    brushW_ = n;
+    brushH_ = n;
+    wchar_t msg[64];
+    ::wsprintfW(msg, L"[地形] 刷子 %dx%d", brushW_, brushH_);
+    Output(2, msg);
+    SyncToolbarControls();
+    UpdateStatusBar();
+}
+
+void MainWindow::SetTerrainMirror(bool mirrorX, bool mirrorY) {
+    mirrorX_ = mirrorX;
+    mirrorY_ = mirrorY;
+    SyncToolbarControls();
     UpdateStatusBar();
 }
 
@@ -3270,6 +3429,7 @@ u16 MainWindow::TerrainValueFor(int tx, int ty) const {
             return static_cast<u16>(group | (brushTile_ & 0x0F));
         }
         case TerrainPlacementMode::kIndexed:
+        case TerrainPlacementMode::kClipboard:
         default:
             return brushTile_;
     }
@@ -3286,7 +3446,7 @@ void MainWindow::StampTerrainAt(int tx, int ty) {
             const int x = ox + dx;
             const int y = oy + dy;
             if (x < 0 || y < 0 || x >= map_.width() || y >= map_.height()) continue;
-            PaintTileToBuffer(x, y, TerrainValueFor(x, y));
+            PaintTileMirroredAuto(x, y);
         }
     }
 }
@@ -5099,6 +5259,8 @@ void MainWindow::CommitEdit(const wchar_t* label) {
         cmd.doodadsAfter = doodadsAfter;
         cmd.fogBefore = std::move(fogSnapshot_);
         cmd.fogAfter = fogAfter;
+        // 界面命令在 BeginEdit 里已经快照了 SP 单位，撤销/重做一并还原
+        cmd.hasSprites = true;
         cmd.spritesBefore = std::move(spritesSnapshot_);
         cmd.spritesAfter = spritesAfter;
     }

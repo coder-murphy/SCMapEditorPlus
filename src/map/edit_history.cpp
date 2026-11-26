@@ -35,13 +35,15 @@ void EditHistory::ApplyMeta(MapDocument& doc, const EditCommand& cmd, bool befor
     if (cmd.hasDecor) {
         const Buffer& doodads = before ? cmd.doodadsBefore : cmd.doodadsAfter;
         const Buffer& fog = before ? cmd.fogBefore : cmd.fogAfter;
-        const Buffer& sprites = before ? cmd.spritesBefore : cmd.spritesAfter;
         // Parse 会清除 modified_；快照为空（例如撤销“清空全部”）也要写回，
         // 否则保存时会继续沿用 CHK 里的旧段内容
         doc.mutableDoodads().Parse(doodads);
         doc.mutableDoodads().MarkModified();
         doc.mutableFog().Parse(fog, doc.width(), doc.height());
         doc.mutableFog().MarkModified();
+    }
+    if (cmd.hasSprites) {
+        const Buffer& sprites = before ? cmd.spritesBefore : cmd.spritesAfter;
         doc.mutableSprites().Parse(sprites);
         doc.mutableSprites().MarkModified();
     }

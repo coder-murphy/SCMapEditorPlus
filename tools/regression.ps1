@@ -5,12 +5,13 @@
   用法：
     powershell -NoProfile -ExecutionPolicy Bypass -File tools\regression.ps1
     powershell ... -SkipBuild                       # 跳过构建，仅跑测试
-    powershell ... -Map "D:\maps\test.scx"          # 追加依赖输入地图的测试
+    powershell ... -Map "D:\maps\test.scx"          # 指定依赖输入地图的测试用图
     powershell ... -Configs Debug/Win32             # 只跑一个配置
 
   说明：
+    - 默认使用仓库内 testdata\regression.scm（含 OWNR/SIDE/COLR/FORC/DD2/THG2/MASK/TRIG 等完整段）；
+      传 -Map '' 可跳过依赖地图的用例；
     - 无头用例由 SCMDTests.exe 运行，UI 探针由 SCMDPlus.exe 运行；
-    - 依赖地图的测试（undo/trig/edit/player/...）在未提供 -Map 时自动跳过；
     - 所有输出写在 %TEMP%\scmdplus_regression_<pid>，结束后清理；
     - 任一构建/审计/测试失败则退出码非 0。
 #>
@@ -25,6 +26,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+if (-not $PSBoundParameters.ContainsKey('Map')) {
+    $defaultMap = Join-Path $root 'testdata\regression.scm'
+    if (Test-Path -LiteralPath $defaultMap) { $Map = $defaultMap }
+}
 if ([string]::IsNullOrEmpty($Ts)) {
     $candidate = Join-Path $root 'ts'
     if (Test-Path -LiteralPath $candidate) { $Ts = $candidate }

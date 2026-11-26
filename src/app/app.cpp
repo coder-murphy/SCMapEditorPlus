@@ -926,6 +926,14 @@ int RunBrushPatternTest(MainWindow& win, const std::wstring& outPath) {
     const bool undoOk = win.Undo() && doc.TileAt(4, 4) == 0 && doc.TileAt(5, 5) == 0;
     const bool redoOk = win.Redo() && doc.TileAt(4, 4) == 0x0040 && doc.TileAt(5, 5) == 0x0043;
 
+    // 镜像-XY：同一笔在地图水平/垂直中线上各写一份（16×16 地图）
+    win.SetTerrainMirror(true, true);
+    const bool mirroredPaint = win.PaintBrushAt(10, 10);
+    const bool mirrorOk = doc.TileAt(10, 10) == 0x0043 && doc.TileAt(9, 9) == 0x0040 &&
+                          doc.TileAt(5, 5) == 0x0043 && doc.TileAt(6, 5) == 0x0042 &&
+                          doc.TileAt(5, 6) == 0x0041 && doc.TileAt(6, 6) == 0x0040;
+    win.SetTerrainMirror(false, false);
+
     const bool saved = doc.Save(outPath);
     MapDocument check;
     const bool reopened = check.Open(outPath, std::wstring());
@@ -936,11 +944,14 @@ int RunBrushPatternTest(MainWindow& win, const std::wstring& outPath) {
 
     wchar_t msg[256];
     ::wsprintfW(msg,
-                L"paint=%d\ntiles=%d\nundo=%d\nredo=%d\nsaved=%d\nreopened=%d\nreopenOk=%d\n",
+                L"paint=%d\ntiles=%d\nundo=%d\nredo=%d\nmirrorPaint=%d\nmirror=%d\n"
+                L"saved=%d\nreopened=%d\nreopenOk=%d\n",
                 painted ? 1 : 0, tileOk ? 1 : 0, undoOk ? 1 : 0, redoOk ? 1 : 0,
-                saved ? 1 : 0, reopened ? 1 : 0, reopenOk ? 1 : 0);
+                mirroredPaint ? 1 : 0, mirrorOk ? 1 : 0, saved ? 1 : 0, reopened ? 1 : 0,
+                reopenOk ? 1 : 0);
     WriteDiag(msg);
-    return (painted && tileOk && undoOk && redoOk && saved && reopenOk) ? 0 : 2;
+    return (painted && tileOk && undoOk && redoOk && mirroredPaint && mirrorOk && saved &&
+            reopenOk) ? 0 : 2;
 }
 
 // --terrain-type-test=<输出scx>：ScmDraft2 地形类型表 / 等距铺设回归
@@ -1151,6 +1162,7 @@ bool ItemEnabled(HWND hwnd, int id) {
 struct CloseOthersCtx {
     HWND keep = nullptr;
     int closed = 0;
+    wchar_t names[512] = L"";
 };
 
 BOOL CALLBACK CloseOtherMainWindow(HWND w, LPARAM lp) {
@@ -1158,6 +1170,10 @@ BOOL CALLBACK CloseOtherMainWindow(HWND w, LPARAM lp) {
     wchar_t cls[64] = L"";
     ::GetClassNameW(w, cls, 64);
     if (std::wcscmp(cls, L"SCMDPlusMainWindow") == 0 && w != ctx->keep) {
+        wchar_t title[96] = L"";
+        ::GetWindowTextW(w, title, 96);
+        ::lstrcatW(ctx->names, title);
+        ::lstrcatW(ctx->names, L"|");
         ::SendMessageW(w, WM_CLOSE, 0, 0);
         ctx->closed++;
     }
@@ -1361,6 +1377,7 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         L"fogAlias=%d\nfogExplored=%d\nallColors=%d\neffects=%d\ndebug=%d\ndebugData=%d\noverlap=%d\nimageSize=%d\n"
         L"compare=%d\nconflict=%d\nminiNav=%d\nsound=%d\ndoodadAny=%d\nlocMode=%d\n"
         L"spAlign=%d\nautoUpdate=%d\noutput=%d\ncache=%d\nwindow=%d\n"
+        L"wNew=%d\nwClosed=%d\nwLive=%d\nwBefore=%d\nwNames=%s\n"
         L"minimapDrag=%d\narrowKeys=%d\n",
         layerInit ? 1 : 0, enabledInit ? 1 : 0, layerUnits ? 1 : 0, layerLoc ? 1 : 0,
         layerBack ? 1 : 0,
@@ -1375,6 +1392,8 @@ int RunMenuCommandTest(HWND hwnd, MainWindow& win) {
         (locGrid && locAny && locNeat) ? 1 : 0, (spAlignOn && spAlignOff) ? 1 : 0,
         (autoUpdateOn && autoUpdateOff) ? 1 : 0,
         outputOk ? 1 : 0, cacheOk ? 1 : 0, windowOk ? 1 : 0,
+        windowCreated ? 1 : 0, closeCtx.closed,
+        MainWindow::LiveWindowCount(), windowsBefore, closeCtx.names,
         minimapDrag ? 1 : 0, arrowKeys ? 1 : 0);
     WriteDiag(msg);
 

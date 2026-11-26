@@ -37,10 +37,11 @@ enum class EditLayer {
 
 // 地形放置方式（对应 ScmDraft2 的地形层模式）
 enum class TerrainPlacementMode {
-    kIsometric = 0,   // 等距地形：按相邻地形类型选子瓦片，自动混合
-    kRectangular = 1, // 矩形地形：按组整格填充，不参与混合
-    kSubtile = 2,     // 子瓦片：只改同组瓦片的子索引
-    kIndexed = 3,     // 瓦片索引：放置精确的 group+index
+    kIsometric = 0,   // 标准地形：按相邻地形类型选子瓦片，自动混合
+    kRectangular = 1, // 方块地形：按组整格填充，不参与混合
+    kSubtile = 2,     // 自定义地形：只改同组瓦片的子索引
+    kIndexed = 3,     // 特殊地形：放置精确的 group+index
+    kClipboard = 4,   // 复制/剪切/粘贴：以剪贴板内容作为刷子
 };
 
 // Locations 描绘模式（选项 → Locations）
@@ -122,6 +123,10 @@ public:
     // 地形放置方式与刷子大小（ScmDraft2 风格）
     void SetTerrainPlacementMode(TerrainPlacementMode mode);
     void ResizeTerrainBrush(int delta);
+    void SetTerrainBrushSize(int size);
+    void SetTerrainMirror(bool mirrorX, bool mirrorY);
+    bool terrainMirrorX() const { return mirrorX_; }
+    bool terrainMirrorY() const { return mirrorY_; }
     TerrainPlacementMode terrainPlacementMode() const { return terrainMode_; }
     int terrainBrushWidth() const { return brushW_; }
     int terrainBrushHeight() const { return brushH_; }
@@ -271,6 +276,9 @@ private:
     void BeepWarning() const;        // 受“启用声音”控制
     void CommitEdit(const wchar_t* label);
     void StampBrushAt(int tx, int ty);
+    void StampClipboardAt(int tx, int ty);
+    void PaintTileMirrored(int tx, int ty, u16 value);
+    void PaintTileMirroredAuto(int tx, int ty);
     void BeginSelection(int tx, int ty);
     void UpdateSelection(int tx, int ty);
     void DrawSelection(HDC dc, const RECT& client) const;
@@ -315,8 +323,12 @@ private:
     HWND zoomCombo_ = nullptr;
     int zoomTempItem_ = -1;   // 滚轮缩放档位不在固定列表时临时追加的项
     HWND terrainCombo_ = nullptr;
+    HWND modeCombo_ = nullptr;
     HWND indexCombo_ = nullptr;
     HWND mirrorButtons_[3] = {nullptr, nullptr, nullptr};
+    // 地形镜像放置：X = 以地图中线左右镜像，Y = 上下镜像（对应原版工具栏三个开关）
+    bool mirrorX_ = false;
+    bool mirrorY_ = false;
     HWND hScroll_ = nullptr;
     HWND vScroll_ = nullptr;
     HWND logVScroll_ = nullptr;

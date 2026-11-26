@@ -1588,6 +1588,7 @@ int RunSpriteTest(const std::wstring& mapPath, const std::wstring& outPath) {
     const Buffer upgrOrig = sectionOf(doc, "UPGR");
     const Buffer dimOrig = sectionOf(doc, "DIM ");
     const Buffer mtxmOrig = sectionOf(doc, "MTXM");
+    const std::size_t baseSprites = doc.sprites().Count();   // 样本地图已有的 THG2 条数
 
     auto& items = doc.mutableSprites().MutableItems();
     items.push_back({100, 4 * 32, 4 * 32, 0, 0, 0x1000});
@@ -1599,7 +1600,7 @@ int RunSpriteTest(const std::wstring& mapPath, const std::wstring& outPath) {
     const Buffer spritesBefore = doc.sprites().Serialize();
     const Buffer doodadsNow = doc.doodads().Serialize();
     const Buffer fogNow = doc.fog().Serialize();
-    SpriteRecord& s0 = doc.mutableSprites().MutableItems()[0];
+    SpriteRecord& s0 = doc.mutableSprites().MutableItems()[baseSprites];
     s0.owner = 2;
     s0.unused = 0x7F;
     s0.flags = static_cast<u16>(0x1000u | 0x2000u | 0x8000u | 0x0001u);
@@ -1617,6 +1618,7 @@ int RunSpriteTest(const std::wstring& mapPath, const std::wstring& outPath) {
     cmd.doodadsAfter = doodadsNow;
     cmd.fogBefore = fogNow;
     cmd.fogAfter = fogNow;
+    cmd.hasSprites = true;
     cmd.spritesBefore = spritesBefore;
     cmd.spritesAfter = spritesAfter;
     history.Push(std::move(cmd));
@@ -1628,15 +1630,15 @@ int RunSpriteTest(const std::wstring& mapPath, const std::wstring& outPath) {
     const bool saved = doc.Save(outPath);
     MapDocument check;
     const bool reopened = check.Open(outPath, std::wstring());
-    const bool fieldsOk = reopened && check.sprites().Count() == 3 &&
-                          check.sprites().Items()[0].type == 100 &&
-                          check.sprites().Items()[0].x == 4 * 32 &&
-                          check.sprites().Items()[0].owner == 2 &&
-                          check.sprites().Items()[0].unused == 0x7F &&
-                          check.sprites().Items()[0].flags == 0xB001u &&
-                          check.sprites().Items()[1].owner == 1 &&
-                          check.sprites().Items()[2].DrawAsSprite() &&
-                          sectionOf(check, "THG2").size() == 30;
+    const bool fieldsOk = reopened && check.sprites().Count() == baseSprites + 3 &&
+                          check.sprites().Items()[baseSprites].type == 100 &&
+                          check.sprites().Items()[baseSprites].x == 4 * 32 &&
+                          check.sprites().Items()[baseSprites].owner == 2 &&
+                          check.sprites().Items()[baseSprites].unused == 0x7F &&
+                          check.sprites().Items()[baseSprites].flags == 0xB001u &&
+                          check.sprites().Items()[baseSprites + 1].owner == 1 &&
+                          check.sprites().Items()[baseSprites + 2].DrawAsSprite() &&
+                          sectionOf(check, "THG2").size() == (baseSprites + 3) * 10;
     const bool preserved = reopened && sectionOf(check, "DD2 ") == dd2Orig &&
                            sectionOf(check, "MASK") == maskOrig &&
                            sectionOf(check, "UPGR") == upgrOrig &&
@@ -2024,6 +2026,7 @@ int RunMapToolsTest(const std::wstring& mapPath, const std::wstring& outPath) {
     dcmd.doodadsAfter = doodadsBytesAfter;
     dcmd.fogBefore = fogNow;
     dcmd.fogAfter = fogNow;
+    dcmd.hasSprites = true;
     dcmd.spritesBefore = spritesNow;
     dcmd.spritesAfter = spritesNow;
     history.Push(std::move(dcmd));

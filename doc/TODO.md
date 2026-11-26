@@ -414,8 +414,11 @@
 - [x] **顶部工具栏（按原版控件顺序）**
   - 左侧命令按钮（顺序实测自原版 `TB_GETBUTTON`）：新建 / 打开 / 保存 / 图像 |
     撤销 / 重做 / 属性 / 删除 | 复制 / 剪切 / 粘贴；分隔符位置与原版一致。
-  - 右侧控件顺序：地形层 **地形** → **Player** → 缩放（25%–400%）→ **标准地形** →
-    **01** → **镜像-X / 镜像-Y / 镜像-XY**（后三者为禁用占位，语义待逆向确认）。
+  - 右侧控件顺序：地形层 **地形** → **Player** → 缩放（25%–400%）→ 地形类型（本工程额外保留）
+    → 放置方式（标准/方块/自定义/特殊/复制剪切粘贴）→ 笔刷 **01–14** →
+    **镜像-X / 镜像-Y / 镜像-XY**；紧跟命令按钮排列。
+  - 放置方式、笔刷尺寸、镜像均已接线（2026-11-26 由原版运行时枚举控件/条目确认）：
+    镜像按地图中线对称写入（X 左右、Y 上下、XY 同时），`--brush-pattern-test` 覆盖。
   - 地形层、Player、缩放可用：下拉切换直接调用 `SetLayer` / `SetUnitPlacement` /
     `ApplyZoomPercent`，并与菜单勾选、状态栏双向同步（`SyncToolbarControls`）。
   - 工具栏高 28px，全宽置顶（含左侧栏上方）；`MapViewRect` / `SideRect` / `VScrollRect`
@@ -619,10 +622,14 @@
 - [x] **一键回归脚本（tools/regression.ps1）**
   - 默认四配置构建 + 四配置对话框审计 + 11 个自包含无头测试（unit-data/unit-param/clip/
     doodad/loc-draw/brush-pattern/tileset-render/file/mpq-compress/edge/menu）。
-  - `-Map <地图>` 追加依赖输入地图的测试（menu-cmd/undo/trig/edit/player/restriction/
-    location/decor/sprite/radar/scenario-text/map-tools/extra/resize）。
+  - 默认使用仓库内 `testdata/regression.scm`（128×128 Ashworld，含 OWNR/SIDE/COLR/FORC/
+    DD2/THG2/MASK/TRIG/MRGN/STR 等完整段）追加 15 项地图测试（menu-cmd/undo/trig/edit/
+    player/restriction/location/decor/sprite/radar/scenario-text/map-tools/extra/resize），
+    共 26 项全绿；传 `-Map ''` 可跳过。
+  - 修复：`EditCommand` 增加 `hasSprites`，装饰物/迷雾命令不再误清 THG2；
+    sprite 测试改为基于样本地图的既有条数；player 测试依赖的 COLR 由样本地图提供。
   - `-SkipBuild` / `-SkipAudit` / `-Configs` 可裁剪；输出写 `%TEMP%\scmdplus_regression_<pid>` 并清理；
-    任一失败退出码非 0。未提供 `-Map` 时自动跳过地图相关项。
+    任一失败退出码非 0。
 - [x] **四配置验证**
   - Debug/Release × Win32/x64 全部构建通过；`tools/dialog-ui-check.ps1`
     四配置均 `audit=1 snapshotMatch=1 interactionMatch=1`，`unitNames172/163/cond193/act194` 全绿。
@@ -630,9 +637,19 @@
 ## 建议顺序
 
 本轮清单已全部完成。剩余可继续项（按优先级）：
-1. 工具栏占位控件语义（标准地形 / 01 / 镜像-X/Y/XY）与原版图标资源来源确认
-2. 其余界面细节（菜单图标、默认值、快捷键）
-3. 测试地图入库（`-Map` 相关测试需要含完整段的样本，仓库目前只有 `tools/repro/crash_repro.scm`）
-4. 174 实际检查/下载逻辑（等 CDN 与包格式确定；当前只预留 `updateCdn`）
-5. （可选）经典 MDI 子窗口/停靠模型（当前为同进程多顶层窗口）
-6. 预览动效：气矿烟雾（`GeySmok1..5.grp`）等动画叠加层的逆向与绘制（详见 P2）
+1. 174 实际检查/下载逻辑（等 CDN 与包格式确定；当前只预留 `updateCdn`）
+2. （可选）经典 MDI 子窗口/停靠模型
+   - 评估结论（2026-11-26）：原版是 `MDIClient` + 自定义 MDI 子窗口；本工程用同进程多顶层窗口
+     已覆盖新建/排列/关闭与独立文档/撤销栈。改成 MDI 需要重构窗口/文档生命周期与菜单命令分发，
+     收益主要是外观一致性，暂不做。
+3. 单位/SP 单位的 iscript 待机动画（unit/sprite → iscript id 映射尚未验证）
+
+已完成（2026-11-26）：
+- 工具栏占位控件语义：原版运行时枚举确认 地形层/Player/缩放/放置方式(标准/方块/自定义/特殊/
+  复制剪切粘贴)/笔刷 01–14/镜像-X/Y/XY；已全部接线，镜像已用于地形绘制并有回归覆盖。
+- 菜单图标/默认值/快捷键：主菜单与加速键表与原版 RT_ACCELERATOR 109 的 34 条逐项一致
+  （`src/res/accel.rc` 自动导出），菜单图标沿用 `assets/menu_icon.bmp` 与工具栏图标。
+- 测试地图入库：`testdata/regression.scm`，`regression.ps1` 默认使用，26 项全绿。
+- 小地图起点标记：维持白色 3×3（此前已按原版导出校准，起点为编辑器标记，不参与队色）。
+- 显示选项：所有颜色/隐藏小雷达/颜色循环/死亡效果/预览迷雾/Locations 等均与原版菜单一致，
+  `--menu-cmd-test` 覆盖勾选与回显。

@@ -40,6 +40,8 @@ struct EditCommand {
     Buffer doodadsAfter;
     Buffer fogBefore;
     Buffer fogAfter;
+    // SP 单位（THG2）；hasSprites=false 时 Undo/Redo 不触碰该层
+    bool hasSprites = false;
     Buffer spritesBefore;      // THG2
     Buffer spritesAfter;
     // WAV / SWNM / MBRF

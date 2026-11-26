@@ -24,7 +24,9 @@
 可用 `tools/dump_original.ps1` 重新生成。
 
 测试入口：`SCMDTests.exe`（无头，`src/tests/`）承载模型/格式/渲染回归；
-UI 探针仍由 `SCMDPlus.exe --*-test` 运行，两者由 `tools/regression.ps1` 统一调度。
+UI 探针仍由 `SCMDPlus.exe --*-test` 运行，两者由 `tools/regression.ps1` 统一调度；
+依赖地图的用例默认使用 `testdata/regression.scm`（含 OWNR/SIDE/COLR/FORC/DD2/THG2/MASK/
+TRIG 等完整段），无需额外传 `-Map`。
 
 AI 技能：`.trae/skills/starcraft-map-assets/` 封装原版 ScmDraft2 解包、星际 MPQ/地形集
 提取与资源组织流程；后续开发地图编辑器时优先加载该技能。
