@@ -85,8 +85,8 @@ bin\Win32\Debug\scmd_cli.exe extract-ts "F:\Games\单机游戏\starcraft" "%TEMP
   repository, and pass `--ts=<dir>` to tests. The build copies `ts/` next to both EXEs.
 - **Fix unit/sprite visuals (orientation, shadow, color)** — read `references/objects.md`.
   Render terrain only with `scmd_cli render --scale 32`, decode the GRP at the CHK anchor,
-  and score with grayscale NCC against `origin.bmp` (target ≥0.99). Use the
-  `.wpe` palette for now; the dedicated object palette is still a TODO.
+  and score with grayscale NCC against `origin.bmp` (target ≥0.99). Objects use the map
+  tileset WPE; remember its bytes are **R,G,B,X** (not BGRA) or red/blue end up swapped.
 
 ## Continuous reinforcement loop
 

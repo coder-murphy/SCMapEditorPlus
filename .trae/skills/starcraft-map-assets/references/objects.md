@@ -77,17 +77,20 @@ scores < 0.2. Binary mask IoU is misleading (shadows and overlaps bias it).
   WPE palette — do not apply a team tint.
 - **Minimap**: draw start locations as 3×3 white dots so they stand out.
 
-## Palettes (partially VERIFIED)
+## Palettes (VERIFIED)
 
-Terrain uses the map tileset WPE (`ts/*.wpe`). Objects rendered by the original editor
-do **not** match any of the eight WPE palettes: e.g. the mineral blues
-`(36,60,100)`, `(52,76,108)`, `(56,92,148)` are absent from all WPE files, and a
-dedicated unit palette must exist. Status: **TODO** — candidates `unit.pal`,
-`unit\neutral\*.pal` etc. were not found in the StarCraft 1.08/1.16 MPQs; it may be
-embedded in the exporter. Until located, object hues will differ slightly.
+Terrain and objects both use the map tileset WPE (`ts/*.wpe`); there is **no** separate
+unit palette. The crucial detail is the byte order:
 
-Useful indices used by sprites: minerals 193..199 and 43..50; geyser 16..245;
-StartLoc only 9..15.
+- **WPE entries are R,G,B,X**, not BGRA. GRP decode must write BGRA as
+  `dst[0]=pal[2]`, `dst[1]=pal[1]`, `dst[2]=pal[0]`, `dst[3]=255`.
+- Reading the WPE as BGRA swaps red and blue and falsely suggests "objects use another
+  palette": e.g. the mineral main color `(36,60,100)` is the raw WPE[193] byte triple.
+- Validation against `origin.bmp` at the same anchor (mean RGB error): isolated
+  minerals 0.02..0.5, geyser 2.6, StartLoc 0.09, AshWorld rock `LALRoc02` **0.00**.
+
+Useful indices used by sprites: minerals 43..50 and 193..196 (+203/209 outline);
+geyser 16..245; StartLoc only 9..15.
 
 ## Animation overlays (TODO)
 
