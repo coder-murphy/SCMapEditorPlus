@@ -254,6 +254,7 @@ BEGIN
         MENUITEM "装饰物窗口", 0x8004
         MENUITEM "刷子窗口", 0x8114
         MENUITEM "单位面板", 0x8ffd
+        MENUITEM "放置面板", 0x8121
         MENUITEM "SP单位窗口", 0x80a4, GRAYED
     END
     POPUP "帮助"

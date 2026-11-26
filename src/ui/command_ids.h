@@ -56,6 +56,7 @@ enum CommandId : int {
     kWindowBrush = 0x8114,
     kWindowSpUnits = 0x80A4,    // 窗口 → SP单位窗口（164）
     kWindowUnitPanel = 0x8FFD,  // 本工程新增：单位放置参数面板
+    kWindowPlacementPalette = 0x8121,  // 本工程新增：放置面板（Tab 分类）
     kWindowNew = 0x80ED,        // 新建窗口（多进程实现）
     kWindowMinimize = 0x80EE,   // 微型窗口
     kWindowTileHorizontal = 0x80EF,

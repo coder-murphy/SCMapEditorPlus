@@ -1602,7 +1602,8 @@ int RunMenuTest(HWND hwnd) {
 
     if (accel) ::DestroyAcceleratorTable(accel);
     ::DestroyMenu(menu);
-    const bool ok = topCount == 10 && items == 226 && accelCount == 34 && idFileNew == 0x8005 &&
+    // 原版导入 224 项 + 本工程新增 MPQ 文件管理/单位面板/放置面板 3 项 = 227
+    const bool ok = topCount == 10 && items == 227 && accelCount == 34 && idFileNew == 0x8005 &&
                     idEditUndo == 0x807F && idHelpAbout == 0x0068 && escHandled;
     return ok ? 0 : 2;
 }

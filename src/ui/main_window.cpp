@@ -1752,6 +1752,7 @@ bool MainWindow::OpenMap(const std::wstring& path) {    if (!map_.Open(path, til
     RefreshBrushPalette();
     RebuildTerrainTypeCombo();
     RefreshDoodadPalette();
+    placementPalette_.Refresh();
     RefreshSceneTree();
     SyncMenuChecks();
     CheckCompatibility();
@@ -2032,6 +2033,7 @@ void MainWindow::NewMap() {
     RefreshBrushPalette();
     RebuildTerrainTypeCombo();
     RefreshDoodadPalette();
+    placementPalette_.Refresh();
     RefreshSceneTree();
     SyncMenuChecks();
 }
@@ -2054,6 +2056,7 @@ void MainWindow::CloseMap() {
     RefreshBrushPalette();
     RebuildTerrainTypeCombo();
     RefreshDoodadPalette();
+    placementPalette_.Refresh();
     RefreshSceneTree();
     SyncMenuChecks();
     ::InvalidateRect(hwnd_, nullptr, TRUE);
@@ -3217,6 +3220,36 @@ void MainWindow::RefreshDoodadPalette() {
     if (!doodadPalette_.IsOpen()) return;
     doodadPalette_.Refresh(map_.IsOpen() ? &map_.doodads() : nullptr, doodadType_, doodadOwner_,
                            doodadDisabled_);
+}
+
+// ── 放置面板（窗口 → 放置面板） ──
+void MainWindow::ShowPlacementPalette() {
+    placementPalette_.Show(hInstance_, hwnd_, this);
+}
+
+std::wstring MainWindow::PaletteUnitName(u16 type) const {
+    return SceneUnitNames().Name(type);
+}
+
+std::wstring MainWindow::PaletteUnitGrpPath(u16 type) const {
+    return ObjectGraphicsFor().UnitGrpPath(type);
+}
+
+bool MainWindow::PaletteDecodeObject(const std::wstring& relPath, int owner, int frame,
+                                     std::vector<u8>& bgra, int& w, int& h) const {
+    bgra.clear();
+    w = 0;
+    h = 0;
+    if (relPath.empty()) return false;
+    Buffer data;
+    GrpFile grp;
+    if (!LoadObjectGrpBytes(relPath, data) || !grp.Parse(data) || grp.frameCount() <= 0) {
+        return false;
+    }
+    const Buffer emptyPalette;
+    const Buffer& palette = map_.hasTileset() ? TeamPaletteFor(owner) : emptyPalette;
+    const int useFrame = frame >= 0 && frame < grp.frameCount() ? frame : 0;
+    return grp.DecodeFrame(useFrame, palette, bgra, w, h) && w > 0 && h > 0;
 }
 
 void MainWindow::OpenCustomBrush() {
@@ -5793,6 +5826,7 @@ void MainWindow::RegisterCommands() {
         ::InvalidateRect(hwnd_, nullptr, FALSE);
     });
     commands_.Register(kWindowDoodads, [this](int) { ShowDoodadPalette(); });
+    commands_.Register(kWindowPlacementPalette, [this](int) { ShowPlacementPalette(); });
 
     // 地图显示比率
     commands_.Register(kZoom25, [this](int) { ApplyZoomPercent(25); });

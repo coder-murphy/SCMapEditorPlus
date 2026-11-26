@@ -14,6 +14,7 @@
 #include "ui/brush_palette.h"
 #include "ui/command_table.h"
 #include "ui/doodad_palette.h"
+#include "ui/placement_palette.h"
 
 namespace scmd {
 
@@ -133,6 +134,17 @@ public:
     // 当前地形类型（ScmDraft2 地形类型表的槽位 0..12，用于等距地形）
     void SetTerrainTypeSlot(int slot);
     int terrainTypeSlot() const { return terrainTypeSlot_; }
+
+    // 放置面板（窗口 → 放置面板）：Tab 分类容纳地形/单位/装饰物/地区
+    void ShowPlacementPalette();
+    void PaletteSetLayer(EditLayer layer) { SetLayer(layer); }
+    void PaletteSetBrushTile(u16 value) { SetBrushTile(value); }
+    u8 unitOwner() const { return unitOwner_; }
+    u32 unitResource() const { return unitResource_; }
+    std::wstring PaletteUnitName(u16 type) const;
+    std::wstring PaletteUnitGrpPath(u16 type) const;
+    bool PaletteDecodeObject(const std::wstring& relPath, int owner, int frame,
+                             std::vector<u8>& bgra, int& w, int& h) const;
 
     // SP 单位放置（也用于无头回归）
     void SetSpPlacement(u16 type, u8 owner, u16 flags);
@@ -444,6 +456,7 @@ private:
     u16 spPlaceFlags_ = 0;
     BrushPalette brushPalette_;
     DoodadPalette doodadPalette_;
+    PlacementPalette placementPalette_;
     EditHistory history_;
     bool editOpen_ = false;
     Buffer tilesSnapshot_;
