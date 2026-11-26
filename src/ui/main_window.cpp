@@ -4202,6 +4202,24 @@ void MainWindow::DrawCreep(HDC dc, const RECT& client) const {
     ::SetStretchBltMode(dc, oldMode);
 }
 
+// 气矿烟雾叠加层（原版预览动效）：GeySmok1..3 分别对应气矿的三个喷口，
+// 画布 32×64、各 8 帧。canvasDx/canvasDy 是“画布左上角相对单位中心”的偏移，
+// 由原版导出 origin.bmp 与 GRP 逐像素比对得出（多张地图气矿上均命中 100% 颜色）。
+// phase 为三个喷口的错相，8 帧后接 8 帧间隔，避免三个喷口同步、也贴近原版时有时无的观感。
+struct GeyserSmokeVent {
+    const wchar_t* grp;
+    int canvasDx;
+    int canvasDy;
+    int phase;
+};
+constexpr int kGeyserSmokeFrameCount = 8;
+constexpr int kGeyserSmokeCycle = 16;
+constexpr GeyserSmokeVent kGeyserSmokeVents[] = {
+    {L"thingy\\GeySmok1.grp", -5, -51, 0},    // 中后喷口
+    {L"thingy\\GeySmok2.grp", -56, -45, 5},   // 左侧喷口
+    {L"thingy\\GeySmok3.grp", 18, -30, 10},   // 右侧喷口（最低）
+};
+
 void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
     if (!map_.IsOpen()) return;
 
@@ -4246,6 +4264,21 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
             r.bottom = r.top + size;
             ::FillRect(dc, &r, brush);
             ::DeleteObject(brush);
+        }
+
+        // 气矿动效：三个喷口各有一组循环烟雾，叠在气矿本体之上；
+        // 各气矿按坐标错相，避免整张地图的气矿同时冒烟/同时停歇
+        if (u.type == 188) {
+            const int unitPhase =
+                (static_cast<int>(u.x) / kTilePixels * 5 +
+                 static_cast<int>(u.y) / kTilePixels * 11) & (kGeyserSmokeCycle - 1);
+            for (const GeyserSmokeVent& vent : kGeyserSmokeVents) {
+                const int step = (animFrame_ + unitPhase + vent.phase) % kGeyserSmokeCycle;
+                if (step >= kGeyserSmokeFrameCount) continue;   // 间隔期：不画
+                // GRP 以画布中心为锚点，这里把观测到的画布左上角换算成锚点坐标
+                BlitObject(dc, vent.grp, cx + vent.canvasDx + 16, cy + vent.canvasDy + 32, -1,
+                           step);
+            }
         }
 
         if (specialPen && u.validState != 0x0018) {
@@ -6041,7 +6074,18 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
                                    [now](const DeathMark& m) { return now - m.tick > 500; }),
                     deathMarks_.end());
                 const bool animating = allowColorCycle_ && showUnits_ && map_.IsOpen();
-                if (animating || !deathMarks_.empty() || deathMarks_.size() != before) {
+                bool smokeAnimating = false;
+                if (showUnits_ && map_.IsOpen()) {
+                    for (const UnitRecord& u : map_.units()) {
+                        if (u.type == 188) {
+                            smokeAnimating = true;
+                            break;
+                        }
+                    }
+                }
+                if (smokeAnimating) animFrame_ = (animFrame_ + 1) % kGeyserSmokeCycle;
+                if (animating || smokeAnimating || !deathMarks_.empty() ||
+                    deathMarks_.size() != before) {
                     ::InvalidateRect(hwnd_, nullptr, FALSE);
                 }
                 return 0;

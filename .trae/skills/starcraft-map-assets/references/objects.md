@@ -92,10 +92,32 @@ unit palette. The crucial detail is the byte order:
 Useful indices used by sprites: minerals 43..50 and 193..196 (+203/209 outline);
 geyser 16..245; StartLoc only 9..15.
 
-## Animation overlays (TODO)
+## Geyser smoke overlay (VERIFIED, implemented)
 
-The original preview animates geyser gas: `unit\thingy\GeySmok1..5.grp`
-(32×64 canvas, 8 frames) plus `GeySmoS1`. Not drawn yet; see `doc/TODO.md`.
+The original preview animates geyser gas. Three emitters are used, one per vent; each
+is a 32×64 / 8-frame GRP from `unit\thingy\` drawn on top of the geyser body:
+
+| GRP | canvas top-left offset vs unit center | vent |
+| --- | --- | --- |
+| `GeySmok1.grp` | (-5, -51) | rear / center |
+| `GeySmok2.grp` | (-56, -45) | left |
+| `GeySmok3.grp` | (18, -30) | right (lowest) |
+
+How the offsets were obtained: decode every (variant, frame) with the map WPE, then
+scan `origin.bmp` around all 12 geysers of `darkcrystal` for exact palette-colour hits.
+The matched offsets are identical across different geysers and the colour match is
+**100%** for the visible frames (e.g. GeySmok2 f0/f1/f4 at (-56,-45), GeySmok3 f2/f3/f4
+at (18,-30), GeySmok1 f5 at (-5,-51)). `GeySmok4/5` and `GeySmoS1` (smoke shadow)
+never match in this tileset, so they are not drawn.
+
+- Draw order: geyser body first, smoke on top (puffs overlap the body rim).
+- Position: canvas-center anchored → pass `mapX = unitX + dx + 16`,
+  `mapY = unitY + dy + 32` to the standard `BlitObject`.
+- Animation: 8 frames per puff. The preview leaves many geysers without visible smoke
+  at a given instant, so the editor uses 8 smoke frames + 8 idle frames, with the three
+  vents offset in phase and each geyser phase-shifted by its tile coordinates.
+- Frame rate: one frame per existing 120 ms `WM_TIMER` tick.
+- Owner: neutral (`-1`), i.e. raw WPE palette; no team tint.
 
 ## UI coordinate system (VERIFIED)
 
@@ -123,3 +145,11 @@ bin\x64\Release\scmd_cli.exe render <map.scm> "$env:TEMP\terrain32.bmp" --scale 
   coordinates (the DPI-unaware app does not scale injected mouse messages), and make
   the window topmost with `SetWindowPos(hwnd, HWND_TOPMOST, …, SWP_NOACTIVATE)`
   (never include `SWP_NOZORDER`, or topmost is ignored).
+- Screenshot probes must call `SetProcessDPIAware()` first. Otherwise `GetWindowRect` /
+  `CopyFromScreen` work in 96-DPI virtual coordinates and capture only the top-left of
+  the real window (at 150% scaling the app's client is 1.5× bigger than reported).
+- Deterministic scrolling: `GetDlgItem(hwnd, 0x8FF1/0x8FF2)` then
+  `SetScrollInfo(bar, SIF_TRACKPOS)` and send `WM_HSCROLL`/`WM_VSCROLL` with
+  `SB_THUMBTRACK=8` to the main window (the handler reads `si.nTrackPos`).
+- Verify the animated smoke by scanning the screenshot for the six exact GeySmok
+  palette greens; their bounding boxes must move/change between shots.

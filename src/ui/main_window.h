@@ -379,6 +379,7 @@ private:
         ULONGLONG tick = 0;
     };
     std::vector<DeathMark> deathMarks_;   // 0x80F6：删除单位后的短暂 X 标记
+    int animFrame_ = 0;                   // 场景动效时钟（120ms/拍，气矿烟雾等使用）
 
     // 选项 → 输出面板
     struct OutputLine {
