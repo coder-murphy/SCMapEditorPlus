@@ -38,7 +38,8 @@ parsers, dumps, and docs; reuse them instead of re-deriving formats.
   against `origin.bmp` (≥0.99), never with mask IoU alone.
 - Object palette: team color is indices 8..15 **and** 0x88..0x8F (9/10 bright, 11 mid,
   12..15 dark); neutral/resources (owner ≥ 8) stay untinted. Shadows are the `*Sha*`
-  image 1–2 `images.dat` entries after the body and use the same center anchor.
+  image 1–2 `images.dat` entries after the body, drawn at the same anchor as **50% black
+  over terrain** (not the GRP's palette color).
 
 ## Quick commands
 

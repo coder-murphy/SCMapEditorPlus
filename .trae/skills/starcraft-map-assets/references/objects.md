@@ -58,7 +58,11 @@ scores < 0.2. Binary mask IoU is misleading (shadows and overlaps bias it).
   start location.
 - **Shadows**: the shadow image is 1–2 `images.dat` entries after the object and its
   GRP name contains `Sha`/`Shad` (min01→min01Sha, geyser→geyShad, Acritter→nacShad).
-  Draw it at the same anchor before the body, with the raw (untinted) palette.
+  Draw it at the same anchor before the body. The shadow GRP uses only palette index 1,
+  but the original does **not** paint that index's color: it composites the silhouette
+  as **50% black over the terrain** (measured on `origin.bmp`: shadow ≈ terrain × 0.5,
+  mean error 5.0; painting WPE index 1 opaque gives error 35.8). Implement by forcing
+  shadow pixels to RGB(0,0,0) with alpha 128 inside the DIB.
   Start Location 214 is an editor marker — never draw a shadow for it.
   Shadow canvases are often larger than the body canvas (e.g. 128×96 vs 64×96), so
   centering the shadow canvas produces the intended down-left offset.

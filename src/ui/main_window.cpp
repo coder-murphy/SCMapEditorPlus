@@ -3539,7 +3539,8 @@ const ObjectGraphics& MainWindow::ObjectGraphicsFor() const {
 }
 
 const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& relPath,
-                                                            int owner, int frame) const {
+                                                            int owner, int frame,
+                                                            bool shadow) const {
     if (relPath.empty()) return nullptr;
     // 同一 GRP 按玩家颜色/帧缓存不同版本
     std::wstring key = relPath;
@@ -3551,6 +3552,7 @@ const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& 
         key += L"#";
         key += std::to_wstring(frame);
     }
+    if (shadow) key += L"~shadow";
     auto it = spriteCache_.find(key);
     if (it != spriteCache_.end()) return it->second.bmp ? &it->second : nullptr;
     if (spriteMissing_.find(key) != spriteMissing_.end()) return nullptr;
@@ -3571,6 +3573,17 @@ const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& 
     if (!grp.DecodeFrame(useFrame, palette, bgra, w, h) || w <= 0 || h <= 0) {
         spriteMissing_.insert(key);
         return nullptr;
+    }
+    // 原版阴影不是 GRP 自带颜色，而是把阴影剪影按 50% 黑色叠加到地形上：
+    // 这里直接把不透明像素改成黑色 + alpha 128，交给 AlphaBlend 混合
+    if (shadow) {
+        for (std::size_t at = 0; at + 3 < bgra.size(); at += 4) {
+            if (bgra[at + 3] == 0) continue;
+            bgra[at + 0] = 0;
+            bgra[at + 1] = 0;
+            bgra[at + 2] = 0;
+            bgra[at + 3] = 128;
+        }
     }
 
     BITMAPINFO bi = {};
@@ -3602,8 +3615,8 @@ const MainWindow::SpriteBitmap* MainWindow::SpriteBitmapFor(const std::wstring& 
 }
 
 bool MainWindow::BlitObject(HDC dc, const std::wstring& relPath, int mapX, int mapY,
-                            int owner, int frame) const {
-    const SpriteBitmap* bmp = SpriteBitmapFor(relPath, owner, frame);
+                            int owner, int frame, bool shadow) const {
+    const SpriteBitmap* bmp = SpriteBitmapFor(relPath, owner, frame, shadow);
     if (!bmp || pxPerTile_ <= 0) return false;
     const int left = (mapX - bmp->width / 2) * pxPerTile_ / kTilePixels - scrollX_;
     const int top = (mapY - bmp->height / 2) * pxPerTile_ / kTilePixels - scrollY_;
@@ -3632,8 +3645,8 @@ const Buffer& MainWindow::TeamPaletteFor(int owner) const {
         auto inserted = teamPalettes_.emplace(owner, Buffer());
         return inserted.first->second;
     }
-    // 中立/装饰/资源（owner >= 8）与阴影（owner < 0）保持地形集调色板原色，
-    // 与原版一致：矿物的晶体、气矿阴影不能被队色覆盖
+    // 中立/装饰/资源（owner >= 8）保持地形集调色板原色，
+    // 与原版一致：矿物的晶体、气矿等不能被队色覆盖
     if (owner < 0 || owner >= 8) {
         auto inserted = teamPalettes_.emplace(owner, std::move(palette));
         return inserted.first->second;
@@ -3707,7 +3720,8 @@ void MainWindow::DrawSprites(HDC dc, const RECT& client) const {
         if (!grp.empty()) {
             const std::wstring shadow = ObjectGraphicsFor().SpriteShadowGrpPath(s.type);
             if (!shadow.empty()) {
-                BlitObject(dc, shadow, static_cast<int>(s.x), static_cast<int>(s.y), -1);
+                BlitObject(dc, shadow, static_cast<int>(s.x), static_cast<int>(s.y), -1, 0,
+                           true);
             }
         }
         if (!grp.empty() && BlitObject(dc, grp, static_cast<int>(s.x), static_cast<int>(s.y),
@@ -4217,7 +4231,7 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
         // 先画阴影（原版导出的单位/资源下方有投影）；出生点是编辑器标记，不画阴影
         if (u.type != 214) {
             const std::wstring shadow = ObjectGraphicsFor().UnitShadowGrpPath(u.type);
-            if (!shadow.empty()) BlitObject(dc, shadow, cx, cy, -1, frame);
+            if (!shadow.empty()) BlitObject(dc, shadow, cx, cy, -1, frame, true);
         }
         const bool drawn =
             !grp.empty() && BlitObject(dc, grp, cx, cy, static_cast<int>(u.owner), frame);

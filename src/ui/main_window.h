@@ -192,10 +192,11 @@ private:
     };
     const ObjectGraphics& ObjectGraphicsFor() const;
     const SpriteBitmap* SpriteBitmapFor(const std::wstring& relPath, int owner,
-                                        int frame = 0) const;
+                                        int frame = 0, bool shadow = false) const;
     // 在源像素坐标 (mapX,mapY) 处居中绘制；frame 为 GRP 帧（默认 0）
+    // shadow=true 时按原版规则画成 50% 黑色投影
     bool BlitObject(HDC dc, const std::wstring& relPath, int mapX, int mapY, int owner,
-                    int frame = 0) const;
+                    int frame = 0, bool shadow = false) const;
     const Buffer& TeamPaletteFor(int owner) const;
     void ReleaseSpriteCache();
 
