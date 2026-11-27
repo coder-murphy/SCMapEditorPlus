@@ -4935,8 +4935,40 @@ void MainWindow::Present(HDC dc, const RECT& client) {
         if (locationDrawing_) DrawLocationPreview(dc, local);
         DrawSelection(dc, local);
 
-        // 光标所在格高亮
-        if (cursorTx_ >= 0) {
+        // 光标刷子预览：等距/子瓦片为 2:1 菱形，其余模式为刷子范围方块（原版红色）
+        if (cursorTx_ >= 0 && map_.IsOpen() && layer_ == EditLayer::kTerrain) {
+            const bool diamond = terrainMode_ == TerrainPlacementMode::kIsometric ||
+                                 terrainMode_ == TerrainPlacementMode::kSubtile;
+            const int px = std::max(1, pxPerTile_);
+            const HPEN pen = ::CreatePen(PS_SOLID, 1, RGB(255, 0, 0));
+            const HGDIOBJ oldPen = ::SelectObject(dc, pen);
+            const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(HOLLOW_BRUSH));
+            if (diamond) {
+                // 等距刷：尺寸 01 = 2×1 瓦片的菱形，N 对应 2N×N 瓦片
+                const int n = std::max(1, brushW_);
+                const int cx = (cursorTx_ + 1) * px - scrollX_;
+                const int cy = cursorTy_ * px + px / 2 - scrollY_;
+                const int hw = n * px;
+                const int hh = std::max(1, n * px / 2);
+                POINT pts[5] = {{cx - hw, cy},
+                                {cx, cy - hh},
+                                {cx + hw, cy},
+                                {cx, cy + hh},
+                                {cx - hw, cy}};
+                ::Polyline(dc, pts, 5);
+            } else {
+                const int w = std::max(1, brushW_);
+                const int h = std::max(1, brushH_);
+                const int ox = cursorTx_ - (w - 1) / 2;
+                const int oy = cursorTy_ - (h - 1) / 2;
+                RECT r = {ox * px - scrollX_, oy * px - scrollY_,
+                          (ox + w) * px - scrollX_, (oy + h) * px - scrollY_};
+                ::Rectangle(dc, r.left, r.top, r.right, r.bottom);
+            }
+            ::SelectObject(dc, oldBrush);
+            ::SelectObject(dc, oldPen);
+            ::DeleteObject(pen);
+        } else if (cursorTx_ >= 0) {
             const int sx = cursorTx_ * pxPerTile_ - scrollX_;
             const int sy = cursorTy_ * pxPerTile_ - scrollY_;
             RECT r = {sx, sy, sx + pxPerTile_, sy + pxPerTile_};
