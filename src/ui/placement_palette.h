@@ -52,6 +52,7 @@ private:
     bool RenderDoodadIcon(u16 type, std::vector<u8>& bgra32) const;
     int AddIcon(const std::vector<u8>& bgra32);
     int AddPlaceholderIcon();
+    int AddBlackIcon();   // CV5 空槽：原版索引表里画成纯黑格
 
     HINSTANCE instance_ = nullptr;
     HWND owner_ = nullptr;

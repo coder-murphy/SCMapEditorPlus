@@ -317,6 +317,13 @@ int PlacementPalette::AddPlaceholderIcon() {
     return AddIcon(dark);
 }
 
+// CV5 空槽（megatile 引用为 0）：原版 Tileset Indexed 表照常占位，画成纯黑格
+int PlacementPalette::AddBlackIcon() {
+    std::vector<u8> black(static_cast<std::size_t>(kIconSize) * kIconSize * 4, 0);
+    for (std::size_t i = 0; i < black.size(); i += 4) black[i + 3] = 255;
+    return AddIcon(black);
+}
+
 int PlacementPalette::AddIcon(const std::vector<u8>& bgra32) {
     if (!images_ || bgra32.size() < static_cast<std::size_t>(kIconSize) * kIconSize * 4) {
         return -1;
@@ -550,16 +557,18 @@ void PlacementPalette::RebuildTerrainGrid() {
     }
     EndUpdate();
 
-    images_ = ImageList_Create(kIconSize, kIconSize, ILC_COLOR32, 1, 32);
+    images_ = ImageList_Create(kIconSize, kIconSize, ILC_COLOR32, 1, 16);
     BeginUpdate();
     const Tileset& ts = win_->map().tileset();
+    // 原版 Tileset Indexed 表按 group<<4|sub 连续枚举 16 格，空槽照样占位（黑色），
+    // 便于与原版逐格对照，也允许直接选中空槽做原始索引放置。
     for (int sub = 0; sub < 16; sub++) {
-        if (!ts.HasSubtile(group, static_cast<u16>(sub))) continue;
         const u16 value = static_cast<u16>((group << 4) | static_cast<u16>(sub));
+        const bool has = ts.HasSubtile(group, static_cast<u16>(sub));
         std::vector<u8> icon;
         int image = -1;
-        if (RenderTile(value, icon)) image = AddIcon(icon);
-        if (image < 0) image = AddPlaceholderIcon();
+        if (has && RenderTile(value, icon)) image = AddIcon(icon);
+        if (image < 0) image = AddBlackIcon();
         wchar_t label[16];
         ::wsprintfW(label, L"%02d", sub);
         LVITEMW item = {};
