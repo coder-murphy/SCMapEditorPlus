@@ -74,6 +74,7 @@ public:
     bool MaybeSave();   // 有未保存修改时询问，返回 false 表示取消
     const MapDocument& map() const { return map_; }
     MapDocument& mutableMap() { return map_; }
+    const IsomTerrain& isomTerrain() const { return isomTerrain_; }   // 回归：字典自检
 
     bool RebuildView(int pxPerTile);
     int FitZoom() const;                  // 按地图尺寸限制当前缩放

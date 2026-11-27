@@ -3521,15 +3521,16 @@ void MainWindow::StampTerrainAt(int tx, int ty) {
 }
 
 // 等距（ISOM）落笔：以地形类型对应的中心 ISOM 刷入，自动接出高低地过渡。
-// 首次落笔时从当前地图的 ISOM+MTXM 学习“瓦片索引 -> CV5 组”字典。
+// 首次落笔时按地形集 CV5 记录建立“瓦片索引 -> CV5 组”字典。
 bool MainWindow::StampIsometricAt(int tx, int ty) {
     if (!map_.hasTileset() || !map_.hasIsom()) return false;
     if (isomNeedsLearn_) {
         isomNeedsLearn_ = false;
         isomTerrain_.Learn(map_.tileset(), map_.isom(), map_.tiles(), map_.width(),
                            map_.height(), map_.era());
-        Log(L"[isom] learn %dx%d era=%d ready=%d", map_.width(), map_.height(), map_.era(),
-            isomTerrain_.ready() ? 1 : 0);
+        Log(L"[isom] dict %dx%d era=%d ready=%d roundtrip=%d/%d", map_.width(), map_.height(),
+            map_.era(), isomTerrain_.ready() ? 1 : 0, isomTerrain_.roundTripMismatches(),
+            isomTerrain_.roundTripMissing());
     }
     if (!isomTerrain_.ready() || !isomTerrain_.SlotDefined(terrainTypeSlot_)) return false;
 

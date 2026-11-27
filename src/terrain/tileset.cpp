@@ -114,6 +114,14 @@ u16 Tileset::Type(u16 group) const {
     return static_cast<u16>(ReadU16(cv5_.data() + group * 52) >> 1);
 }
 
+bool Tileset::GroupTileIndex(u16 group, u16& type, u16 abuts[4]) const {
+    if (group >= GroupCount()) return false;
+    const u8* rec = cv5_.data() + static_cast<std::size_t>(group) * 52;
+    type = ReadU16(rec);
+    for (int i = 0; i < 4; i++) abuts[i] = ReadU16(rec + 4 + i * 2);
+    return type != 0;
+}
+
 bool Tileset::HasSubtile(u16 group, int index) const {
     if (group >= GroupCount() || index < 0 || index > 15) return false;
     return ReadU16(cv5_.data() + group * 52 + 20 + index * 2) != 0;

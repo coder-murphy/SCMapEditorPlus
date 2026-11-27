@@ -30,6 +30,10 @@ public:
     bool IsWalkable(u16 group) const;
     u16 Type(u16 group) const;
 
+    // CV5 记录里的等距瓦片标识：字 0 = TILE 类型，字 2..5 = 四向（左/上/右/下）邻接 ID。
+    // 过渡瓦片与纯地形瓦片用同一套标识，原版据此建立 ISOM_TILE -> 组 字典。
+    bool GroupTileIndex(u16 group, u16& type, u16 abuts[4]) const;
+
     // 组内子索引（0..15）是否有有效大瓦片（CV5 引用非 0）
     bool HasSubtile(u16 group, int index) const;
     // 组内第一个有效子索引；无有效项时返回 0

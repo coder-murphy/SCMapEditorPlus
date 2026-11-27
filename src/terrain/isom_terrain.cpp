@@ -74,6 +74,14 @@ inline void WriteU16(u8* p, u16 v) {
     p[1] = static_cast<u8>(v >> 8);
 }
 
+// ISOM_TILE 的字典键：类型 + 四向（左/上/右/下）邻接 ID，各 6 位。
+// 原版不把上下邻接放进键（上下由 mega 索引衔接），邻接值可能到 0x3F，
+// 因此不能压缩成 2 位，否则不同悬崖/过渡瓦片会串到同一组。
+inline u32 PackTileKey(u16 type, u16 left, u16 top, u16 right, u16 bottom) {
+    return (type & 0x3Fu) | ((left & 0x3Fu) << 6) | ((top & 0x3Fu) << 12) |
+           ((right & 0x3Fu) << 18) | ((bottom & 0x3Fu) << 24);
+}
+
 }  // namespace
 
 // ── ERA 参数表（数据来自 ScmDraft2 逆向：PARAM_TABLE）──
@@ -399,8 +407,9 @@ void IsomTerrain::Clear() {
     dirty_.clear();
     tiles_.clear();
     dict_.clear();
-    dictFlat_.clear();
     dictType_.clear();
+    roundTripMismatches_ = 0;
+    roundTripMissing_ = 0;
     info_ = EraInfo();
     tileset_ = nullptr;
 }
@@ -432,66 +441,63 @@ bool IsomTerrain::Learn(const Tileset& tileset, const Buffer& isom, const Buffer
     BuildEraInfo();
     if (!info_.init) return false;
 
-    // 从地图样本学习 ISOM_TILE -> CV5 组 的字典
+    // 从 CV5 记录建立 ISOM_TILE -> CV5 组 字典。每条记录头部自带 TILE 类型与
+    // 四向邻接 ID，过渡瓦片与纯地形瓦片用同一套标识，因此字典覆盖完整。
+    // 偶数组是基准组，奇数组是同一标识的配对组（落笔时写 group / group+1）。
+    const int groupCount = tileset.GroupCount();
+    dict_.reserve(static_cast<std::size_t>(groupCount) / 2 + 16);
+    dictType_.reserve(64);
+    for (int g = 0; g + 1 < groupCount; g += 2) {
+        u16 type = 0;
+        u16 abuts[4] = {0, 0, 0, 0};
+        if (!tileset.GroupTileIndex(static_cast<u16>(g), type, abuts)) continue;
+        if (type > 0x23) continue;   // 只接受 ISOM 地形类型；其余为特殊/装饰组
+        bool abutOk = true;
+        for (int i = 0; i < 4 && abutOk; i++) abutOk = abuts[i] <= 0x3F;
+        if (!abutOk) continue;       // 6 位邻接 ID 之外的记录不是 ISOM 瓦片标识
+
+        DictEntry entry;
+        entry.group = static_cast<u16>(g);
+        entry.megaMask = MegaMaskOf(tileset, entry.group);
+        if (!entry.megaMask) continue;
+        dict_.emplace(PackTileKey(type, abuts[0], abuts[1], abuts[2], abuts[3]), entry);
+        const u16 typeKey = static_cast<u16>(type & 0x3F);
+        if (dictType_.find(typeKey) == dictType_.end()) dictType_[typeKey] = entry;
+    }
+
+    // 自检：用字典把整张地图重算一遍，与地图原 MTXM 组号对照。
+    // 正确的字典 + 正确的标识字段顺序应几乎没有差异（自定义地形图除外）。
     std::vector<TileIndex> computed(cells);
     for (int cy = 0; cy < line_; cy++) {
         for (int cx = 0; cx < rowW_; cx++) MakeTileIndex(cx, cy, computed.data());
     }
-
-    struct Vote {
-        u16 group = 0;
-        u32 count = 0;
-    };
-    auto vote = [](auto& map, auto key, u16 group) {
-        Vote& v = map[key];
-        if (v.group == group) {
-            v.count++;
-        } else if (v.count == 0) {
-            v.group = group;
-            v.count = 1;
-        } else if (--v.count == 0) {
-            v.group = group;
-            v.count = 1;
-        }
-    };
-
-    std::unordered_map<u32, Vote> votes;
-    std::unordered_map<u32, Vote> votesFlat;
-    std::unordered_map<u16, Vote> votesType;
-    votes.reserve(cells);
-    votesFlat.reserve(cells);
-    votesType.reserve(64);
+    roundTripMismatches_ = 0;
+    roundTripMissing_ = 0;
     for (int cy = 0; cy < height_; cy++) {
-        for (int cx = 0; cx < rowW_; cx++) {
+        for (int cx = 0; cx * 2 < width_; cx++) {
+            if (((cx ^ cy) & 1) != 0) continue;
             const TileIndex& t = computed[static_cast<std::size_t>(cy) * rowW_ + cx];
-            if (t.type == 0) continue;
-            if (cx * 2 >= width_) continue;   // 右侧多出的一列菱形只用于边界
+            if (!t.type) continue;
             u32 key = 0;
             if (!KeyFor(t, key)) continue;
-            const u16 value = tiles_[static_cast<std::size_t>(cy) * width_ + cx * 2];
-            const u16 group = static_cast<u16>((value & 0x7FF0) >> 4);
-            if (group == 0) continue;
-            vote(votes, key, group);
-            // 放宽键：忽略上下邻接 / 只看类型，用于地图样本不足时的兜底
-            const u32 flat = key & ~(0x3u << 14) & ~(0x3u << 16);
-            vote(votesFlat, flat, group);
-            vote(votesType, static_cast<u16>(t.type & 0x3F), group);
+            const auto it = dict_.find(key);
+            if (it == dict_.end()) {
+                roundTripMissing_++;
+                continue;
+            }
+            const std::size_t at = static_cast<std::size_t>(cy) * width_ + cx * 2;
+            const u16 even = static_cast<u16>((tiles_[at] & 0x7FF0) >> 4);
+            const u16 odd = static_cast<u16>((tiles_[at + 1] & 0x7FF0) >> 4);
+            if (even == it->second.group && odd == it->second.group + 1) continue;
+            // 同一瓦片标识可能有多个 CV5 组（外观变体），地图用另一个组不算错误
+            u16 aType = 0;
+            u16 aAbuts[4] = {0, 0, 0, 0};
+            const bool sameKey =
+                tileset.GroupTileIndex(static_cast<u16>(even & ~1), aType, aAbuts) &&
+                PackTileKey(aType, aAbuts[0], aAbuts[1], aAbuts[2], aAbuts[3]) == key;
+            if (!sameKey) roundTripMismatches_++;
         }
     }
-    auto build = [&](const auto& src, auto& dst) {
-        dst.reserve(src.size());
-        for (const auto& kv : src) {
-            if (kv.second.count == 0 || kv.second.group == 0) continue;
-            DictEntry entry;
-            entry.group = kv.second.group;
-            entry.megaMask = MegaMaskOf(tileset, entry.group);
-            if (!entry.megaMask) continue;
-            dst[kv.first] = entry;
-        }
-    };
-    build(votes, dict_);
-    build(votesFlat, dictFlat_);
-    build(votesType, dictType_);
 
     ready_ = !dict_.empty();
     isomChanged_ = false;
@@ -698,7 +704,8 @@ u16 IsomTerrain::IsometricLink(u16 isom, int from, int bx, int by, bool& updated
     if (!InBounds(ccx, ccy)) return 0;
 
     const u16* cell = Cell(ccx, ccy);
-    const u16 link = cell[from];
+    // 低 4 位是位置位，高 12 位才是 ISOM 值
+    const u16 link = static_cast<u16>(cell[from] >> 4);
     if (!link) return 0;
 
     int lx = 0, ly = 0;
@@ -806,7 +813,7 @@ void IsomTerrain::ResolveLinks(std::deque<std::pair<int, int>>& queue) {
         const int y = queue.front().second;
         queue.pop_front();
         if (!InBounds(x, y)) continue;
-        const u16 current = Cell(x, y)[LEFT];
+        const u16 current = static_cast<u16>(Cell(x, y)[LEFT] >> 4);
         if (!current) continue;
         for (int from = 0; from < 4; from++) {
             bool updated = false;
@@ -821,10 +828,8 @@ void IsomTerrain::ResolveLinks(std::deque<std::pair<int, int>>& queue) {
 
 bool IsomTerrain::KeyFor(const TileIndex& t, u32& key) const {
     if (t.type > 0x3F) return false;
-    key = static_cast<u32>(t.type & 0x3F) | (static_cast<u32>(t.leftAbut & 3) << 6) |
-          (static_cast<u32>(t.topAbut & 3) << 8) | (static_cast<u32>(t.rightAbut & 3) << 10) |
-          (static_cast<u32>(t.bottomAbut & 3) << 12) | (static_cast<u32>(t.upAbut & 3) << 14) |
-          (static_cast<u32>(t.downAbut & 3) << 16);
+    // 上下邻接不参与查表（与原版一致，上下由 mega 索引衔接）
+    key = PackTileKey(t.type, t.leftAbut, t.topAbut, t.rightAbut, t.bottomAbut);
     return true;
 }
 
@@ -833,7 +838,7 @@ bool IsomTerrain::MakeTileIndex(int cx, int cy, TileIndex* computed) const {
     if (!InBounds(cx, cy)) return false;
 
     const u16* cell = Cell(cx, cy);
-    const u16 isom = cell[LEFT];
+    const u16 isom = static_cast<u16>(cell[LEFT] >> 4);   // 去掉位置位
 
     const EraParam& param = ParamFor(era_);
     TileMap tm{};
@@ -954,14 +959,9 @@ void IsomTerrain::UpdateTile(int cx, int cy, const TileIndex* computed) {
     if (it != dict_.end()) {
         entry = &it->second;
     } else {
-        const u32 flat = key & ~(0x3u << 14) & ~(0x3u << 16);
-        auto itFlat = dictFlat_.find(flat);
-        if (itFlat != dictFlat_.end()) {
-            entry = &itFlat->second;
-        } else {
-            auto itType = dictType_.find(static_cast<u16>(t.type & 0x3F));
-            if (itType != dictType_.end()) entry = &itType->second;
-        }
+        // 兜底：只按类型匹配（正常地图不应命中）
+        auto itType = dictType_.find(static_cast<u16>(t.type & 0x3F));
+        if (itType != dictType_.end()) entry = &itType->second;
     }
     u16 group = 0;
     DictEntry fallback;
@@ -970,7 +970,7 @@ void IsomTerrain::UpdateTile(int cx, int cy, const TileIndex* computed) {
         fallback = *entry;
     } else {
         // 字典没有覆盖：中心地形直接按 ERA 地形类型表取纯组，保证至少能落笔
-        const int center = IsomToCenter(Cell(cx, cy)[LEFT]);
+        const int center = IsomToCenter(static_cast<u16>(Cell(cx, cy)[LEFT] >> 4));
         const TerrainTypeInfo* types = TerrainTypes(era_);
         if (center < 0 || !types || center >= kTerrainTypeSlots) return;
         group = types[center].group;

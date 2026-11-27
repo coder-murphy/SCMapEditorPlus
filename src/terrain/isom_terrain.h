@@ -14,11 +14,12 @@ class Tileset;
 // 原版 ScmDraft2 等距地形（ISOM）管线：
 //   ISOM 四个边值 + 邻居连接 -> 计算瓦片索引（type + 邻接） -> 查字典得到 CV5 组
 //   -> 按组的有效子瓦片掩码挑选 mega index，写入 MTXM。
-// 字典（ISOM_TILE -> 组）从当前地图的 ISOM + MTXM 样本学习，无需外部数据文件。
+// 字典（ISOM_TILE -> 组）由地形集 CV5 记录建立：每条 CV5 记录头部自带
+// 类型与四向邻接 ID，过渡瓦片因此与纯地形使用同一套标识，覆盖完整。
 class IsomTerrain {
 public:
-    // 从地图样本建立 ERA 参数与字典。isom 长度必须为 8*(w/2+1)*(h+1)；
-    // 缺失/尺寸不符或 ERA 无参数时返回 false（调用方回退旧逻辑）。
+    // 载入地图 ISOM/MTXM 并按 CV5 记录建立 ERA 参数与字典。isom 长度必须为
+    // 8*(w/2+1)*(h+1)；缺失/尺寸不符或 ERA 无参数时返回 false（调用方回退旧逻辑）。
     bool Learn(const Tileset& tileset, const Buffer& isom, const Buffer& tiles, int width,
                int height, int era);
     void Clear();
@@ -31,6 +32,10 @@ public:
 
     // 内部 ISOM 是否有改动（用于脏标记/撤销）
     bool isomChanged() const { return isomChanged_; }
+
+    // 字典自检：用 CV5 字典重算整图后，与原 MTXM 组号不一致/未命中的格子数。
+    int roundTripMismatches() const { return roundTripMismatches_; }
+    int roundTripMissing() const { return roundTripMissing_; }
 
     // 内部 ISOM -> 定长字节缓冲（u16 小端，顺序与 CHK 一致）
     void WriteIsom(Buffer& out) const;
@@ -161,10 +166,12 @@ private:
     std::vector<u16> isom_;                 // 内部 ISOM（每单元 4 个 u16）
     std::vector<u8> dirty_;                 // 每单元 1 位（这里用 1 字节简化）
     std::vector<u16> tiles_;                // 当前 MTXM 副本
-    std::unordered_map<u32, DictEntry> dict_;  // 样本学习到的 ISOM_TILE -> 组
-    // 放宽匹配：忽略上下邻接 / 只按类型（地图样本不足以覆盖所有组合时使用）
-    std::unordered_map<u32, DictEntry> dictFlat_;
+    // CV5 记录建立的 ISOM_TILE -> 组 字典
+    std::unordered_map<u32, DictEntry> dict_;
+    // 兜底：只按类型匹配（正常地图不应命中）
     std::unordered_map<u16, DictEntry> dictType_;
+    int roundTripMismatches_ = 0;
+    int roundTripMissing_ = 0;
     EraInfo info_;
     const Tileset* tileset_ = nullptr;
 };

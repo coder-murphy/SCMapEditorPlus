@@ -1115,9 +1115,11 @@ int RunTerrainBlendTest(MainWindow& win, const std::wstring& mapPath, const std:
     ::wsprintfW(msg,
                 L"spot=%d center=%d,%d\npainted=%d\ntilesChanged=%d\nisomChanged=%d\n"
                 L"changedTiles=%d\ncenterPure=%d\ninvalid=%d\npure=%d\ntransition=%d\n"
+                L"roundTrip=%d/%d\n"
                 L"undo=%d\nredo=%d\nsaved=%d\nreopened=%d\nreopenOk=%d\n",
                 spot ? 1 : 0, cx, cy, painted ? 1 : 0, tilesChanged ? 1 : 0,
                 isomChanged ? 1 : 0, changedTiles, centerPure, invalid, pure, transition,
+                win.isomTerrain().roundTripMismatches(), win.isomTerrain().roundTripMissing(),
                 undoOk ? 1 : 0, redoOk ? 1 : 0, saved ? 1 : 0, reopened ? 1 : 0,
                 reopenOk ? 1 : 0);
     WriteDiag(msg);
