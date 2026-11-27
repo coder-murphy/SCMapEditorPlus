@@ -143,7 +143,7 @@ enum CommandId : int {
     kDispLocations = 0x8115,
 
     kTriggerEditor = 0x810F,    // 触发 → 编辑触发
-    kTriggerTextView = 0x8FF9,  // 本工程新增：触发 → 文本视图（只读，206）
+    kTriggerTextView = 0x8122,  // 本工程新增：触发 → 文本视图（只读，206；避开 0x8FF9）
 
     // 调试菜单
     kDebugEnable = 0x80DE,      // 允许调试

@@ -136,7 +136,8 @@ public:
     int terrainTypeSlot() const { return terrainTypeSlot_; }
 
     // 放置面板（窗口 → 放置面板）：Tab 分类容纳地形/单位/装饰物/地区
-    void ShowPlacementPalette();
+    // tab >= 0 时打开后切到指定页（0 地形 / 1 单位 / 2 装饰物 / 3 地区）
+    void ShowPlacementPalette(int tab = -1);
     void PaletteSetLayer(EditLayer layer) { SetLayer(layer); }
     void PaletteSetBrushTile(u16 value) { SetBrushTile(value); }
     u8 unitOwner() const { return unitOwner_; }

@@ -845,8 +845,8 @@ bool MainWindow::Create(HINSTANCE hInstance) {    hInstance_ = hInstance;
             ::AppendMenuW(file, MF_SEPARATOR, 0, nullptr);
             ::AppendMenuW(file, MF_STRING, kMpqFileManager, L"MPQ 文件管理...");
         }
-        // 去掉「帮助」菜单（关于/主页/在线帮助/论坛/错误与建议/捐款及自测入口）
-        ::RemoveMenu(bar, 8, MF_BYPOSITION);
+        // 原版「帮助」菜单保留：关于 / 主页 / 在线帮助 / 论坛 / 错误与建议 / 捐款
+        // 均已接入本工程实现（链接指向项目页或给出说明）。
         ::DrawMenuBar(hwnd_);
         // 「选项」菜单追加地形放置方式（对应 ScmDraft2 的四种地形模式）
         if (HMENU options = ::GetSubMenu(bar, 2)) {
@@ -3223,8 +3223,8 @@ void MainWindow::RefreshDoodadPalette() {
 }
 
 // ── 放置面板（窗口 → 放置面板） ──
-void MainWindow::ShowPlacementPalette() {
-    placementPalette_.Show(hInstance_, hwnd_, this);
+void MainWindow::ShowPlacementPalette(int tab) {
+    placementPalette_.Show(hInstance_, hwnd_, this, tab);
 }
 
 std::wstring MainWindow::PaletteUnitName(u16 type) const {
@@ -5822,9 +5822,7 @@ void MainWindow::RegisterCommands() {
     commands_.Register(kWindowTileHorizontal, [this](int) { ArrangeWindows(true); });
     commands_.Register(kWindowTileVertical, [this](int) { ArrangeWindows(false); });
     commands_.Register(kWindowClose, [this](int) { ::PostMessageW(hwnd_, WM_CLOSE, 0, 0); });
-    commands_.Register(kWindowTerrain, [this](int) {
-        ::InvalidateRect(hwnd_, nullptr, FALSE);
-    });
+    commands_.Register(kWindowTerrain, [this](int) { ShowPlacementPalette(0); });
     commands_.Register(kWindowDoodads, [this](int) { ShowDoodadPalette(); });
     commands_.Register(kWindowPlacementPalette, [this](int) { ShowPlacementPalette(); });
 

@@ -16,7 +16,8 @@ class MainWindow;
 // 选中即切换当前层与放置类型；图形使用地形集调色板与单位 GRP 缩略图。
 class PlacementPalette {
 public:
-    void Show(HINSTANCE instance, HWND owner, MainWindow* win);
+    // tab >= 0 时先切到指定页（0 地形 / 1 单位 / 2 装饰物 / 3 地区）
+    void Show(HINSTANCE instance, HWND owner, MainWindow* win, int tab = -1);
     void Hide();
     void Refresh();                 // 地图/地形集/层数据变化后重建当前页
     bool IsOpen() const { return hwnd_ != nullptr; }

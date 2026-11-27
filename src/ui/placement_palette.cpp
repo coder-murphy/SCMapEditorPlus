@@ -56,10 +56,11 @@ void SetControlFont(HWND h) {
 
 }  // namespace
 
-void PlacementPalette::Show(HINSTANCE instance, HWND owner, MainWindow* win) {
+void PlacementPalette::Show(HINSTANCE instance, HWND owner, MainWindow* win, int tab) {
     instance_ = instance;
     owner_ = owner;
     win_ = win;
+    if (tab >= 0) tab_ = std::clamp(tab, 0, 3);
 
     if (!hwnd_) {
         WNDCLASSEXW wc = {};
@@ -83,6 +84,7 @@ void PlacementPalette::Show(HINSTANCE instance, HWND owner, MainWindow* win) {
         CreateChildren();
         Layout();
     }
+    if (tabs_) TabCtrl_SetCurSel(tabs_, tab_);
     Refresh();
     ::ShowWindow(hwnd_, SW_SHOW);
     ::SetWindowPos(hwnd_, HWND_TOP, 0, 0, 0, 0,
