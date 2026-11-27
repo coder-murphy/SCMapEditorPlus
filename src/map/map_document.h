@@ -45,6 +45,11 @@ public:
     const Buffer& tiles() const { return tiles_; }
     Buffer& mutableTiles() { return tiles_; }
 
+    // ISOM（编辑器等距地形）：长度 = 8*(w/2+1)*(h+1)；未修改时原样写回
+    const Buffer& isom() const { return isom_; }
+    Buffer& mutableIsom() { return isom_; }
+    bool hasIsom() const { return !isom_.empty(); }
+
     const Tileset& tileset() const { return tileset_; }
     bool hasTileset() const { return tileset_.IsLoaded(); }
 
@@ -134,6 +139,7 @@ private:
     int height_ = 0;
     u16 era_ = 0;                  // 0..7，越界按 0 处理
     Buffer tiles_;                 // MTXM 原始字节（u16 小端）
+    Buffer isom_;                  // ISOM 原始字节（u16 小端，4 值/单元）
     std::vector<UnitRecord> units_;
     TriggerSection triggers_;
     LocationTable locations_;

@@ -16,6 +16,10 @@ struct EditCommand {
     std::wstring label;
     Buffer tilesBefore;
     Buffer tilesAfter;
+    // ISOM（等距地形）；hasIsom=false 时 Undo/Redo 不触碰该层
+    bool hasIsom = false;
+    Buffer isomBefore;
+    Buffer isomAfter;
     std::vector<UnitRecord> unitsBefore;
     std::vector<UnitRecord> unitsAfter;
     // TRIG / MRGN / STR 的序列化快照；hasMeta=false 表示该命令不涉及元数据

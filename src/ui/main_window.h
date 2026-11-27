@@ -9,6 +9,7 @@
 #include "map/edit_history.h"
 #include "map/map_document.h"
 #include "terrain/brush.h"
+#include "terrain/isom_terrain.h"
 #include "terrain/terrain_renderer.h"
 #include "units/object_graphics.h"
 #include "ui/brush_palette.h"
@@ -241,6 +242,8 @@ private:
     void RefreshBrushPalette();
     void RebuildTerrainTypeCombo();
     void StampTerrainAt(int tx, int ty);
+    // 等距（ISOM）落笔：自动生成高低地过渡；地图缺少 ISOM 或学习失败时返回 false
+    bool StampIsometricAt(int tx, int ty);
     u16 TerrainValueFor(int tx, int ty) const;
 
     // 装饰物窗口（窗口 → 装饰物窗口）
@@ -422,6 +425,8 @@ private:
     TerrainBrush brushPattern_;      // 当前刷子图案（1x1 即单格刷）
     std::vector<TerrainBrush> customBrushes_;   // 182 列表（进程内）
     TerrainPlacementMode terrainMode_ = TerrainPlacementMode::kIsometric;
+    IsomTerrain isomTerrain_;        // 等距地形（ISOM）管线：从当前地图学习过渡字典
+    bool isomNeedsLearn_ = true;     // 开图/撤销/重开后下一笔重新学习
     int brushW_ = 1;   // 地形刷宽（格），+/- 调整
     int brushH_ = 1;   // 地形刷高（格）
     int terrainTypeSlot_ = 0;   // ScmDraft2 地形类型表槽位（等距模式使用）
@@ -462,6 +467,7 @@ private:
     EditHistory history_;
     bool editOpen_ = false;
     Buffer tilesSnapshot_;
+    Buffer isomSnapshot_;
     std::vector<UnitRecord> unitsSnapshot_;
     Buffer triggersSnapshot_;
     Buffer locationsSnapshot_;

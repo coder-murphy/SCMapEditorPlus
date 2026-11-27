@@ -1,6 +1,7 @@
 ﻿#include "ui/main_window.h"
 
 #include <algorithm>
+#include <cmath>
 #include <commctrl.h>
 #include <commdlg.h>
 #include <cstdlib>
@@ -1741,6 +1742,8 @@ bool MainWindow::OpenMap(const std::wstring& path) {    if (!map_.Open(path, til
     }
     history_.Clear();
     editOpen_ = false;
+    isomNeedsLearn_ = true;
+    isomTerrain_.Clear();
     locationDrawing_ = false;
     ClearSelection();
     AppSettings::Instance().AddRecentMap(path);
@@ -2024,6 +2027,8 @@ void MainWindow::NewMap() {
     fileName_.clear();
     history_.Clear();
     editOpen_ = false;
+    isomNeedsLearn_ = true;
+    isomTerrain_.Clear();
     locationDrawing_ = false;
     ClearSelection();
     UpdateTitle();
@@ -2047,6 +2052,8 @@ void MainWindow::CloseMap() {
     fileName_.clear();
     history_.Clear();
     editOpen_ = false;
+    isomNeedsLearn_ = true;
+    isomTerrain_.Clear();
     locationDrawing_ = false;
     ClearSelection();
     ReleaseBackBuffer();
@@ -2129,6 +2136,8 @@ void MainWindow::ResizeMapDialog() {
     }
     history_.Clear();     // 旧快照与新尺寸不兼容
     editOpen_ = false;
+    isomNeedsLearn_ = true;
+    isomTerrain_.Clear();
     ClearSelection();
     RebuildView(LoadZoom());
     UpdateTitle();
@@ -3496,6 +3505,7 @@ u16 MainWindow::TerrainValueFor(int tx, int ty) const {
 
 void MainWindow::StampTerrainAt(int tx, int ty) {
     if (!map_.IsOpen()) return;
+    if (terrainMode_ == TerrainPlacementMode::kIsometric && StampIsometricAt(tx, ty)) return;
     const int w = std::max(1, brushW_);
     const int h = std::max(1, brushH_);
     const int ox = tx - (w - 1) / 2;
@@ -3508,6 +3518,73 @@ void MainWindow::StampTerrainAt(int tx, int ty) {
             PaintTileMirroredAuto(x, y);
         }
     }
+}
+
+// 等距（ISOM）落笔：以地形类型对应的中心 ISOM 刷入，自动接出高低地过渡。
+// 首次落笔时从当前地图的 ISOM+MTXM 学习“瓦片索引 -> CV5 组”字典。
+bool MainWindow::StampIsometricAt(int tx, int ty) {
+    if (!map_.hasTileset() || !map_.hasIsom()) return false;
+    if (isomNeedsLearn_) {
+        isomNeedsLearn_ = false;
+        isomTerrain_.Learn(map_.tileset(), map_.isom(), map_.tiles(), map_.width(),
+                           map_.height(), map_.era());
+        Log(L"[isom] learn %dx%d era=%d ready=%d", map_.width(), map_.height(), map_.era(),
+            isomTerrain_.ready() ? 1 : 0);
+    }
+    if (!isomTerrain_.ready() || !isomTerrain_.SlotDefined(terrainTypeSlot_)) return false;
+
+    // 等距刷：笔刷尺寸 N 对应屏幕上 2N×N 的菱形；收集菱形内的 ISOM 单元后一次填充
+    const int n = std::max(1, brushW_);
+    const int mapW = map_.width();
+    const int mapH = map_.height();
+    const bool flipX = mirrorX_;
+    const bool flipY = mirrorY_;
+
+    std::vector<std::pair<int, int>> cells;
+    auto addCell = [&](int cx, int cy) {
+        if (cx < 0 || cy < 0 || cx >= (mapW / 2 + 1) || cy >= mapH) return;
+        for (const auto& c : cells) {
+            if (c.first == cx && c.second == cy) return;
+        }
+        cells.push_back({cx, cy});
+    };
+    auto collectArea = [&](int centerTileX, int centerTileY) {
+        const double centerX = centerTileX + 1.0;
+        const double centerY = centerTileY + 0.5;
+        const double halfW = static_cast<double>(n);
+        const double halfH = std::max(1.0, n / 2.0);
+        const int cx0 = centerTileX / 2;
+        const int radius = n + 2;
+        for (int dy = -radius; dy <= radius; dy++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                const int cx = cx0 + dx;
+                const int cy = centerTileY + dy;
+                if (cx < 0 || cy < 0 || cx >= (mapW / 2 + 1) || cy >= mapH) continue;
+                const double tx2 = cx * 2 + 1.0;
+                const double ty2 = cy + 0.5;
+                if (std::abs(tx2 - centerX) / halfW + std::abs(ty2 - centerY) / halfH > 1.0) {
+                    continue;
+                }
+                addCell(cx, cy);
+            }
+        }
+    };
+
+    collectArea(tx, ty);
+    if (flipX) collectArea(mapW - 1 - tx, ty);
+    if (flipY) collectArea(tx, mapH - 1 - ty);
+    if (flipX && flipY) collectArea(mapW - 1 - tx, mapH - 1 - ty);
+    if (cells.empty()) addCell(tx / 2, ty);
+    if (!isomTerrain_.Fill(terrainTypeSlot_, cells)) return false;
+
+    std::vector<std::pair<int, int>> changed;
+    isomTerrain_.FlushTiles(map_.mutableTiles(), &changed);
+    isomTerrain_.WriteIsom(map_.mutableIsom());
+    map_.MarkDirty();
+    for (const auto& p : changed) {
+        PaintTileToBuffer(p.first, p.second, map_.TileAt(p.first, p.second));
+    }
+    return true;
 }
 
 void MainWindow::SetLayer(EditLayer layer) {
@@ -5261,6 +5338,7 @@ void MainWindow::BeginEdit() {
     if (editOpen_) return;
     editOpen_ = true;
     tilesSnapshot_ = map_.tiles();
+    isomSnapshot_ = map_.isom();
     unitsSnapshot_ = map_.units();
     triggersSnapshot_ = map_.triggers().Serialize();
     locationsSnapshot_ = map_.locations().Serialize();
@@ -5281,6 +5359,7 @@ void MainWindow::CommitEdit(const wchar_t* label) {
 
     const Buffer& tiles = map_.tiles();
     const bool tilesChanged = tiles != tilesSnapshot_;
+    const bool isomChanged = map_.isom() != isomSnapshot_;
     const bool unitsChanged = map_.units().size() != unitsSnapshot_.size() ||
         !std::equal(map_.units().begin(), map_.units().end(), unitsSnapshot_.begin(),
                     [](const UnitRecord& a, const UnitRecord& b) {
@@ -5311,9 +5390,10 @@ void MainWindow::CommitEdit(const wchar_t* label) {
     const bool extraChanged = wavAfter != wavSnapshot_ || swnmAfter != swnmSnapshot_ ||
                               mbrfAfter != mbrfSnapshot_;
 
-    if (!tilesChanged && !unitsChanged && !metaChanged && !playersChanged &&
+    if (!tilesChanged && !isomChanged && !unitsChanged && !metaChanged && !playersChanged &&
         !restrictionsChanged && !decorChanged && !extraChanged) {
         tilesSnapshot_.clear();
+        isomSnapshot_.clear();
         unitsSnapshot_.clear();
         triggersSnapshot_.clear();
         locationsSnapshot_.clear();
@@ -5334,6 +5414,11 @@ void MainWindow::CommitEdit(const wchar_t* label) {
     cmd.label = label;
     cmd.tilesBefore = std::move(tilesSnapshot_);
     cmd.tilesAfter = tiles;
+    if (isomChanged) {
+        cmd.hasIsom = true;
+        cmd.isomBefore = std::move(isomSnapshot_);
+        cmd.isomAfter = map_.isom();
+    }
     cmd.unitsBefore = std::move(unitsSnapshot_);
     cmd.unitsAfter = map_.units();
     if (metaChanged) {
@@ -5380,6 +5465,7 @@ void MainWindow::CommitEdit(const wchar_t* label) {
     triggersSnapshot_.clear();
     locationsSnapshot_.clear();
     stringsSnapshot_.clear();
+    isomSnapshot_.clear();
     playersSnapshot_.clear();
     restrictionsSnapshot_.clear();
     doodadsSnapshot_.clear();
@@ -5454,6 +5540,7 @@ void MainWindow::RefreshAfterHistory(const Buffer& oldTiles) {
 bool MainWindow::Undo() {
     const Buffer before = map_.tiles();
     if (!history_.Undo(map_)) return false;
+    isomNeedsLearn_ = true;
     RefreshAfterHistory(before);
     UpdateTitle();
     SyncMenuChecks();
@@ -5463,6 +5550,7 @@ bool MainWindow::Undo() {
 bool MainWindow::Redo() {
     const Buffer before = map_.tiles();
     if (!history_.Redo(map_)) return false;
+    isomNeedsLearn_ = true;
     RefreshAfterHistory(before);
     UpdateTitle();
     SyncMenuChecks();

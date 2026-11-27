@@ -234,9 +234,34 @@ VA 0x47C878 处是 8 × 14 个 u32（第 14 项保留为 0），代码 0x413920 
 CV5 组号的低 4 位即子索引；地图数据验证：Jungle 水（组 6）出现在偶数列、
 组 7 出现在奇数列，且奇数列子索引与左格完全一致（样本 17036/17037 吻合）。
 
-实现位置：表数据在 `src/terrain/terrain_types.cpp`，等距铺设规则在
-`MainWindow::TerrainValueFor`（等距分支），默认/随机子索引在
+实现位置：表数据在 `src/terrain/terrain_types.cpp`；等距模式下地图有 ISOM 段时走
+`src/terrain/isom_terrain.*`（见下节），否则回退到 `MainWindow::TerrainValueFor`
+的“组内随机/沿用”旧规则；默认/随机子索引在
 `Tileset::FirstValidSubtile / RandomValidSubtile`。回归：`--terrain-type-test=<out.scx>`。
+
+## 等距地形（ISOM）绘制管线
+
+原版 ScmDraft2 的等距地形不是“同组换子索引”，而是维护 `ISOM` 段的四条边值，
+再由硬编码表把“四边形状 + 邻接关系”映射到 CV5 组。本工程按同样管线实现，
+但把硬编码字典改为**从当前地图样本学习**，因此不依赖外部数据文件：
+
+1. **ISOM 段**：`u16[(w/2+1)*(h+1)*4]`，每个 2×1 菱形单元 4 个值
+   （左/上/右/下）：bit0 编辑位、bit1-3 位置、bit4-14 地形类型 ID、bit15 skip。
+   打开地图时按精确长度校验，匹配才启用；保存时原样写回（含绘制修改）。
+2. **ERA 参数表**：`src/terrain/isom_terrain.cpp` 内置 8 个地形集的
+   `center[13]`（中心 ISOM/类型/邻接/样式）与 `edge[12]`（低地/高地/悬崖邻接），
+   以及 14 种边缘形状模板（`SHAPE_TABLE`），取自原版 `PARAM_TABLE`。
+3. **画笔**：等距模式按预览菱形（屏幕上 2N×N）收集 N×N 个 ISOM 单元，
+   先把单元自身写为纯中心值，再从这些单元向外做连接解析
+   （`IsometricLink` / `MatchShape` / `SearchBrushLink`），得到高低地/悬崖过渡。
+4. **生成 MTXM**：对每个脏单元计算 `ISOM_TILE`（type + 4 个水平邻接 + 上下邻接），
+   查字典得到偶数 CV5 组，奇数格用 `组 + 1`；子索引按 CV5 有效掩码随机，
+   悬崖列沿用上一行同一列的子索引（与原版 `gen_mega_tile_index` 一致）。
+5. **字典学习**：遍历地图所有菱形单元，用同一套 `map_isom_tile` 逻辑计算键，
+   以 MTXM 偶数格组号投票得到 `键 → 组`；另存“忽略上下邻接”和“仅按类型”的
+   放宽表，地图样本不足时依次回退。
+6. **撤销/保存**：`EditCommand` 增加 ISOM 前后快照；`MapDocument` 保存时写回
+   `ISOM` 段；改尺寸时 ISOM 按菱形网格平移（越界取最近边缘值）。
 
 
 

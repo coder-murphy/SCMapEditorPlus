@@ -65,6 +65,7 @@ bool EditHistory::Undo(MapDocument& doc) {
     undo_.pop_back();
 
     doc.mutableTiles() = cmd.tilesBefore;
+    if (cmd.hasIsom) doc.mutableIsom() = cmd.isomBefore;
     doc.mutableUnits() = cmd.unitsBefore;
     ApplyMeta(doc, cmd, true);
     doc.MarkDirty();
@@ -79,6 +80,7 @@ bool EditHistory::Redo(MapDocument& doc) {
     redo_.pop_back();
 
     doc.mutableTiles() = cmd.tilesAfter;
+    if (cmd.hasIsom) doc.mutableIsom() = cmd.isomAfter;
     doc.mutableUnits() = cmd.unitsAfter;
     ApplyMeta(doc, cmd, false);
     doc.MarkDirty();

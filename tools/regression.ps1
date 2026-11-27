@@ -123,6 +123,7 @@ if (-not [string]::IsNullOrEmpty($Map)) {
     Invoke-Test $testExe 'undo' ($openArgs + @('--undo-test'))
     Invoke-Test $testExe 'trig' ($openArgs + @('--trig-test="' + (Join-Path $tmp 'trig.scx') + '"'))
     Invoke-Test $testExe 'edit' ($openArgs + @('--edit-test="' + (Join-Path $tmp 'edit.scx') + '"'))
+    Invoke-Test $uiExe 'terrain-blend' ($openArgs + @('--terrain-blend-test="' + (Join-Path $tmp 'blend.scx') + '"'))
     Invoke-Test $testExe 'player' ($openArgs + @('--player-test="' + (Join-Path $tmp 'player.scx') + '"'))
     Invoke-Test $testExe 'restriction' ($openArgs + @('--restriction-test="' + (Join-Path $tmp 'restriction.scx') + '"'))
     Invoke-Test $testExe 'location' ($openArgs + @('--location-test="' + (Join-Path $tmp 'location.scx') + '"'))

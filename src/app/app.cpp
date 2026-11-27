@@ -403,6 +403,20 @@ std::wstring ParseTerrainTypeTestArg() {
     return path;
 }
 
+// --terrain-blend-test=<输出scx>：等距地形 ISOM 过渡回归（配合 --open / --ts）
+std::wstring ParseTerrainBlendTestArg() {
+    int argc = 0;
+    LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+    std::wstring path;
+    if (argv) {
+        for (int i = 1; i < argc; ++i) {
+            if (std::wcsncmp(argv[i], L"--terrain-blend-test=", 21) == 0) path = argv[i] + 21;
+        }
+        ::LocalFree(argv);
+    }
+    return path;
+}
+
 // --player-test=<输出scx>：玩家/势力模型回归
 std::wstring ParsePlayerTestArg() {
     int argc = 0;
@@ -1002,6 +1016,105 @@ int RunTerrainTypeTest(MainWindow& win, const std::wstring& outPath) {
 
     const bool ok = tableOk && p1 && p2 && p3 && groupOk && copyOk && validOk && randomOk &&
                     saved && reopenOk;
+    return ok ? 0 : 2;
+}
+
+// --terrain-blend-test=<输出scx>：等距地形 ISOM 过渡回归（配合 --open / --ts）
+int RunTerrainBlendTest(MainWindow& win, const std::wstring& mapPath, const std::wstring& outPath) {
+    if (mapPath.empty() || !win.OpenMap(mapPath)) {
+        WriteDiag(L"open=FAIL\n");
+        return 2;
+    }
+    MapDocument& doc = win.mutableMap();
+    const bool isomOk = doc.hasIsom() && doc.hasTileset();
+    if (!isomOk) {
+        WriteDiag(L"isom=FAIL\n");
+        return 2;
+    }
+
+    const int w = doc.width();
+    const int h = doc.height();
+    // 找一块较大的纯 Dirt（组 2/3）区域，避开地图边缘与悬崖
+    int cx = w / 2;
+    int cy = h / 2;
+    bool spot = false;
+    for (int y = 6; y + 6 < h && !spot; y++) {
+        for (int x = 6; x + 6 < w; x++) {
+            bool ok = true;
+            for (int dy = -4; dy <= 4 && ok; dy++) {
+                for (int dx = -4; dx <= 4; dx++) {
+                    const u16 g = static_cast<u16>((doc.TileAt(x + dx, y + dy) & 0x7FF0) >> 4);
+                    if (g != 2 && g != 3) {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if (ok) {
+                cx = x;
+                cy = y;
+                spot = true;
+                break;
+            }
+        }
+    }
+
+    win.SetTerrainPlacementMode(TerrainPlacementMode::kIsometric);
+    win.SetTerrainTypeSlot(5);   // Ashworld: High Dirt -> 组 6/7
+    win.SetTerrainBrushSize(3);
+
+    const Buffer tilesBefore = doc.tiles();
+    const Buffer isomBefore = doc.isom();
+    const bool painted = win.PaintBrushAt(cx, cy);
+    const Buffer tilesAfter = doc.tiles();
+    const Buffer isomAfter = doc.isom();
+    const bool tilesChanged = tilesAfter != tilesBefore;
+    const bool isomChanged = isomAfter != isomBefore;
+
+    int centerPure = 0;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            const u16 g = static_cast<u16>((doc.TileAt(cx + dx, cy + dy) & 0x7FF0) >> 4);
+            if (g == 6 || g == 7) centerPure++;
+        }
+    }
+
+    int invalid = 0;
+    int transition = 0;
+    int pure = 0;
+    for (int dy = -3; dy <= 3; dy++) {
+        for (int dx = -4; dx <= 4; dx++) {
+            const int x = cx + dx;
+            const int y = cy + dy;
+            if (x < 0 || y < 0 || x >= w || y >= h) continue;
+            const u16 v = doc.TileAt(x, y);
+            const u16 g = static_cast<u16>((v & 0x7FF0) >> 4);
+            if (!doc.tileset().HasSubtile(g, v & 0x0F)) invalid++;
+            if (g == 2 || g == 3 || g == 6 || g == 7) pure++;
+            else transition++;
+        }
+    }
+
+    const bool undoOk = win.Undo() && doc.tiles() == tilesBefore && doc.isom() == isomBefore;
+    const bool redoOk = win.Redo() && doc.tiles() == tilesAfter && doc.isom() == isomAfter;
+
+    const bool saved = doc.Save(outPath);
+    MapDocument check;
+    const bool reopened = check.Open(outPath, std::wstring());
+    const bool reopenOk = reopened && check.tiles() == tilesAfter && check.isom() == isomAfter;
+
+    wchar_t msg[768];
+    ::wsprintfW(msg,
+                L"spot=%d center=%d,%d\npainted=%d\ntilesChanged=%d\nisomChanged=%d\n"
+                L"centerPure=%d\ninvalid=%d\npure=%d\ntransition=%d\n"
+                L"undo=%d\nredo=%d\nsaved=%d\nreopened=%d\nreopenOk=%d\n",
+                spot ? 1 : 0, cx, cy, painted ? 1 : 0, tilesChanged ? 1 : 0,
+                isomChanged ? 1 : 0, centerPure, invalid, pure, transition, undoOk ? 1 : 0,
+                redoOk ? 1 : 0, saved ? 1 : 0, reopened ? 1 : 0, reopenOk ? 1 : 0);
+    WriteDiag(msg);
+
+    const bool ok = spot && painted && tilesChanged && isomChanged && centerPure > 0 &&
+                    invalid == 0 && transition > 0 && undoOk && redoOk && saved && reopenOk;
     return ok ? 0 : 2;
 }
 
@@ -3134,6 +3247,13 @@ int App::Run(HINSTANCE hInstance) {
     // 地形类型表 / 等距铺设回归（无头）
     if (const std::wstring terrainTypeOut = ParseTerrainTypeTestArg(); !terrainTypeOut.empty()) {
         const int rc = RunTerrainTypeTest(mainWindow_, terrainTypeOut);
+        ::DestroyWindow(mainWindow_.hwnd());
+        return rc;
+    }
+
+    // 等距地形 ISOM 过渡回归（无头，配合 --open / --ts）
+    if (const std::wstring blendOut = ParseTerrainBlendTestArg(); !blendOut.empty()) {
+        const int rc = RunTerrainBlendTest(mainWindow_, ParseOpenArg(), blendOut);
         ::DestroyWindow(mainWindow_.hwnd());
         return rc;
     }

@@ -162,6 +162,13 @@ bool MapDocument::Open(const std::wstring& path, const std::wstring& tilesetDir)
         tiles_ = *tile;
     }
 
+    // ISOM：只接受与尺寸匹配的段，长度不符时忽略（后续等距绘制回退到旧逻辑）
+    isom_.clear();
+    if (const Buffer* isom = chk_.Find(section::kIsom)) {
+        const std::size_t need = 8ull * (width_ / 2 + 1) * (height_ + 1);
+        if (isom->size() == need) isom_ = *isom;
+    }
+
     // UNIT：36 字节/条
     if (const Buffer* unit = chk_.Find(section::kUnit)) {
         const std::size_t count = unit->size() / UnitRecord::kSize;
@@ -302,9 +309,32 @@ bool MapDocument::Resize(int width, int height, int offsetX, int offsetY, bool s
     }
 
     tiles_ = std::move(next);
+    const int oldWidth = width_;
+    const int oldHeight = height_;
     width_ = width;
     height_ = height;
     fog_.Resize(width_, height_, offsetX, offsetY);
+
+    // ISOM：按新的菱形网格平移；越界单元沿用最近的边缘值，避免段长度失配
+    if (!isom_.empty() && oldWidth > 0 && oldHeight > 0) {
+        const int oldRow = oldWidth / 2 + 1;
+        const int oldLine = oldHeight + 1;
+        const int newRow = width_ / 2 + 1;
+        const int newLine = height_ + 1;
+        Buffer iso(static_cast<std::size_t>(newRow) * newLine * 8, 0);
+        for (int cy = 0; cy < newLine; cy++) {
+            for (int cx = 0; cx < newRow; cx++) {
+                int sx = cx - offsetX / 2;
+                int sy = cy - offsetY;
+                sx = std::clamp(sx, 0, oldRow - 1);
+                sy = std::clamp(sy, 0, oldLine - 1);
+                const std::size_t s = (static_cast<std::size_t>(sy) * oldRow + sx) * 8;
+                const std::size_t d = (static_cast<std::size_t>(cy) * newRow + cx) * 8;
+                if (s + 8 <= isom_.size()) std::memcpy(iso.data() + d, isom_.data() + s, 8);
+            }
+        }
+        isom_ = std::move(iso);
+    }
 
     // 单位：按格平移，越界丢弃
     std::vector<UnitRecord> kept;
@@ -357,6 +387,7 @@ void MapDocument::Close() {
     width_ = height_ = 0;
     era_ = 0;
     tiles_.clear();
+    isom_.clear();
     units_.clear();
     triggers_.Parse(Buffer());
     locations_.Parse(Buffer());
@@ -575,6 +606,10 @@ bool MapDocument::Save(const std::wstring& path) {
         } else {
             chk_.Set(section::kTile, tiles_);
         }
+    }
+    // ISOM：仅在地图原本就有该段且长度正确时写回
+    if (!isom_.empty() && chk_.Has(section::kIsom)) {
+        chk_.Set(section::kIsom, isom_);
     }
 
     // 单位：按 36 字节记录回写
