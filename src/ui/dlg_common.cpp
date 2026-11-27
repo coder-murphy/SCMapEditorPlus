@@ -1,5 +1,7 @@
 ﻿#include "ui/dlg_common.h"
 
+#include <algorithm>
+
 namespace scmd {
 
 namespace {
@@ -23,6 +25,15 @@ void CenterDialog(HWND dlg) {
     const int x = rcOwner.left + ((rcOwner.right - rcOwner.left) - w) / 2;
     const int y = rcOwner.top + ((rcOwner.bottom - rcOwner.top) - h) / 2;
     ::SetWindowPos(dlg, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+}
+
+void ClampWindowToWorkArea(int& x, int& y, int width, int height) {
+    RECT work = {0, 0, ::GetSystemMetrics(SM_CXSCREEN), ::GetSystemMetrics(SM_CYSCREEN)};
+    ::SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+    const int maxX = std::max(static_cast<int>(work.left), static_cast<int>(work.right) - width);
+    const int maxY = std::max(static_cast<int>(work.top), static_cast<int>(work.bottom) - height);
+    x = std::clamp(x, static_cast<int>(work.left), maxX);
+    y = std::clamp(y, static_cast<int>(work.top), maxY);
 }
 
 int ReadClampedInt(HWND dlg, int controlId, int defValue, int minValue, int maxValue) {

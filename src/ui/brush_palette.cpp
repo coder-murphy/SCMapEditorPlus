@@ -7,6 +7,7 @@
 
 #include "common/log.h"
 #include "terrain/tileset.h"
+#include "ui/dlg_common.h"
 
 namespace scmd {
 
@@ -106,6 +107,7 @@ bool BrushPalette::Create(HINSTANCE instance, HWND owner) {
         x = ownerRect.left - width - 12;
         if (x < 0) x = ownerRect.right + 12;
         y = ownerRect.top + 40;
+        ClampWindowToWorkArea(x, y, width, height);
     }
 
     hwnd_ = ::CreateWindowExW(WS_EX_TOOLWINDOW, kClassName, kWindowTitle,

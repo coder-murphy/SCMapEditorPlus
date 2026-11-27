@@ -5,6 +5,7 @@
 
 #include "common/log.h"
 #include "map/decor_model.h"
+#include "ui/dlg_common.h"
 
 namespace scmd {
 
@@ -63,6 +64,7 @@ bool DoodadPalette::Create(HINSTANCE instance, HWND ownerWnd) {
     if (ownerWnd && ::GetWindowRect(ownerWnd, &ownerRect)) {
         x = ownerRect.right + 12;
         y = ownerRect.top + 40;
+        ClampWindowToWorkArea(x, y, width, height);
     }
 
     hwnd_ = ::CreateWindowExW(WS_EX_TOOLWINDOW, kClassName, kWindowTitle, WS_OVERLAPPEDWINDOW,

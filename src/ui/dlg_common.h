@@ -11,6 +11,8 @@ MapDocument* DialogDocument();
 
 // 把对话框居中到父窗口（父窗口为空时居中到屏幕）
 void CenterDialog(HWND dlg);
+// 把浮动窗口坐标限制在当前屏幕工作区内，避免主窗口最大化时开到屏幕外
+void ClampWindowToWorkArea(int& x, int& y, int width, int height);
 // 读取控件文本为 min..max 的整数，非法返回 defValue
 int ReadClampedInt(HWND dlg, int controlId, int defValue, int minValue, int maxValue);
 // 写百分数（0..100）

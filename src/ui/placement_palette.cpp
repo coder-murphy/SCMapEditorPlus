@@ -9,6 +9,7 @@
 #include "map/map_document.h"
 #include "terrain/terrain_types.h"
 #include "terrain/tileset.h"
+#include "ui/dlg_common.h"
 #include "ui/main_window.h"
 
 namespace scmd {
@@ -74,8 +75,9 @@ void PlacementPalette::Show(HINSTANCE instance, HWND owner, MainWindow* win, int
 
         RECT o = {0, 0, 640, 480};
         if (owner_) ::GetWindowRect(owner_, &o);
-        int x = std::max(0L, o.right + 8);
-        int y = std::max(0L, o.top + 80);
+        int x = static_cast<int>(o.right) + 8;
+        int y = static_cast<int>(o.top) + 80;
+        ClampWindowToWorkArea(x, y, 420, 460);
         hwnd_ = ::CreateWindowExW(
             WS_EX_TOOLWINDOW, kPaletteClass, L"放置面板",
             WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_SIZEBOX,
