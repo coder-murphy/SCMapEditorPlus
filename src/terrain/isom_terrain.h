@@ -26,8 +26,8 @@ public:
     // 该地形类型槽位在当前 ERA 是否有定义（对应 PARAM_TABLE.center[slot].isom != 0）
     bool SlotDefined(int slot) const;
 
-    // 以 slot 为中心填充一组 ISOM 单元（单元坐标），随后向外解析边缘连接
-    bool Fill(int slot, const std::vector<std::pair<int, int>>& cells);
+    // 在瓦片坐标 (tileX, tileY) 落一笔等距菱形（更新周围 4 个 ISOM 单元并解析边缘）
+    bool Brush(int slot, int tileX, int tileY);
 
     // 内部 ISOM 是否有改动（用于脏标记/撤销）
     bool isomChanged() const { return isomChanged_; }

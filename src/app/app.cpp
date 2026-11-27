@@ -1061,7 +1061,7 @@ int RunTerrainBlendTest(MainWindow& win, const std::wstring& mapPath, const std:
 
     win.SetTerrainPlacementMode(TerrainPlacementMode::kIsometric);
     win.SetTerrainTypeSlot(5);   // Ashworld: High Dirt -> 组 6/7
-    win.SetTerrainBrushSize(3);
+    // 等距刷固定为光标顶点周围的 2×2 菱形，与笔刷尺寸无关（原版 0.8 实测）
 
     const Buffer tilesBefore = doc.tiles();
     const Buffer isomBefore = doc.isom();
@@ -1070,6 +1070,14 @@ int RunTerrainBlendTest(MainWindow& win, const std::wstring& mapPath, const std:
     const Buffer isomAfter = doc.isom();
     const bool tilesChanged = tilesAfter != tilesBefore;
     const bool isomChanged = isomAfter != isomBefore;
+
+    // 单笔只应影响光标周围少量瓦片（防止 ISOM 连接级联失控）
+    int changedTiles = 0;
+    for (std::size_t i = 0; i + 1 < tilesBefore.size() && i + 1 < tilesAfter.size(); i += 2) {
+        if (tilesBefore[i] != tilesAfter[i] || tilesBefore[i + 1] != tilesAfter[i + 1]) {
+            changedTiles++;
+        }
+    }
 
     int centerPure = 0;
     for (int dy = -1; dy <= 1; dy++) {
@@ -1106,15 +1114,17 @@ int RunTerrainBlendTest(MainWindow& win, const std::wstring& mapPath, const std:
     wchar_t msg[768];
     ::wsprintfW(msg,
                 L"spot=%d center=%d,%d\npainted=%d\ntilesChanged=%d\nisomChanged=%d\n"
-                L"centerPure=%d\ninvalid=%d\npure=%d\ntransition=%d\n"
+                L"changedTiles=%d\ncenterPure=%d\ninvalid=%d\npure=%d\ntransition=%d\n"
                 L"undo=%d\nredo=%d\nsaved=%d\nreopened=%d\nreopenOk=%d\n",
                 spot ? 1 : 0, cx, cy, painted ? 1 : 0, tilesChanged ? 1 : 0,
-                isomChanged ? 1 : 0, centerPure, invalid, pure, transition, undoOk ? 1 : 0,
-                redoOk ? 1 : 0, saved ? 1 : 0, reopened ? 1 : 0, reopenOk ? 1 : 0);
+                isomChanged ? 1 : 0, changedTiles, centerPure, invalid, pure, transition,
+                undoOk ? 1 : 0, redoOk ? 1 : 0, saved ? 1 : 0, reopened ? 1 : 0,
+                reopenOk ? 1 : 0);
     WriteDiag(msg);
 
-    const bool ok = spot && painted && tilesChanged && isomChanged && centerPure > 0 &&
-                    invalid == 0 && transition > 0 && undoOk && redoOk && saved && reopenOk;
+    const bool ok = spot && painted && tilesChanged && isomChanged && changedTiles > 0 &&
+                    changedTiles < 64 && invalid == 0 && transition > 0 && undoOk && redoOk &&
+                    saved && reopenOk;
     return ok ? 0 : 2;
 }
 

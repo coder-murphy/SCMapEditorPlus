@@ -3533,49 +3533,30 @@ bool MainWindow::StampIsometricAt(int tx, int ty) {
     }
     if (!isomTerrain_.ready() || !isomTerrain_.SlotDefined(terrainTypeSlot_)) return false;
 
-    // 等距刷：笔刷尺寸 N 对应屏幕上 2N×N 的菱形；收集菱形内的 ISOM 单元后一次填充
-    const int n = std::max(1, brushW_);
+    // 原版等距刷固定为光标顶点周围的一个 2×2 菱形，与笔刷尺寸无关
+    // （反汇编 0x419010 → 0x421b00：isometric 分支只按单个顶点刷一笔，尺寸循环只用于方块模式）
     const int mapW = map_.width();
     const int mapH = map_.height();
-    const bool flipX = mirrorX_;
-    const bool flipY = mirrorY_;
 
-    std::vector<std::pair<int, int>> cells;
-    auto addCell = [&](int cx, int cy) {
-        if (cx < 0 || cy < 0 || cx >= (mapW / 2 + 1) || cy >= mapH) return;
-        for (const auto& c : cells) {
-            if (c.first == cx && c.second == cy) return;
+    bool painted = false;
+    auto stamp = [&](int x, int y) {
+        if (x < 0 || y < 0 || x >= mapW || y >= mapH) return;
+        if (isomTerrain_.Brush(terrainTypeSlot_, x, y)) {
+            painted = true;
+            return;
         }
-        cells.push_back({cx, cy});
-    };
-    auto collectArea = [&](int centerTileX, int centerTileY) {
-        const double centerX = centerTileX + 1.0;
-        const double centerY = centerTileY + 0.5;
-        const double halfW = static_cast<double>(n);
-        const double halfH = std::max(1.0, n / 2.0);
-        const int cx0 = centerTileX / 2;
-        const int radius = n + 2;
-        for (int dy = -radius; dy <= radius; dy++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                const int cx = cx0 + dx;
-                const int cy = centerTileY + dy;
-                if (cx < 0 || cy < 0 || cx >= (mapW / 2 + 1) || cy >= mapH) continue;
-                const double tx2 = cx * 2 + 1.0;
-                const double ty2 = cy + 0.5;
-                if (std::abs(tx2 - centerX) / halfW + std::abs(ty2 - centerY) / halfH > 1.0) {
-                    continue;
-                }
-                addCell(cx, cy);
-            }
-        }
+        // 顶点要求 (x/2 + y) 为偶数：向相邻瓦片对齐一次
+        if (isomTerrain_.Brush(terrainTypeSlot_, x + 1, y)) painted = true;
+        else if (isomTerrain_.Brush(terrainTypeSlot_, x, y + 1)) painted = true;
+        else if (isomTerrain_.Brush(terrainTypeSlot_, x - 1, y)) painted = true;
+        else if (isomTerrain_.Brush(terrainTypeSlot_, x, y - 1)) painted = true;
     };
 
-    collectArea(tx, ty);
-    if (flipX) collectArea(mapW - 1 - tx, ty);
-    if (flipY) collectArea(tx, mapH - 1 - ty);
-    if (flipX && flipY) collectArea(mapW - 1 - tx, mapH - 1 - ty);
-    if (cells.empty()) addCell(tx / 2, ty);
-    if (!isomTerrain_.Fill(terrainTypeSlot_, cells)) return false;
+    stamp(tx, ty);
+    if (mirrorX_) stamp(mapW - 1 - tx, ty);
+    if (mirrorY_) stamp(tx, mapH - 1 - ty);
+    if (mirrorX_ && mirrorY_) stamp(mapW - 1 - tx, mapH - 1 - ty);
+    if (!painted) return false;
 
     std::vector<std::pair<int, int>> changed;
     isomTerrain_.FlushTiles(map_.mutableTiles(), &changed);
@@ -5021,17 +5002,18 @@ void MainWindow::Present(HDC dc, const RECT& client) {
             const HGDIOBJ oldPen = ::SelectObject(dc, pen);
             const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(HOLLOW_BRUSH));
             if (diamond) {
-                // 等距刷：尺寸 01 = 2×1 瓦片的菱形，N 对应 2N×N 瓦片
-                const int n = std::max(1, brushW_);
-                const int cx = (cursorTx_ + 1) * px - scrollX_;
-                const int cy = cursorTy_ * px + px / 2 - scrollY_;
-                const int hw = n * px;
-                const int hh = std::max(1, n * px / 2);
-                POINT pts[5] = {{cx - hw, cy},
-                                {cx, cy - hh},
-                                {cx + hw, cy},
-                                {cx, cy + hh},
-                                {cx - hw, cy}};
+                // 原版光标固定为光标顶点周围的 2×2 个等距菱形（4×2 瓦片），与笔刷尺寸无关
+                const int cellX = cursorTx_ / 2;
+                const int cellY = cursorTy_;
+                const int left = (cellX - 1) * 2 * px - scrollX_;
+                const int top = (cellY - 1) * px - scrollY_;
+                const int w = 4 * px;
+                const int h = 2 * px;
+                POINT pts[5] = {{left, top + h / 2},
+                                {left + w / 2, top},
+                                {left + w, top + h / 2},
+                                {left + w / 2, top + h},
+                                {left, top + h / 2}};
                 ::Polyline(dc, pts, 5);
             } else {
                 const int w = std::max(1, brushW_);

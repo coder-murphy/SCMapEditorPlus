@@ -776,32 +776,23 @@ u16 IsomTerrain::IsometricLink(u16 isom, int from, int bx, int by, bool& updated
     return newLink;
 }
 
-// 填充一组 ISOM 单元：先把单元自身写为纯中心值，再从这些单元向外解析连接。
-// 这样内部不会残留过渡边（与 ScmDraft2 的等距画笔一致）。
-bool IsomTerrain::Fill(int slot, const std::vector<std::pair<int, int>>& cells) {
+// 等距画笔：设置光标顶点周围 4 个 ISOM 单元朝向顶点的边，再从顶点向外解析连接。
+// 与原版 0x421b00/0x4212a0 的行为一致（单次落笔只影响一个 2×2 菱形范围）。
+bool IsomTerrain::Brush(int slot, int tileX, int tileY) {
     if (!ready_) return false;
+    const int px = tileX / 2;
+    const int py = tileY;
+    if (px < 0 || py < 0 || px >= rowW_ || py >= line_) return false;
+    if ((px & 1) ^ (py & 1)) return false;
+
     const EraParam& param = ParamFor(era_);
     if (slot < 0 || slot >= 13 || param.center[slot].isom == 0) return false;
+
     const u16 center = param.center[slot].isom;
+    for (int from = 0; from < 4; from++) UpdateIsom(center, from, px, py);
 
-    std::vector<std::pair<int, int>> filled;
-    filled.reserve(cells.size());
-    for (const auto& c : cells) {
-        const int cx = c.first;
-        const int cy = c.second;
-        if (!InBounds(cx, cy)) continue;
-        if (!SetTilePos(cx, cy)) continue;
-        u16* cell = Cell(cx, cy);
-        const u16* pos = ((cx + cy) & 1) ? kTilePosEven : kTilePosOdd;
-        for (int i = 0; i < 4; i++) {
-            cell[i] = static_cast<u16>(pos[i] | (center << 4));
-        }
-        dirty_[static_cast<std::size_t>(cy) * rowW_ + cx] = 1;
-        filled.push_back({cx, cy});
-    }
-    if (filled.empty()) return false;
-
-    std::deque<std::pair<int, int>> queue(filled.begin(), filled.end());
+    std::deque<std::pair<int, int>> queue;
+    queue.push_back({px, py});
     ResolveLinks(queue);
     isomChanged_ = true;
     return true;
