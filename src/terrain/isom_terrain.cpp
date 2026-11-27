@@ -5,6 +5,7 @@
 #include <deque>
 #include <random>
 
+#include "terrain/terrain_types.h"
 #include "terrain/tileset.h"
 
 namespace scmd {
@@ -971,9 +972,24 @@ void IsomTerrain::UpdateTile(int cx, int cy, const TileIndex* computed) {
             if (itType != dictType_.end()) entry = &itType->second;
         }
     }
-    if (!entry || entry->group == 0) return;
+    u16 group = 0;
+    DictEntry fallback;
+    if (entry && entry->group != 0) {
+        group = entry->group;
+        fallback = *entry;
+    } else {
+        // 字典没有覆盖：中心地形直接按 ERA 地形类型表取纯组，保证至少能落笔
+        const int center = IsomToCenter(Cell(cx, cy)[LEFT]);
+        const TerrainTypeInfo* types = TerrainTypes(era_);
+        if (center < 0 || !types || center >= kTerrainTypeSlots) return;
+        group = types[center].group;
+        if (!group) return;
+        fallback.group = group;
+        if (tileset_) fallback.megaMask = MegaMaskOf(*tileset_, group);
+        if (!fallback.megaMask) return;
+        entry = &fallback;
+    }
 
-    const u16 group = entry->group;
     u16 mega = GenMegaIndex(cx, cy, *entry, t.upAbut);
     if (tileset_) {
         if (!tileset_->HasSubtile(group, mega)) {
