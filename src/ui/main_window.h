@@ -262,6 +262,8 @@ private:
     RECT StartupBannerRect() const;   // 未打开地图时的左侧启动图区域
     RECT LogRect() const;
     RECT SceneTreeRect() const;
+    RECT SplitterRect() const;                 // 左侧栏竖向分割条（拖拽调整宽度）
+    int SplitterHitTest(int mx, int my) const; // 0 未命中 / 1 侧栏分割条
     RECT StatusRect() const;
     RECT HScrollRect() const;
     RECT VScrollRect() const;
@@ -282,7 +284,11 @@ private:
     void LayoutSceneTree();
     void RefreshSceneTree();
     void DrawSidebar(HDC dc) const;
+    void DrawSplitters(HDC dc) const;
     void OnSceneTreeDblClk();
+    void OnSceneTreeRClick();
+    void SyncSceneSelectionFromTree();   // 场景树选择 -> 地图白色椭圆标记
+    void CenterOnTile(int tx, int ty);   // 地图滚动到指定瓦片居中
     void CheckCompatibility();   // 163：开图后检测并提示（有问题才弹）
     void OpenHelpUrl(const wchar_t* url);   // 帮助菜单外链（默认浏览器）
     void OnLButtonDown(int mx, int my);
@@ -311,6 +317,8 @@ private:
     // 撤销/重做后只重绘发生变化的瓦片区域（大面积改动回退为整图重建）
     void RefreshAfterHistory(const Buffer& oldTiles);
     void DrawUnits(HDC dc, const RECT& client) const;
+    // 场景树选中的物件：地图上用白色椭圆圈出（单位点之外的显式标注）
+    void DrawSceneMarkers(HDC dc, const RECT& client) const;
     // 显示选项 → Zerg地皮：在虫族建筑下铺 4×4 creep 图案
     void DrawCreep(HDC dc, const RECT& client) const;
     void DrawDeathMarks(HDC dc, const RECT& client) const;
@@ -484,6 +492,14 @@ private:
     bool fogPaint_ = false;         // 迷雾拖动时统一写入的目标状态
     int cursorTx_ = -1;
     int cursorTy_ = -1;
+    // 左侧栏宽度拖拽（中间分割条）
+    int sidebarWidth_ = 140;
+    int splitterDrag_ = 0;          // 0 无 / 1 侧栏竖向分割条
+    int splitterStartX_ = 0;
+    int splitterStartWidth_ = 0;
+    // 场景树选中的物件（1 单位 / 2 SP单位 / 3 装饰物；-1 无）
+    int sceneSelKind_ = -1;
+    int sceneSelIndex_ = -1;
 
     // 框选与内部剪贴板（剪贴板可跨地图使用）
     struct ClipboardData {

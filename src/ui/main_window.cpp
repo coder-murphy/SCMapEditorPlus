@@ -46,6 +46,7 @@ constexpr const wchar_t* kWindowTitle = L"SCMD Plus 3.0";
 
 // 布局常量：左侧栏宽度 / 状态栏高度 / 场景树控件 ID
 constexpr int kSidebarWidth = 140;
+constexpr int kSplitterWidth = 4;   // 左侧栏与地图之间的可拖拽分割条
 constexpr int kStatusBarHeight = 26;
 constexpr int kToolbarHeight = 28;
 constexpr int kSceneTreeId = 0x8FF0;
@@ -1539,8 +1540,8 @@ RECT MainWindow::MapViewRect() const {
     const int sbW = ::GetSystemMetrics(SM_CXVSCROLL);
     const int sbH = ::GetSystemMetrics(SM_CYHSCROLL);
     const int maxSide = std::max(0, static_cast<int>(rc.right - rc.left)) / 3;
-    const int sideW = std::min(kSidebarWidth, maxSide);
-    RECT r = {sideW, kToolbarHeight, rc.right - sbW,
+    const int sideW = std::min(sidebarWidth_, maxSide);
+    RECT r = {sideW + kSplitterWidth, kToolbarHeight, rc.right - sbW,
               rc.bottom - kStatusBarHeight - sbH - logH};
     if (r.right < r.left) r.right = r.left;
     if (r.bottom < r.top) r.bottom = r.top;
@@ -1722,6 +1723,25 @@ RECT MainWindow::SceneTreeRect() const {
     return r;
 }
 
+RECT MainWindow::SplitterRect() const {
+    RECT rc = {0, 0, 0, 0};
+    if (!hwnd_) return rc;
+    ::GetClientRect(hwnd_, &rc);
+    const int maxSide = std::max(0, static_cast<int>(rc.right)) / 3;
+    const int sideW = std::min(sidebarWidth_, maxSide);
+    RECT r = {sideW, kToolbarHeight, sideW + kSplitterWidth, LogTop()};
+    if (r.bottom < r.top) r.bottom = r.top;
+    return r;
+}
+
+int MainWindow::SplitterHitTest(int mx, int my) const {
+    if (!hwnd_ || splitterDrag_ != 0) return splitterDrag_;
+    const RECT r = SplitterRect();
+    if (r.right <= r.left) return 0;
+    if (mx >= r.left - 3 && mx < r.right + 3 && my >= r.top && my <= r.bottom) return 1;
+    return 0;
+}
+
 bool MainWindow::PointInMapView(int mx, int my) const {
     const RECT view = MapViewRect();
     return mx >= view.left && my >= view.top && mx < view.right && my < view.bottom;
@@ -1745,6 +1765,8 @@ bool MainWindow::OpenMap(const std::wstring& path) {    if (!map_.Open(path, til
     isomNeedsLearn_ = true;
     isomTerrain_.Clear();
     locationDrawing_ = false;
+    sceneSelKind_ = -1;
+    sceneSelIndex_ = -1;
     ClearSelection();
     AppSettings::Instance().AddRecentMap(path);
     AppSettings::Instance().Save();
@@ -4582,6 +4604,57 @@ void MainWindow::DrawUnits(HDC dc, const RECT& client) const {
     }
 }
 
+// 场景树选中的物件：白色椭圆圈出（单位点之外的显式标注）
+void MainWindow::DrawSceneMarkers(HDC dc, const RECT& client) const {
+    if (!map_.IsOpen() || sceneSelKind_ < 0 || sceneSelIndex_ < 0) return;
+    int px = -1;
+    int py = -1;
+    switch (sceneSelKind_) {
+        case 1: {
+            const auto& items = map_.units();
+            if (static_cast<std::size_t>(sceneSelIndex_) < items.size()) {
+                px = static_cast<int>(items[static_cast<std::size_t>(sceneSelIndex_)].x);
+                py = static_cast<int>(items[static_cast<std::size_t>(sceneSelIndex_)].y);
+            }
+            break;
+        }
+        case 2: {
+            const auto& items = map_.sprites().Items();
+            if (static_cast<std::size_t>(sceneSelIndex_) < items.size()) {
+                px = static_cast<int>(items[static_cast<std::size_t>(sceneSelIndex_)].x);
+                py = static_cast<int>(items[static_cast<std::size_t>(sceneSelIndex_)].y);
+            }
+            break;
+        }
+        case 3: {
+            const auto& items = map_.doodads().Items();
+            if (static_cast<std::size_t>(sceneSelIndex_) < items.size()) {
+                px = static_cast<int>(items[static_cast<std::size_t>(sceneSelIndex_)].x);
+                py = static_cast<int>(items[static_cast<std::size_t>(sceneSelIndex_)].y);
+            }
+            break;
+        }
+        default:
+            return;
+    }
+    if (px < 0 || py < 0) return;
+    const int sx = (px / kTilePixels) * pxPerTile_ - scrollX_;
+    const int sy = (py / kTilePixels) * pxPerTile_ - scrollY_;
+    if (sx + pxPerTile_ < 0 || sy + pxPerTile_ < 0 || sx > client.right ||
+        sy > client.bottom) {
+        return;
+    }
+    const int pad = std::max(2, pxPerTile_ / 2);
+    const int penW = std::max(1, pxPerTile_ / 12);
+    const HPEN pen = ::CreatePen(PS_SOLID, penW, RGB(255, 255, 255));
+    const HGDIOBJ oldPen = ::SelectObject(dc, pen);
+    const HGDIOBJ oldBrush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
+    ::Ellipse(dc, sx - pad, sy - pad, sx + pxPerTile_ + pad, sy + pxPerTile_ + pad);
+    ::SelectObject(dc, oldBrush);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(pen);
+}
+
 void MainWindow::DrawDeathMarks(HDC dc, const RECT& client) const {
     if (!showDeathFx_ || deathMarks_.empty() || pxPerTile_ <= 1) return;
     const ULONGLONG now = ::GetTickCount64();
@@ -4993,6 +5066,7 @@ void MainWindow::Present(HDC dc, const RECT& client) {
         if (showLocations_) DrawLocations(dc, local);
         if (locationDrawing_) DrawLocationPreview(dc, local);
         DrawSelection(dc, local);
+        DrawSceneMarkers(dc, local);
 
         // 光标刷子预览：等距/子瓦片为 2:1 菱形，其余模式为刷子范围方块（原版红色）
         if (cursorTx_ >= 0 && map_.IsOpen() && layer_ == EditLayer::kTerrain) {
@@ -5040,7 +5114,37 @@ void MainWindow::Present(HDC dc, const RECT& client) {
     }
 
     DrawSidebar(dc);
+    DrawSplitters(dc);
     DrawOutputPanel(dc, client);
+}
+
+// 左侧栏与地图之间的分割条：拖动改变侧栏宽度（动态布局）
+void MainWindow::DrawSplitters(HDC dc) const {
+    const RECT r = SplitterRect();
+    if (r.right <= r.left || r.bottom <= r.top) return;
+    HBRUSH back = ::CreateSolidBrush(RGB(212, 208, 200));
+    ::FillRect(dc, &r, back);
+    ::DeleteObject(back);
+    HPEN light = ::CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
+    HPEN dark = ::CreatePen(PS_SOLID, 1, RGB(128, 128, 128));
+    HGDIOBJ oldPen = ::SelectObject(dc, light);
+    ::MoveToEx(dc, r.left, r.top, nullptr);
+    ::LineTo(dc, r.left, r.bottom);
+    ::SelectObject(dc, dark);
+    ::MoveToEx(dc, r.right - 1, r.top, nullptr);
+    ::LineTo(dc, r.right - 1, r.bottom);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(light);
+    ::DeleteObject(dark);
+    // 中间三个小点，提示可拖拽
+    const int cx = (r.left + r.right) / 2;
+    const int cy = (r.top + r.bottom) / 2;
+    HBRUSH dot = ::CreateSolidBrush(RGB(96, 96, 96));
+    for (int i = -1; i <= 1; i++) {
+        RECT p = {cx - 1, cy + i * 8 - 1, cx + 1, cy + i * 8 + 1};
+        ::FillRect(dc, &p, dot);
+    }
+    ::DeleteObject(dot);
 }
 
 // 左侧栏：上=微缩地图，下=场景树（场景树是 TreeView 子窗口，这里只画背景/分隔线）
@@ -5136,6 +5240,8 @@ void MainWindow::RefreshSceneTree() {
     if (!sceneTree_) return;
     ::SendMessageW(sceneTree_, WM_SETREDRAW, FALSE, 0);
     TreeView_DeleteAllItems(sceneTree_);
+    sceneSelKind_ = -1;
+    sceneSelIndex_ = -1;
 
     if (!map_.IsOpen()) {
         // 原版未打开地图时也显示场景分类，只是没有具体条目
@@ -5258,38 +5364,26 @@ void MainWindow::OnSceneTreeDblClk() {
     const int kind = static_cast<int>((data >> kSceneKindShift) & kSceneKindMask);
     const int index = static_cast<int>(data & kSceneIndexMask);
 
-    auto centerOnTile = [this](int tx, int ty) {
-        const RECT view = MapViewRect();
-        const int viewW = static_cast<int>(view.right - view.left);
-        const int viewH = static_cast<int>(view.bottom - view.top);
-        scrollX_ = std::clamp(tx * pxPerTile_ - viewW / 2, 0,
-                              std::max(0, image_.width - viewW));
-        scrollY_ = std::clamp(ty * pxPerTile_ - viewH / 2, 0,
-                              std::max(0, image_.height - viewH));
-        UpdateScrollBars();
-        ::InvalidateRect(hwnd_, nullptr, FALSE);
-    };
-
     switch (kind) {
         case 1: {
             const auto& items = map_.units();
             if (index < 0 || static_cast<std::size_t>(index) >= items.size()) return;
             const UnitRecord& u = items[static_cast<std::size_t>(index)];
-            centerOnTile(static_cast<int>(u.x) / kTilePixels, static_cast<int>(u.y) / kTilePixels);
+            CenterOnTile(static_cast<int>(u.x) / kTilePixels, static_cast<int>(u.y) / kTilePixels);
             break;
         }
         case 2: {
             const auto& items = map_.sprites().Items();
             if (index < 0 || static_cast<std::size_t>(index) >= items.size()) return;
             const SpriteRecord& s = items[static_cast<std::size_t>(index)];
-            centerOnTile(static_cast<int>(s.x) / kTilePixels, static_cast<int>(s.y) / kTilePixels);
+            CenterOnTile(static_cast<int>(s.x) / kTilePixels, static_cast<int>(s.y) / kTilePixels);
             break;
         }
         case 3: {
             const auto& items = map_.doodads().Items();
             if (index < 0 || static_cast<std::size_t>(index) >= items.size()) return;
             const Doodad& d = items[static_cast<std::size_t>(index)];
-            centerOnTile(static_cast<int>(d.x) / kTilePixels, static_cast<int>(d.y) / kTilePixels);
+            CenterOnTile(static_cast<int>(d.x) / kTilePixels, static_cast<int>(d.y) / kTilePixels);
             break;
         }
         case 4:
@@ -5311,6 +5405,83 @@ void MainWindow::OnSceneTreeDblClk() {
         default:
             break;
     }
+}
+
+void MainWindow::CenterOnTile(int tx, int ty) {
+    const RECT view = MapViewRect();
+    const int viewW = static_cast<int>(view.right - view.left);
+    const int viewH = static_cast<int>(view.bottom - view.top);
+    scrollX_ = std::clamp(tx * pxPerTile_ - viewW / 2, 0, std::max(0, image_.width - viewW));
+    scrollY_ = std::clamp(ty * pxPerTile_ - viewH / 2, 0, std::max(0, image_.height - viewH));
+    UpdateScrollBars();
+    ::InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+// 右键场景树：选中光标下的物件，并定位到地图（白色椭圆由 TVN_SELCHANGED 同步）
+void MainWindow::OnSceneTreeRClick() {
+    if (!sceneTree_ || !map_.IsOpen()) return;
+    POINT pt = {};
+    ::GetCursorPos(&pt);
+    ::ScreenToClient(sceneTree_, &pt);
+    TVHITTESTINFO ht = {};
+    ht.pt = pt;
+    const HTREEITEM hit = TreeView_HitTest(sceneTree_, &ht);
+    if (!hit) return;
+    TreeView_SelectItem(sceneTree_, hit);
+
+    TVITEMW item = {};
+    item.mask = TVIF_PARAM;
+    item.hItem = hit;
+    if (!TreeView_GetItem(sceneTree_, &item) || item.lParam == 0) return;
+    const int kind = static_cast<int>((item.lParam >> kSceneKindShift) & kSceneKindMask);
+    const int index = static_cast<int>(item.lParam & kSceneIndexMask);
+    switch (kind) {
+        case 1: {
+            const auto& items = map_.units();
+            if (static_cast<std::size_t>(index) < items.size()) {
+                CenterOnTile(static_cast<int>(items[static_cast<std::size_t>(index)].x) / kTilePixels,
+                             static_cast<int>(items[static_cast<std::size_t>(index)].y) / kTilePixels);
+            }
+            break;
+        }
+        case 2: {
+            const auto& items = map_.sprites().Items();
+            if (static_cast<std::size_t>(index) < items.size()) {
+                CenterOnTile(static_cast<int>(items[static_cast<std::size_t>(index)].x) / kTilePixels,
+                             static_cast<int>(items[static_cast<std::size_t>(index)].y) / kTilePixels);
+            }
+            break;
+        }
+        case 3: {
+            const auto& items = map_.doodads().Items();
+            if (static_cast<std::size_t>(index) < items.size()) {
+                CenterOnTile(static_cast<int>(items[static_cast<std::size_t>(index)].x) / kTilePixels,
+                             static_cast<int>(items[static_cast<std::size_t>(index)].y) / kTilePixels);
+            }
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+void MainWindow::SyncSceneSelectionFromTree() {
+    sceneSelKind_ = -1;
+    sceneSelIndex_ = -1;
+    if (sceneTree_ && map_.IsOpen()) {
+        TVITEMW item = {};
+        item.mask = TVIF_PARAM;
+        item.hItem = TreeView_GetSelection(sceneTree_);
+        if (item.hItem && TreeView_GetItem(sceneTree_, &item) && item.lParam != 0) {
+            const int kind = static_cast<int>((item.lParam >> kSceneKindShift) & kSceneKindMask);
+            const int index = static_cast<int>(item.lParam & kSceneIndexMask);
+            if (kind >= 1 && kind <= 3) {
+                sceneSelKind_ = kind;
+                sceneSelIndex_ = index;
+            }
+        }
+    }
+    if (hwnd_) ::InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void MainWindow::BeepWarning() const {
@@ -6444,14 +6615,29 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         case WM_ERASEBKGND:
             return 1;
-        case WM_LBUTTONDOWN:
+        case WM_LBUTTONDOWN: {
+            const int mx = GET_X_LPARAM(lParam);
+            const int my = GET_Y_LPARAM(lParam);
+            if (SplitterHitTest(mx, my)) {
+                splitterDrag_ = 1;
+                splitterStartX_ = mx;
+                splitterStartWidth_ = sidebarWidth_;
+                ::SetCapture(hwnd_);
+                return 0;
+            }
             ::SetCapture(hwnd_);
-            OnLButtonDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+            OnLButtonDown(mx, my);
             return 0;
+        }
         case WM_LBUTTONDBLCLK:
             OnLButtonDblClk(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             return 0;
         case WM_LBUTTONUP:
+            if (splitterDrag_) {
+                splitterDrag_ = 0;
+                ::ReleaseCapture();
+                return 0;
+            }
             ::ReleaseCapture();
             if (minimapDragging_) {
                 minimapDragging_ = false;
@@ -6473,10 +6659,37 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             else editOpen_ = false;
             UpdateTitle();
             return 0;
-        case WM_MOUSEMOVE:
-            OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam),
-                        (wParam & MK_LBUTTON) != 0);
+        case WM_MOUSEMOVE: {
+            const int mx = GET_X_LPARAM(lParam);
+            const int my = GET_Y_LPARAM(lParam);
+            if (splitterDrag_) {
+                RECT rc;
+                ::GetClientRect(hwnd_, &rc);
+                const int maxW = std::max(160, static_cast<int>(rc.right) / 2);
+                const int w = std::clamp(splitterStartWidth_ + (mx - splitterStartX_), 120, maxW);
+                if (w != sidebarWidth_) {
+                    sidebarWidth_ = w;
+                    LayoutChrome();
+                    LayoutSceneTree();
+                    UpdateScrollBars();
+                    ::InvalidateRect(hwnd_, nullptr, TRUE);
+                }
+                return 0;
+            }
+            OnMouseMove(mx, my, (wParam & MK_LBUTTON) != 0);
             return 0;
+        }
+        case WM_SETCURSOR:
+            if (LOWORD(lParam) == HTCLIENT) {
+                POINT pt = {};
+                ::GetCursorPos(&pt);
+                ::ScreenToClient(hwnd_, &pt);
+                if (SplitterHitTest(pt.x, pt.y)) {
+                    ::SetCursor(::LoadCursorW(nullptr, IDC_SIZEWE));
+                    return TRUE;
+                }
+            }
+            return ::DefWindowProcW(hwnd_, msg, wParam, lParam);
         case WM_RBUTTONDOWN:
             OnRButtonDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             return 0;
@@ -6587,6 +6800,14 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             if (hdr && hdr->hwndFrom == sceneTree_ && hdr->code == NM_DBLCLK) {
                 OnSceneTreeDblClk();
+                return 0;
+            }
+            if (hdr && hdr->hwndFrom == sceneTree_ && hdr->code == NM_RCLICK) {
+                OnSceneTreeRClick();
+                return 0;
+            }
+            if (hdr && hdr->hwndFrom == sceneTree_ && hdr->code == TVN_SELCHANGED) {
+                SyncSceneSelectionFromTree();
                 return 0;
             }
             return 0;
