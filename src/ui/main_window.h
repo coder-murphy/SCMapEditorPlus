@@ -237,6 +237,7 @@ private:
     // 地形刷选择窗口（窗口 → 刷子窗口）
     void ShowBrushPalette();
     void SetBrushTile(u16 value);
+    void PickTerrainAt(int tx, int ty);   // Ctrl+左键吸取地形
     void RefreshBrushPalette();
     void RebuildTerrainTypeCombo();
     void StampTerrainAt(int tx, int ty);

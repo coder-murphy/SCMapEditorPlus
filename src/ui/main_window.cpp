@@ -3130,6 +3130,26 @@ void MainWindow::SetBrushTile(u16 value) {
     SetLayer(EditLayer::kTerrain);   // 选中刷子即切回地形工具
 }
 
+// Ctrl+左键吸取地形：同步笔刷、地形类型与放置面板（原版 Ctrl+click）
+void MainWindow::PickTerrainAt(int tx, int ty) {
+    if (!map_.IsOpen() || !map_.hasTileset()) return;
+    if (tx < 0 || ty < 0 || tx >= map_.width() || ty >= map_.height()) return;
+    const u16 value = map_.TileAt(tx, ty);
+    brushTile_ = value;
+    brushPattern_.SetSingle(value, L"单格");
+    const int slot = TerrainTypeSlotForGroup(
+        map_.era(), static_cast<u16>((value & 0x7FF0) >> 4));
+    if (slot >= 0) terrainTypeSlot_ = slot;
+    SyncToolbarControls();
+    UpdateStatusBar();
+    placementPalette_.RefreshTerrain();
+    wchar_t msg[96];
+    ::wsprintfW(msg, L"[地形] 吸取 0x%04X（%s，子索引 %u）",
+                value, slot >= 0 ? L"已匹配地形类型" : L"未匹配地形类型",
+                static_cast<unsigned>(value & 0x0F));
+    Output(2, msg);
+}
+
 void MainWindow::RebuildTerrainTypeCombo() {
     if (!terrainCombo_) return;
     ::SendMessageW(terrainCombo_, CB_RESETCONTENT, 0, 0);
@@ -3175,6 +3195,7 @@ void MainWindow::SetTerrainTypeSlot(int slot) {
     if (types) {
         Output(2, std::wstring(L"[地形] 类型：") + types[slot].name);
     }
+    placementPalette_.RefreshTerrain();
 }
 
 void MainWindow::RefreshBrushPalette() {
@@ -3390,6 +3411,7 @@ void MainWindow::SetTerrainPlacementMode(TerrainPlacementMode mode) {
     SyncToolbarControls();
     SyncMenuChecks();
     UpdateStatusBar();
+    placementPalette_.RefreshTerrain();
 }
 
 void MainWindow::ResizeTerrainBrush(int delta) {
@@ -3403,6 +3425,7 @@ void MainWindow::ResizeTerrainBrush(int delta) {
     Output(2, msg);
     SyncToolbarControls();
     UpdateStatusBar();
+    placementPalette_.RefreshTerrain();
 }
 
 void MainWindow::SetTerrainBrushSize(int size) {
@@ -3415,6 +3438,7 @@ void MainWindow::SetTerrainBrushSize(int size) {
     Output(2, msg);
     SyncToolbarControls();
     UpdateStatusBar();
+    placementPalette_.RefreshTerrain();
 }
 
 void MainWindow::SetTerrainMirror(bool mirrorX, bool mirrorY) {
@@ -3458,8 +3482,10 @@ u16 MainWindow::TerrainValueFor(int tx, int ty) const {
         }
         case TerrainPlacementMode::kSubtile: {
             const u16 cur = map_.TileAt(tx, ty);
-            if ((cur & 0x7FF0) != group) return cur;
-            return static_cast<u16>(group | (brushTile_ & 0x0F));
+            // Shift：保留各格自身组号，只强制替换子索引（原版 Subtile 模式）
+            const bool force = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            if (!force && (cur & 0x7FF0) != group) return cur;
+            return static_cast<u16>((cur & 0x7FF0) | (brushTile_ & 0x0F));
         }
         case TerrainPlacementMode::kIndexed:
         case TerrainPlacementMode::kClipboard:
@@ -4097,6 +4123,16 @@ void MainWindow::OnLButtonDown(int mx, int my) {
     TileCoordsFromClient(mx, my, tx, ty);
     if (tx < 0) return;
 
+    // Ctrl+左键：吸取光标处地形（原版 Ctrl+click；子瓦片模式用于选组）
+    if (layer_ == EditLayer::kTerrain && (::GetKeyState(VK_CONTROL) & 0x8000) &&
+        terrainMode_ != TerrainPlacementMode::kClipboard) {
+        PickTerrainAt(tx, ty);
+        cursorTx_ = tx;
+        cursorTy_ = ty;
+        UpdateTitle();
+        return;
+    }
+
     if (layer_ == EditLayer::kFog) {
         BeginEdit();
         fogPaint_ = !map_.fog().IsFogged(tx, ty);
@@ -4154,6 +4190,7 @@ void MainWindow::OnLButtonDown(int mx, int my) {
         case Tool::kPicker:
             SetBrushTile(map_.TileAt(tx, ty));
             tool_ = Tool::kTerrain;
+            placementPalette_.RefreshTerrain();
             ::InvalidateRect(hwnd_, nullptr, FALSE);
             break;
         case Tool::kUnit:
@@ -6222,6 +6259,7 @@ LRESULT MainWindow::WndProc(UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case BrushPalette::kMsgSelected:
             SetBrushTile(static_cast<u16>(wParam));
+            placementPalette_.RefreshTerrain();
             return 0;
         case DoodadPalette::kMsgParamsChanged:
             doodadType_ = doodadPalette_.type();

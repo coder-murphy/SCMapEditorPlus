@@ -19,8 +19,11 @@ namespace {
 constexpr const wchar_t* kPaletteClass = L"SCMDPlusPlacementPalette";
 constexpr int kTabId = 100;
 constexpr int kTypeComboId = 201;
+constexpr int kModeComboId = 202;
+constexpr int kSizeComboId = 203;
 constexpr int kModeButtonId = 210;
 constexpr int kIconSize = 32;
+constexpr int kMaxBrushSize = 14;   // 与工具栏 01..14 一致
 
 // 把任意尺寸的 BGRA 图像按最近邻缩放并居中到 32×32 透明画布
 std::vector<u8> FitIcon32(const std::vector<u8>& src, int sw, int sh) {
@@ -134,6 +137,36 @@ void PlacementPalette::CreateChildren() {
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kTypeComboId)), instance_, nullptr);
     SetControlFont(typeCombo_);
 
+    // 原版地形调色板的两个下拉：放置方式 + 笔刷尺寸
+    modeCombo_ = ::CreateWindowExW(
+        0, L"ComboBox", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL, 0, 0,
+        0, 200, hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kModeComboId)), instance_, nullptr);
+    if (modeCombo_) {
+        static const wchar_t* kModes[] = {
+            L"标准地形（Isometrical）", L"方块地形（Rectangular）",
+            L"子瓦片（Subtile）", L"瓦片索引（Tileset Indexed）",
+            L"复制/剪切/粘贴（Copy/Cut/Paste）",
+        };
+        for (int i = 0; i < 5; i++) {
+            ::SendMessageW(modeCombo_, CB_ADDSTRING, 0,
+                           reinterpret_cast<LPARAM>(kModes[i]));
+        }
+        SetControlFont(modeCombo_);
+    }
+    sizeCombo_ = ::CreateWindowExW(
+        0, L"ComboBox", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL, 0, 0,
+        0, 200, hwnd_,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kSizeComboId)), instance_, nullptr);
+    if (sizeCombo_) {
+        wchar_t label[8];
+        for (int i = 1; i <= kMaxBrushSize; i++) {
+            ::wsprintfW(label, L"%02d", i);
+            ::SendMessageW(sizeCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
+        }
+        SetControlFont(sizeCombo_);
+    }
+
     list_ = ::CreateWindowExW(
         0, WC_LISTVIEWW, L"",
         WS_CHILD | WS_VISIBLE | LVS_ICON | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_VSCROLL,
@@ -165,11 +198,26 @@ void PlacementPalette::Layout() {
     }
     const bool terrain = tab_ == 0;
     const bool locations = tab_ == 3;
+    const TerrainPlacementMode mode =
+        win_ ? win_->terrainPlacementMode() : TerrainPlacementMode::kIsometric;
+    const bool typeRow =
+        terrain && (mode == TerrainPlacementMode::kSubtile ||
+                    mode == TerrainPlacementMode::kIndexed);
     const int top = pad + 26 + 6;
-    if (typeCombo_) {
-        ::SetWindowPos(typeCombo_, nullptr, pad + 4, top, w - pad * 2 - 8, 200, SWP_NOZORDER);
+    const int sizeW = 52;
+    if (modeCombo_) {
+        ::SetWindowPos(modeCombo_, nullptr, pad + 2, top, w - pad * 2 - sizeW - 8, 200,
+                       SWP_NOZORDER);
     }
-    const int listTop = terrain ? top + 30 : top;
+    if (sizeCombo_) {
+        ::SetWindowPos(sizeCombo_, nullptr, w - pad - sizeW + 2, top, sizeW, 200,
+                       SWP_NOZORDER);
+    }
+    if (typeCombo_) {
+        ::SetWindowPos(typeCombo_, nullptr, pad + 4, top + 30, w - pad * 2 - 8, 200,
+                       SWP_NOZORDER);
+    }
+    const int listTop = terrain ? top + 30 + (typeRow ? 32 : 0) : top;
     const int listBottom = locations ? h - pad - 30 : h - pad;
     if (list_) {
         ::SetWindowPos(list_, nullptr, pad, listTop, w - pad * 2,
@@ -188,7 +236,14 @@ void PlacementPalette::Layout() {
 void PlacementPalette::ShowTabControls() {
     const bool terrain = tab_ == 0;
     const bool locations = tab_ == 3;
-    if (typeCombo_) ::ShowWindow(typeCombo_, terrain ? SW_SHOW : SW_HIDE);
+    const TerrainPlacementMode mode =
+        win_ ? win_->terrainPlacementMode() : TerrainPlacementMode::kIsometric;
+    const bool typeRow =
+        terrain && (mode == TerrainPlacementMode::kSubtile ||
+                    mode == TerrainPlacementMode::kIndexed);
+    if (modeCombo_) ::ShowWindow(modeCombo_, terrain ? SW_SHOW : SW_HIDE);
+    if (sizeCombo_) ::ShowWindow(sizeCombo_, terrain ? SW_SHOW : SW_HIDE);
+    if (typeCombo_) ::ShowWindow(typeCombo_, typeRow ? SW_SHOW : SW_HIDE);
     for (HWND btn : modeButtons_) {
         if (btn) ::ShowWindow(btn, locations ? SW_SHOW : SW_HIDE);
     }
@@ -205,8 +260,20 @@ void PlacementPalette::ShowTabControls() {
     }
 }
 
+bool PlacementPalette::TerrainTypeListMode() const {
+    if (!win_) return true;
+    const TerrainPlacementMode mode = win_->terrainPlacementMode();
+    return mode == TerrainPlacementMode::kIsometric ||
+           mode == TerrainPlacementMode::kRectangular;
+}
+
 void PlacementPalette::Refresh() {
     if (!hwnd_) return;
+    RebuildCurrentPage();
+}
+
+void PlacementPalette::RefreshTerrain() {
+    if (!hwnd_ || tab_ != 0) return;
     RebuildCurrentPage();
 }
 
@@ -337,7 +404,31 @@ void PlacementPalette::RebuildCurrentPage() {
 
 void PlacementPalette::PopulateTerrain() {
     ClearItems();
-    if (!win_ || !win_->map().IsOpen() || !win_->map().hasTileset()) {
+    const bool ready = win_ && win_->map().IsOpen() && win_->map().hasTileset();
+
+    updating_++;
+    if (modeCombo_) {
+        if (ready) {
+            const int mode = std::clamp(static_cast<int>(win_->terrainPlacementMode()), 0, 4);
+            ::SendMessageW(modeCombo_, CB_SETCURSEL, static_cast<WPARAM>(mode), 0);
+        } else {
+            ::SendMessageW(modeCombo_, CB_SETCURSEL, static_cast<WPARAM>(-1), 0);
+        }
+        ::EnableWindow(modeCombo_, ready);
+    }
+    if (sizeCombo_) {
+        if (ready) {
+            const int size = std::clamp(win_->terrainBrushWidth(), 1, kMaxBrushSize);
+            ::SendMessageW(sizeCombo_, CB_SETCURSEL, static_cast<WPARAM>(size - 1), 0);
+        } else {
+            ::SendMessageW(sizeCombo_, CB_SETCURSEL, static_cast<WPARAM>(-1), 0);
+        }
+        ::EnableWindow(sizeCombo_, ready);
+    }
+    updating_--;
+
+    ShowTabControls();
+    if (!ready) {
         BeginUpdate();
         if (typeCombo_) {
             ::SendMessageW(typeCombo_, CB_RESETCONTENT, 0, 0);
@@ -346,20 +437,88 @@ void PlacementPalette::PopulateTerrain() {
         if (list_) {
             LVITEMW item = {};
             item.mask = LVIF_TEXT;
-            item.iItem = 0;
             item.pszText = const_cast<wchar_t*>(L"打开地图后可用");
             ListView_InsertItem(list_, &item);
         }
         EndUpdate();
         return;
     }
-    if (typeCombo_) ::EnableWindow(typeCombo_, TRUE);
 
+    terrainSlot_ = std::clamp(win_->terrainTypeSlot(), 0, kTerrainTypeSlots - 1);
+    const TerrainPlacementMode mode = win_->terrainPlacementMode();
+    if (mode == TerrainPlacementMode::kClipboard) {
+        if (typeCombo_) {
+            ::SendMessageW(typeCombo_, CB_RESETCONTENT, 0, 0);
+            ::EnableWindow(typeCombo_, FALSE);
+        }
+        BeginUpdate();
+        if (list_) {
+            LVITEMW item = {};
+            item.mask = LVIF_TEXT;
+            item.pszText = const_cast<wchar_t*>(L"剪贴板地形：在地图上左键铺设");
+            ListView_InsertItem(list_, &item);
+        }
+        EndUpdate();
+        return;
+    }
+    if (TerrainTypeListMode()) {
+        PopulateTerrainTypes();
+    } else {
+        RebuildTerrainGrid();
+    }
+}
+
+// 标准/方块地形：网格列出地形类型（每类用组内第一个有效子瓦片作缩略图）
+void PlacementPalette::PopulateTerrainTypes() {
+    if (!win_ || !win_->map().IsOpen() || !win_->map().hasTileset()) return;
     const int era = win_->map().era();
     const TerrainTypeInfo* types = TerrainTypes(era < kTerrainSetCount ? era : 0);
     if (!types) return;
+    const Tileset& ts = win_->map().tileset();
 
-    // 类型下拉：只列出有组号的槽位
+    if (typeCombo_) {
+        ::SendMessageW(typeCombo_, CB_RESETCONTENT, 0, 0);
+        ::EnableWindow(typeCombo_, FALSE);
+    }
+    if (list_) ListView_SetIconSpacing(list_, 74, 56);
+    images_ = ImageList_Create(kIconSize, kIconSize, ILC_COLOR32, 1, 16);
+    BeginUpdate();
+    for (int slot = 0; slot < kTerrainTypeSlots; slot++) {
+        const u16 group = types[slot].group;
+        if (group == 0) continue;
+        const int sub = ts.FirstValidSubtile(group);
+        if (sub < 0) continue;
+        const u16 value = static_cast<u16>((group << 4) | static_cast<u16>(sub));
+        std::vector<u8> icon;
+        int image = -1;
+        if (RenderTile(value, icon)) image = AddIcon(icon);
+        if (image < 0) image = AddPlaceholderIcon();
+        LVITEMW item = {};
+        item.mask = LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
+        item.iItem = static_cast<int>(itemValues_.size());
+        item.iImage = image;
+        item.pszText = const_cast<wchar_t*>(types[slot].name);
+        item.lParam = slot;
+        ListView_InsertItem(list_, &item);
+        itemValues_.push_back(static_cast<u16>(slot));
+    }
+    if (images_ && list_) ListView_SetImageList(list_, images_, LVSIL_NORMAL);
+    EndUpdate();
+}
+
+void PlacementPalette::RebuildTerrainGrid() {
+    if (!win_ || !win_->map().IsOpen() || !win_->map().hasTileset()) return;
+    const int era = win_->map().era();
+    const TerrainTypeInfo* types = TerrainTypes(era < kTerrainSetCount ? era : 0);
+    if (!types || terrainSlot_ < 0 || terrainSlot_ >= kTerrainTypeSlots) return;
+    const u16 group = types[terrainSlot_].group;
+    if (group == 0) return;
+
+    ClearItems();
+    if (typeCombo_) ::EnableWindow(typeCombo_, TRUE);
+    if (list_) ListView_SetIconSpacing(list_, 52, 46);
+
+    // 类型下拉：只列出有组号的槽位（子瓦片/瓦片索引模式使用）
     BeginUpdate();
     if (typeCombo_) {
         ::SendMessageW(typeCombo_, CB_RESETCONTENT, 0, 0);
@@ -378,7 +537,6 @@ void PlacementPalette::PopulateTerrain() {
             }
         }
         if (!valid) {
-            // 回退到第一个有效槽位
             for (int slot = 0; slot < kTerrainTypeSlots; slot++) {
                 if (types[slot].group == 0) continue;
                 terrainSlot_ = slot;
@@ -386,22 +544,12 @@ void PlacementPalette::PopulateTerrain() {
                 break;
             }
         }
-        if (select >= 0) ::SendMessageW(typeCombo_, CB_SETCURSEL, static_cast<WPARAM>(select), 0);
-        win_->SetTerrainTypeSlot(terrainSlot_);
+        if (select >= 0) {
+            ::SendMessageW(typeCombo_, CB_SETCURSEL, static_cast<WPARAM>(select), 0);
+        }
     }
     EndUpdate();
-    RebuildTerrainGrid();
-}
 
-void PlacementPalette::RebuildTerrainGrid() {
-    if (!win_ || !win_->map().IsOpen() || !win_->map().hasTileset()) return;
-    const int era = win_->map().era();
-    const TerrainTypeInfo* types = TerrainTypes(era < kTerrainSetCount ? era : 0);
-    if (!types || terrainSlot_ < 0 || terrainSlot_ >= kTerrainTypeSlots) return;
-    const u16 group = types[terrainSlot_].group;
-    if (group == 0) return;
-
-    ClearItems();
     images_ = ImageList_Create(kIconSize, kIconSize, ILC_COLOR32, 1, 32);
     BeginUpdate();
     const Tileset& ts = win_->map().tileset();
@@ -566,7 +714,22 @@ void PlacementPalette::ApplySelection(int index) {
     const u16 value = itemValues_[static_cast<std::size_t>(index)];
     switch (tab_) {
         case 0:
-            win_->PaletteSetBrushTile(value);
+            if (TerrainTypeListMode()) {
+                // 网格项是地形类型槽位：用组内第一个有效子瓦片作为放置值
+                const int era = win_->map().era();
+                const TerrainTypeInfo* types = TerrainTypes(era < kTerrainSetCount ? era : 0);
+                const int slot = value;
+                if (types && slot >= 0 && slot < kTerrainTypeSlots &&
+                    types[slot].group != 0) {
+                    const int sub = win_->map().tileset().FirstValidSubtile(types[slot].group);
+                    if (sub >= 0) {
+                        win_->PaletteSetBrushTile(
+                            static_cast<u16>((types[slot].group << 4) | sub));
+                    }
+                }
+            } else {
+                win_->PaletteSetBrushTile(value);
+            }
             win_->PaletteSetLayer(EditLayer::kTerrain);
             break;
         case 1:
@@ -607,9 +770,23 @@ LRESULT PlacementPalette::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
                     if (slot >= 0) {
                         terrainSlot_ = static_cast<int>(slot);
                         if (win_) win_->SetTerrainTypeSlot(terrainSlot_);
-                        RebuildTerrainGrid();
-                        Layout();
                     }
+                }
+                return 0;
+            }
+            if (id == kModeComboId && code == CBN_SELCHANGE && modeCombo_) {
+                const LRESULT sel = ::SendMessageW(modeCombo_, CB_GETCURSEL, 0, 0);
+                if (sel != CB_ERR && win_) {
+                    win_->SetTerrainPlacementMode(
+                        static_cast<TerrainPlacementMode>(static_cast<int>(sel)));
+                    win_->PaletteSetLayer(EditLayer::kTerrain);
+                }
+                return 0;
+            }
+            if (id == kSizeComboId && code == CBN_SELCHANGE && sizeCombo_) {
+                const LRESULT sel = ::SendMessageW(sizeCombo_, CB_GETCURSEL, 0, 0);
+                if (sel != CB_ERR && win_) {
+                    win_->SetTerrainBrushSize(static_cast<int>(sel) + 1);
                 }
                 return 0;
             }

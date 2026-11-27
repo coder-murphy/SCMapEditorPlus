@@ -20,6 +20,7 @@ public:
     void Show(HINSTANCE instance, HWND owner, MainWindow* win, int tab = -1);
     void Hide();
     void Refresh();                 // 地图/地形集/层数据变化后重建当前页
+    void RefreshTerrain();          // 仅当前页为地形时重建（放置参数变化用）
     bool IsOpen() const { return hwnd_ != nullptr; }
     HWND hwnd() const { return hwnd_; }
 
@@ -33,10 +34,12 @@ private:
     void RebuildCurrentPage();
     void ShowTabControls();
     void PopulateTerrain();
+    void PopulateTerrainTypes();
     void PopulateUnits();
     void PopulateDoodads();
     void PopulateLocations();
     void RebuildTerrainGrid();
+    bool TerrainTypeListMode() const;   // 标准/方块模式：网格列出地形类型
     void ApplySelection(int index);
     void ClearItems();
     void DestroyImageList();
@@ -54,7 +57,9 @@ private:
     HWND owner_ = nullptr;
     HWND hwnd_ = nullptr;
     HWND tabs_ = nullptr;
-    HWND typeCombo_ = nullptr;
+    HWND modeCombo_ = nullptr;   // 地形放置方式（对应原版 5 种模式）
+    HWND sizeCombo_ = nullptr;   // 笔刷尺寸 01..14
+    HWND typeCombo_ = nullptr;   // 子瓦片/瓦片索引模式的当前地形类型
     HWND list_ = nullptr;
     HWND modeButtons_[3] = {nullptr, nullptr, nullptr};
     MainWindow* win_ = nullptr;
